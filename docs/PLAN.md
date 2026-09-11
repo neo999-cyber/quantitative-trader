@@ -112,6 +112,8 @@ Output of the engine: a **Hypothesis Report** (Markdown + JSON) with the eleven 
 
 ## 5. Roadmap
 
+> **Update 11 Sept 2026:** phases 0–3 are replaced for the first pass by the one-week, $0, crypto-spot trial in `docs/01_ONE_WEEK_TRIAL.md` (Claude builds continuously; the pipeline is mostly glue around existing libraries). The phases below remain the shape of the full build after the trial verdict.
+
 Weeks are estimates for one person working most days with Claude as pair. Every phase ends with tests, a runnable command, and a short doc.
 
 ### Phase 0 — Decide and set up (week 1)
@@ -156,6 +158,8 @@ Weeks are estimates for one person working most days with Claude as pair. Every 
 ---
 
 ## 6. Decisions needed before Phase 1
+
+> **Resolved 11 Sept 2026** (details in `docs/01_ONE_WEEK_TRIAL.md`): macOS research + Linux ops, so Norgate is out; budget path first; crypto spot first; no new hardware; existing CX23 + Volume for ops, hourly CX53 for bursts. Still open: residency (venue), brokers, package name.
 
 1. **Operating system.** Norgate (the best-value equity data) requires Windows for its updater. Mac/Linux means Tiingo + free constituents at budget, or Sharadar at serious tier, or a Windows VM.
 2. **Budget tier** per asset class (§3). Recommendation: $0 crypto now, ~$130/mo equities (Tiingo → Norgate/Sharadar) from Phase 1, forex at $0 until a forex strategy passes gate 8.

@@ -1,0 +1,52 @@
+# The one-week trial: decisions and plan (agreed 11 Sept 2026)
+
+This supersedes the timeline in `PLAN.md` §5 for the first phase. Everything else in `PLAN.md` still holds.
+
+## Decisions made
+
+| Topic | Decision |
+|---|---|
+| Hardware | **No new hardware for now.** MacBook Air M2 16 GB is the research machine (enough at the daily/swing horizon). Existing Hetzner CX23 (2 vCPU / 4 GB / 40 GB, shared with other projects) is the always-on ops box later; add a Volume (~€0.057/GB/mo) for the lake rather than resizing. Hourly CX53 (16 vCPU / 32 GB, ~€0.047/h) created and deleted per job for anything that outgrows 16 GB; Modal ($30/mo free credit) as the serverless alternative. |
+| OS | macOS for research, Linux for ops → **Norgate is out** (Windows only). Equities later via Tiingo + free constituent histories (budget) or Sharadar (serious). |
+| Budget | Budget path first. Spend the ~$1,000 only after the trial verdict. Priority for that money later: survivorship-free equity data (Norgate/Sharadar), then hourly compute or a workstation, then RealTest. |
+| First asset class | **Crypto spot, daily bars, one venue** (Binance data; Binance or Kraken as the modelled venue depending on residency). Fixed ETF basket (SPY, QQQ, TLT, GLD…) is the second $0 trial. Single stocks wait for paid data. |
+| Yardstick | The trial is judged by the **validation gates on 8–10 years of historical data**, not by two weeks of P&L. Short-window P&L is noise for any realistic system (see table below). |
+| Live | Any strategy that passes gates 1–9 goes to paper/small live immediately on the CX23; sizing up follows live results tracking expectations (3–6 months). That clock runs in parallel with the heavy build. |
+
+## Why P&L over weeks is not evidence
+
+Probability a period ends positive, assuming roughly normal returns:
+
+| Annual Sharpe | Month | Quarter | Year |
+|---|---|---|---|
+| 0.5 | 56% | 60% | 69% |
+| 1.0 | 61% | 69% | 84% |
+| 2.0 | 72% | 84% | 98% |
+
+Income = edge × capital. A validated Sharpe-1 system at 15% vol on $10k expects ~$1,500/yr with a 16% chance of a losing year. The platform makes that number real instead of a mirage; it cannot change the arithmetic.
+
+## The one-week plan (from "go")
+
+| Day | Work | Who |
+|---|---|---|
+| 1–2 | Binance bucket loader (daily + 1h bars, top-30 pairs by volume, listing/delisting dates from the bucket listing), strategy interface, cost model (taker fee + spread, no funding for spot), vectorbt runner, append-only trial log | Claude |
+| 2–3 | Gates 1–9 on existing libraries (vectorbt, skfolio CPCV, arch bootstrap/SPA, jsharpe PSR/DSR, own CSCV + permutation); **synthetic self-test**: a noise strategy searched over 200 variants must FAIL at gate 4/5, a planted edge must PASS | Claude |
+| 3 | Run the data pull + QA report on the laptop (the cloud sandbox cannot reach Binance) | You, one command, ~15 min |
+| 4–5 | Four families through all nine gates, in parallel: (1) time-series momentum, vol-targeted, top-20 coins; (2) cross-sectional momentum, weekly rebalance; (3) weekly short-term reversal; (4) the existing 3-down-day RSI setup as a **control** (expected to fail) | Claude |
+| 6–7 | Read the four Hypothesis Reports, fix what they expose, rerun | Both |
+
+Realistic: first honest verdict ~1 week after go, 10 days with one fix cycle. The minimal pipeline is 3–5k lines of glue around existing libraries; correctness (the self-test), not volume, is the long pole.
+
+## Decision rule at the end
+
+- **≥1 family passes gates 1–8 with positive holdout Sharpe** → start paper trading it on the CX23 that week; spend the $1,000; continue the heavy build (`PLAN.md` phases 4–6) while incubation runs.
+- **All fail** → do not spend. Run the ETF-basket trial next ($0). The failure itself is the platform working.
+
+## What does not compress
+- Historical depth (8–10 years) — free for crypto and ETFs.
+- The live clock after the verdict.
+- The discipline: pre-registration + trial log stay in even in the minimal build. Speed without them is p-hacking.
+
+## Before "go" (still thinking)
+- Review GitHub repos the user will share; each gets a one-by-one assessment: does it improve or add to `PLAN.md`, and where.
+- Residency (US or not) → venue for fees/data (Binance vs Kraken/Coinbase).

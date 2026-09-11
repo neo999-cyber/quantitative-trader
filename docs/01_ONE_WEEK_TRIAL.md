@@ -55,7 +55,8 @@ Realistic: first honest verdict ~1 week after go, 10 days with one fix cycle. Th
 
 ## Build progress
 
-- **Day 1–2 done (11 Sept 2026).** Data layer, strategy interface, cost model, two-engine backtest runner and hash-chained trial log are in on `claude/admiring-ptolemy-tfp528`; 152 tests, all offline. Details and the laptop commands: `docs/02_DATA_LAYER.md`. Cost model frozen at the verified VIP0+BNB tier. **Waiting on you:** run `qr data pull` on the laptop (the sandbox cannot reach Binance).
+- **Day 1–2 done (11 Sept 2026).** Data layer, strategy interface, cost model, two-engine backtest runner and hash-chained trial log are in on `claude/admiring-ptolemy-tfp528`; 152 tests, all offline. Details and the laptop commands: `docs/02_DATA_LAYER.md`. Cost model frozen at the verified VIP0+BNB tier. Details and the laptop commands: `docs/02_DATA_LAYER.md`.
+- **Day 2–3 done (11 Sept 2026).** Gates 0–9, the Hypothesis Report generator and the synthetic self-test are in; 283 tests. **The self-test passes**: searched-over noise is rejected by the deflation gates (4 and 5), a planted Sharpe-1.7 edge survives all nine. Writing it found three real bugs in the engine — gate 1 was testing the wrong signature for look-ahead, gate 5 over-rejected interchangeable variants, and the planted edge was so strong it tested nothing. Details: `docs/03_VALIDATION_ENGINE.md`. **Waiting on you:** run `qr data pull` on the laptop (the sandbox cannot reach Binance).
 
 ## Before "go" (still thinking)
 - Review GitHub repos the user will share; each gets a one-by-one assessment in `docs/research/06_repo_reviews.md`: adopt / borrow / reference / skip, and where it changes `PLAN.md`.

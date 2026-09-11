@@ -220,6 +220,39 @@ def deflated_sharpe(
     return probabilistic_sharpe(returns, benchmark=benchmark, moments_=m), benchmark
 
 
+def effective_trials(variant_returns: pd.DataFrame, floor: int = 1) -> tuple[int, float]:
+    """How many *independent* trials a correlated sweep really represents.
+
+    Deflating by the raw variant count treats forty adjacent lookbacks as forty
+    independent looks at the data, which they are not — their return series are
+    correlated above 0.95 and they rise and fall together. Over-deflating is
+    not "conservative" in any useful sense: it fails real edges for the crime
+    of having been searched over a fine grid, and it rewards coarse grids that
+    hide the same search behind fewer numbers.
+
+    The estimator is the **effective rank** of the variant correlation matrix,
+    exp of the entropy of its normalised eigenvalues. It equals N when the
+    variants are orthogonal and collapses toward 1 as they become redundant,
+    which is exactly the behaviour wanted. Returns `(effective, raw)` so a
+    report can show both — and it should, because the ratio is itself worth
+    seeing.
+    """
+    frame = variant_returns.dropna(axis=1, how="all").fillna(0.0)
+    raw = frame.shape[1]
+    if raw < 2:
+        return max(floor, raw), float(raw)
+    corr = frame.corr().to_numpy()
+    corr = np.nan_to_num(corr, nan=0.0)
+    eigenvalues = np.linalg.eigvalsh(corr)
+    eigenvalues = eigenvalues[eigenvalues > 1e-12]
+    if len(eigenvalues) == 0:
+        return max(floor, 1), float(raw)
+    weights = eigenvalues / eigenvalues.sum()
+    entropy = float(-(weights * np.log(weights)).sum())
+    effective = float(np.exp(entropy))
+    return int(max(floor, min(raw, round(effective)))), float(raw)
+
+
 def min_backtest_length(n_trials: int, annual_sharpe: float = 1.0) -> float:
     """Years of data needed before the best of `n_trials` means anything.
 

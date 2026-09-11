@@ -39,6 +39,9 @@ class Sweep:
     periods_per_year: float
     universe_name: str = ""
     results: dict[str, BacktestResult] = field(default_factory=dict, repr=False)
+    #: The class the variants were built from, so a permutation test can
+    #: re-optimise over the same grid on permuted data.
+    strategy_class: type | None = field(default=None, repr=False)
 
     def __len__(self) -> int:
         return self.returns.shape[1]
@@ -84,6 +87,29 @@ class Sweep:
     def per_period_sharpes(self) -> pd.Series:
         """Per-period Sharpes — what the deflation formulas want as a variance."""
         return self.stats["sharpe"] / np.sqrt(self.periods_per_year)
+
+    def rebuild(self, names: Sequence[str] | None = None) -> list[Strategy]:
+        """Reconstruct the strategy objects, so a grid can be re-run elsewhere.
+
+        Masters' permutation test needs to re-optimise the *whole search* on
+        each permuted dataset, which means rebuilding the variants rather than
+        reusing their results.
+        """
+        if self.strategy_class is None:
+            raise ValueError("this sweep does not know which class built it")
+        return [self.strategy_class(**self.params[name]) for name in (names or self.names)]
+
+    def subgrid(self, limit: int) -> list[str]:
+        """Up to `limit` variant names, spread evenly across the grid.
+
+        Evenly rather than randomly: the point is to span the parameter space,
+        and a random draw can cluster and make the subgrid unrepresentative of
+        the search it stands in for.
+        """
+        if limit >= len(self.names) or limit <= 0:
+            return list(self.names)
+        step = len(self.names) / limit
+        return [self.names[int(i * step)] for i in range(limit)]
 
 
 def run_sweep(
@@ -136,6 +162,7 @@ def run_sweep(
         periods_per_year=panel.periods_per_year,
         universe_name=universe_name,
         results=results,
+        strategy_class=type(strategies[0]),
     )
 
 

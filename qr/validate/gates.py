@@ -37,7 +37,13 @@ from qr.validate import stats as st
 from qr.validate.cpcv import combinatorial_purged_cv, walk_forward_efficiency
 from qr.validate.cscv import cscv, is_oos_degradation
 from qr.validate.factors import Decomposition, decompose, factor_table
-from qr.validate.permutation import PermutationSuite, bar_permutation_test, random_entry_test
+from qr.validate.permutation import (
+    PermutationSuite,
+    bar_permutation_test,
+    random_entry_test,
+    shuffled_ticker_test,
+)
+from qr.validate.spa import buy_and_hold_benchmark, superior_predictive_ability
 from qr.validate.trial_log import TrialLog
 
 PASS, WARN, FAIL, SKIP = "PASS", "WARN", "FAIL", "SKIP"
@@ -52,6 +58,9 @@ class GateThresholds:
     # short-horizon reversal produces the same shape as a leak.
     implausible_sharpe: float = 8.0
     max_spike_ratio: float = 1.50
+    # Above this, reassigning the weights to random symbols does about as
+    # well: the symbol selection carries nothing.
+    max_placebo_p: float = 0.50
     # gate 2
     min_net_over_gross: float = 0.60
     fail_net_over_gross: float = 0.50
@@ -70,6 +79,10 @@ class GateThresholds:
     # sample this often; otherwise the variants are interchangeable, not overfit.
     max_prob_oos_loss: float = 0.10
     max_spa_p: float = 0.05
+    # SPA is conservative with many correlated models, so only an emphatic
+    # p fails: above one half the benchmark beats the best of the search
+    # more often than not.
+    fail_spa_p: float = 0.50
     # gate 6
     max_permutation_p: float = 0.05
     fail_permutation_p: float = 0.10
@@ -121,6 +134,9 @@ class GateContext:
     thresholds: GateThresholds = field(default_factory=GateThresholds)
     permutations: int = 200
     bootstrap_reps: int = 2000
+    spa_reps: int = 1000
+    #: How many variants gate 6 re-optimises over on each permuted dataset.
+    reoptimise_variants: int = 25
     seed: int = 0
 
     @property
@@ -210,6 +226,23 @@ def gate_1_data_integrity(ctx: GateContext) -> GateResult:
             f"the signal is reading the bar it predicts",
             stats,
         )
+    # The shuffled-ticker placebo: keep every bar's weights, attach them to the
+    # wrong coins. A strategy that genuinely selects symbols collapses; one that
+    # is market timing in cross-sectional clothing does not, because which coin
+    # it held never mattered. Reported always, because the answer is a fact
+    # about what the strategy *is* — for a timing family a high p is expected
+    # and needs a note, not a fix.
+    placebo = _shuffled_ticker(ctx)
+    if placebo is not None:
+        stats.update({f"placebo_{k}": v for k, v in placebo.summary().items()})
+        if placebo.p_value > ctx.thresholds.max_placebo_p:
+            verdict = WARN if verdict == PASS else verdict
+            detail_parts.append(
+                f"shuffled-ticker placebo p = {placebo.p_value:.2f}: attaching these weights to "
+                f"random symbols does about as well, so the symbol selection carries little — "
+                f"expected for a timing strategy, damning for a cross-sectional one"
+            )
+
     if np.isfinite(spike) and spike > ctx.thresholds.max_spike_ratio:
         verdict = WARN
         detail_parts.append(
@@ -229,7 +262,9 @@ def gate_2_cost_survival(ctx: GateContext) -> GateResult:
         ctx.panel, ctx.strategy, ctx.costs.stressed(ctx.thresholds.cost_stress), ctx.universe
     )
     stressed_sharpe = stressed.sharpe()
+    capacity = _capacity(ctx)
     stats = {
+        **capacity,
         "gross_sharpe": result.sharpe(gross=True),
         "net_sharpe": result.sharpe(),
         "net_over_gross": ratio,
@@ -246,13 +281,11 @@ def gate_2_cost_survival(ctx: GateContext) -> GateResult:
         return GateResult(2, "cost survival", FAIL, f"negative at {ctx.thresholds.cost_stress:g}x costs", stats)
     if ratio < ctx.thresholds.min_net_over_gross:
         return GateResult(2, "cost survival", WARN, f"only {ratio:.0%} of gross return survives costs", stats)
-    return GateResult(
-        2,
-        "cost survival",
-        PASS,
-        f"{ratio:.0%} of gross survives; Sharpe {stressed_sharpe:.2f} at {ctx.thresholds.cost_stress:g}x costs",
-        stats,
-    )
+    detail = f"{ratio:.0%} of gross survives; Sharpe {stressed_sharpe:.2f} at {ctx.thresholds.cost_stress:g}x costs"
+    ceiling = capacity.get("capacity_usd")
+    if ceiling and np.isfinite(ceiling):
+        detail += f"; capacity about ${ceiling:,.0f} before impact takes a further 10% of gross"
+    return GateResult(2, "cost survival", PASS, detail, stats)
 
 
 def gate_3_significance(ctx: GateContext) -> GateResult:
@@ -304,7 +337,25 @@ def gate_3_significance(ctx: GateContext) -> GateResult:
 def gate_4_deflation(ctx: GateContext) -> GateResult:
     """Deflate for how hard the search was. Needs an honest trial count."""
     net = ctx.result.net.dropna()
-    n_trials = ctx.trial_count
+    raw_trials = ctx.trial_count
+    n_trials = raw_trials
+    effective = raw_trials
+
+    # The effective trial count is **reported, not used**, and that is a
+    # deliberate reversal. `PLAN.md` §4 asks for deflation against an effective
+    # count from clustering, and the estimator below does measure it correctly
+    # (200 TSMOM variants have an effective rank near 5, because their return
+    # series correlate above 0.95). But feeding it to the DSR double-discounts
+    # the correlation: E[max] = sqrt(V) * f(N) already shrinks through **V**,
+    # the variance of the trial Sharpes, which is itself small precisely when
+    # the variants are redundant. Discounting N as well let the searched-over
+    # noise world through gate 4 in the self-test — the exact failure this
+    # whole apparatus exists to prevent. So DSR takes the raw count, and the
+    # effective count stays in the report as the diagnostic it should have
+    # been: a large gap between the two says the grid is finer than the search.
+    if ctx.sweep is not None and len(ctx.sweep) >= 2:
+        effective, _ = st.effective_trials(ctx.sweep.returns)
+
     if ctx.sweep is not None and len(ctx.sweep) >= 2:
         variance = float(ctx.sweep.per_period_sharpes().var(ddof=1))
     else:
@@ -317,11 +368,15 @@ def gate_4_deflation(ctx: GateContext) -> GateResult:
         ctx.result.sharpe(), n_trials, p_value / 2.0, method="bhy"
     )
     annual_sharpe = ctx.result.sharpe()
-    min_btl = st.min_backtest_length(n_trials, max(annual_sharpe, 0.25))
+    # MinBTL on the RAW count: it asks how much data a search of that breadth
+    # needs, and a fine grid really is a broad search however correlated it is.
+    min_btl = st.min_backtest_length(raw_trials, max(annual_sharpe, 0.25))
     years = len(net) / ctx.periods_per_year
 
     stats = {
         "trials": float(n_trials),
+        "trials_raw": float(raw_trials),
+        "trials_effective": float(effective),
         "sharpe_variance": variance,
         "deflation_benchmark_per_period": benchmark,
         "dsr": dsr,
@@ -335,7 +390,8 @@ def gate_4_deflation(ctx: GateContext) -> GateResult:
             4,
             "multiple-testing deflation",
             FAIL,
-            f"DSR = {dsr:.2f} over {n_trials} trials: the best of this search is what noise would give",
+            f"DSR = {dsr:.2f} over {n_trials} trials (effective rank {effective}): "
+            f"the best of this search is what noise would give",
             stats,
         )
     if haircut <= 0:
@@ -345,13 +401,18 @@ def gate_4_deflation(ctx: GateContext) -> GateResult:
             4,
             "multiple-testing deflation",
             WARN,
-            f"{n_trials} trials need {min_btl:.1f} years to mean anything; the sample is {years:.1f}",
+            f"{raw_trials} trials need {min_btl:.1f} years to mean anything; the sample is {years:.1f}",
             stats,
         )
     if dsr < ctx.thresholds.min_dsr:
         return GateResult(4, "multiple-testing deflation", WARN, f"DSR = {dsr:.2f}", stats)
     return GateResult(
-        4, "multiple-testing deflation", PASS, f"DSR = {dsr:.3f} over {n_trials} trials, haircut Sharpe {haircut:.2f}", stats
+        4,
+        "multiple-testing deflation",
+        PASS,
+        f"DSR = {dsr:.3f} over {n_trials} trials (effective rank {effective}), "
+        f"haircut Sharpe {haircut:.2f}",
+        stats,
     )
 
 
@@ -368,6 +429,23 @@ def gate_5_selection(ctx: GateContext) -> GateResult:
     result = cscv(matrix, n_blocks=16)
     degradation = is_oos_degradation(matrix)
     stats = {**result.summary(), "is_oos_rank_correlation": degradation.attrs["rank_correlation"]}
+
+    # PBO and SPA answer different questions and a family can pass one while
+    # failing the other. PBO asks whether *selecting* the winner carries
+    # information; SPA asks whether the winner beats buy-and-hold at all, once
+    # the search is paid for. A family whose variants all merely track the
+    # market has a low PBO — the same variant does win every time — and nothing
+    # worth trading. Only SPA says so.
+    spa_verdict = None
+    try:
+        benchmark = buy_and_hold_benchmark(ctx.panel, ctx.universe, ctx.costs)
+        spa_result = superior_predictive_ability(
+            matrix, benchmark, ctx.periods_per_year, reps=ctx.spa_reps, seed=ctx.seed
+        )
+        stats.update(spa_result.summary())
+        spa_verdict = spa_result.verdict(ctx.thresholds.max_spa_p, ctx.thresholds.fail_spa_p)
+    except (ValueError, RuntimeError) as exc:
+        stats["spa_error"] = str(exc)
     verdict = result.verdict(
         ctx.thresholds.fail_pbo, ctx.thresholds.max_pbo, ctx.thresholds.max_prob_oos_loss
     )
@@ -381,17 +459,56 @@ def gate_5_selection(ctx: GateContext) -> GateResult:
             f"; selection is arbitrary but stays profitable out of sample "
             f"({result.prob_oos_loss:.0%} losing) — the variants are interchangeable"
         )
+
+    if spa_verdict is not None:
+        p = stats["spa_p_consistent"]
+        detail += f"; SPA p = {p:.3f} vs buy-and-hold"
+        if spa_verdict == FAIL:
+            verdict = FAIL
+            detail += " — no variant beats simply holding the universe"
+        elif spa_verdict == WARN and verdict == PASS:
+            verdict = WARN
+        survivors = int(stats.get("stepm_survivors", 0))
+        if survivors:
+            detail += f" ({survivors} variant(s) survive Romano–Wolf StepM)"
     return GateResult(5, "selection overfitting", verdict, detail, stats)
 
 
 def gate_6_permutation(ctx: GateContext) -> GateResult:
-    """Masters bar permutation, and a random-entry percentile."""
+    """Masters bar permutation **with re-optimisation**, and two cheaper nulls.
+
+    The re-optimisation is what makes this the strongest test in the pipeline.
+    Re-running only the chosen variant on permuted data asks "is this variant
+    better than chance"; re-running the **whole search** and keeping its best
+    asks "is my *procedure* better than chance", which is the question, because
+    the procedure is what produced the variant.
+
+    At full grid size that is variants x permutations backtests, so the search
+    is re-run over an evenly spread subgrid of at most
+    `ctx.reoptimise_variants`. The direction of that approximation is stated in
+    the report: a subgrid null is **weaker** than the full-grid null and
+    **stronger** than no re-optimisation, so the p-value it produces is
+    optimistic relative to a complete Masters test and conservative relative to
+    the naive one.
+    """
     from qr.strategies.library import RandomEntry
 
-    observed = ctx.result.sharpe(gross=True)
-    evaluate = lambda p: run_backtest(p, ctx.strategy, ctx.costs, ctx.universe).sharpe(gross=True)
+    if ctx.sweep is not None and len(ctx.sweep) > 1 and ctx.sweep.strategy_class is not None:
+        names = ctx.sweep.subgrid(ctx.reoptimise_variants)
+        grid = ctx.sweep.rebuild(names)
+    else:
+        grid = [ctx.strategy]
+
+    def best_over_grid(panel: Panel) -> float:
+        scores = [run_backtest(panel, s, ctx.costs, ctx.universe).sharpe(gross=True) for s in grid]
+        finite = [s for s in scores if np.isfinite(s)]
+        return max(finite) if finite else float("nan")
+
+    # The observed statistic must be the same statistic as the null: the best
+    # over this grid on the real data, not the Sharpe of the chosen variant.
+    observed = best_over_grid(ctx.panel) if len(grid) > 1 else ctx.result.sharpe(gross=True)
     permutation = bar_permutation_test(
-        ctx.panel, evaluate, observed, n_permutations=ctx.permutations, seed=ctx.seed
+        ctx.panel, best_over_grid, observed, n_permutations=ctx.permutations, seed=ctx.seed
     )
 
     time_in_market = ctx.result.stats()["time_in_market"]
@@ -406,10 +523,22 @@ def gate_6_permutation(ctx: GateContext) -> GateResult:
     )
     suite = PermutationSuite([permutation, random_entry])
     stats = {f"{r.name}_{k}": v for r in suite.results for k, v in r.summary().items()}
-    verdict = suite.verdict
+    stats["reoptimised_over"] = float(len(grid))
+    stats["grid_size"] = float(len(ctx.sweep)) if ctx.sweep is not None else 1.0
+
+    verdicts = {
+        r.verdict(ctx.thresholds.max_permutation_p, ctx.thresholds.fail_permutation_p)
+        for r in suite.results
+    }
+    verdict = FAIL if FAIL in verdicts else (WARN if WARN in verdicts else PASS)
+    reopt = (
+        f"re-optimised over {len(grid)} of {len(ctx.sweep)} variants"
+        if ctx.sweep is not None and len(grid) > 1
+        else "single variant, no re-optimisation"
+    )
     detail = (
-        f"bar permutation p = {permutation.p_value:.3f} ({permutation.percentile:.0f}th percentile); "
-        f"random entry p = {random_entry.p_value:.3f}"
+        f"bar permutation p = {permutation.p_value:.3f} ({permutation.percentile:.0f}th percentile, "
+        f"{reopt}); random entry p = {random_entry.p_value:.3f}"
     )
     return GateResult(6, "permutation", verdict, detail, stats)
 
@@ -482,16 +611,35 @@ def gate_8_robustness(ctx: GateContext) -> GateResult:
     if np.isfinite(profitable) and profitable < ctx.thresholds.min_profitable_years:
         problems.append(f"profitable in only {profitable:.0%} of years")
 
-    # Drop the best year and the best five bars: does anything remain?
+    # Drop the best year and the best five trades: does anything remain?
     if len(by_year) > 1:
         without_best_year = net[net.index.year != by_year.idxmax()]
         stats["sharpe_without_best_year"] = st.annualised_sharpe(without_best_year, ctx.periods_per_year)
         if stats["sharpe_without_best_year"] <= 0:
             problems.append("the entire result is one year")
-    trimmed = net.drop(net.nlargest(5).index)
-    stats["sharpe_without_best_5_bars"] = st.annualised_sharpe(trimmed, ctx.periods_per_year)
-    if stats["sharpe_without_best_5_bars"] <= 0:
-        problems.append("the entire result is five bars")
+
+    # Trades, not bars. Dropping the five best *bars* removes five days, which
+    # a strategy holding for weeks barely notices; dropping the five best
+    # *holding episodes* removes the positions that actually made the money.
+    # The distinction is the whole point of the check.
+    trimmed = _drop_best_trades(net, ctx.result.held, ctx.panel.returns(), n=5)
+    stats["sharpe_without_best_5_trades"] = st.annualised_sharpe(trimmed, ctx.periods_per_year)
+    stats["sharpe_without_best_5_bars"] = st.annualised_sharpe(
+        net.drop(net.nlargest(5).index), ctx.periods_per_year
+    )
+    if stats["sharpe_without_best_5_trades"] <= 0:
+        problems.append("the entire result is five trades")
+
+    # Per-regime Sharpe, by trailing realised volatility of the book's own
+    # universe. A strategy that only works in one volatility regime is a bet on
+    # that regime, and crypto supplies all three within any two-year window.
+    regimes = _regime_sharpes(net, ctx.panel, ctx.periods_per_year)
+    stats.update({f"sharpe_in_{name}_vol": value for name, value in regimes.items()})
+    losing = [name for name, value in regimes.items() if np.isfinite(value) and value <= 0]
+    if len(losing) >= 2:
+        problems.append(f"loses money in {' and '.join(losing)} volatility regimes")
+    elif losing:
+        warnings.append(f"negative in the {losing[0]}-volatility regime")
 
     try:
         decomposition = decompose(net, factor_table(ctx.panel), ctx.periods_per_year)
@@ -568,6 +716,119 @@ GATES: list[Callable[[GateContext], GateResult]] = [
     gate_8_robustness,
     gate_9_holdout,
 ]
+
+
+def _capacity(ctx: GateContext, give_up_fraction: float = 0.10) -> dict[str, float]:
+    """Roughly how much money this strategy can take before impact bites.
+
+    Square-root impact means the drag grows with the square root of
+    participation, so doubling size costs about 1.41x the impact per dollar.
+    This walks the equity up until impact has eaten `give_up_fraction` of gross
+    return and reports where that happens.
+
+    It is an order-of-magnitude figure, not a limit: it uses median quote
+    volume as ADV and assumes the whole order goes at once. At the sizes this
+    account trades the answer will usually be "far more than you have", and the
+    number matters mainly as a check that it is not "less".
+    """
+    from qr.research.runner import volume_adv
+
+    gross_annual = ctx.result.gross.mean() * ctx.periods_per_year
+    adv = volume_adv(ctx.panel)
+    if adv is None or not np.isfinite(gross_annual) or gross_annual <= 0:
+        return {}
+    turnover = (ctx.result.held - ctx.result.held.shift(1)).abs().fillna(0.0)
+    volatility = ctx.panel.returns().rolling(30, min_periods=5).std()
+
+    budget = give_up_fraction * gross_annual
+    previous = float("nan")
+    for equity in (1e4, 3e4, 1e5, 3e5, 1e6, 3e6, 1e7, 3e7, 1e8):
+        impact = ctx.costs.impact_bps(turnover * equity, adv.reindex_like(turnover), volatility.reindex_like(turnover))
+        drag = (turnover * pd.DataFrame(impact, index=turnover.index, columns=turnover.columns)).sum(axis=1)
+        annual_drag = float(drag.mean() * ctx.periods_per_year * 1e-4)
+        if annual_drag > budget:
+            return {"capacity_usd": previous, "gross_annual_return": gross_annual}
+        previous = equity
+    return {"capacity_usd": previous, "gross_annual_return": gross_annual}
+
+
+def _shuffled_ticker(ctx: GateContext, n_permutations: int = 100):
+    """Gate 1's placebo, scored on gross returns so costs cannot muddy it."""
+    returns = ctx.panel.returns().fillna(0.0)
+    ppy = ctx.periods_per_year
+
+    def score(weights: pd.DataFrame) -> float:
+        series = (weights.shift(1).fillna(0.0) * returns).sum(axis=1)
+        sd = series.std(ddof=1)
+        return float(series.mean() / sd * math.sqrt(ppy)) if sd > 0 else 0.0
+
+    weights = ctx.result.weights
+    if weights.shape[1] < 2 or not (weights.abs().to_numpy() > 0).any():
+        return None
+    return shuffled_ticker_test(score, weights, score(weights), n_permutations, ctx.seed)
+
+
+def _drop_best_trades(net: pd.Series, held: pd.DataFrame, returns: pd.DataFrame, n: int = 5) -> pd.Series:
+    """`net` with the contribution of its `n` most profitable trades removed.
+
+    A **trade** is a contiguous holding of *one symbol*, which is what a trader
+    means by the word and what `round_trips` already counts. A portfolio-level
+    definition is useless here: a vol-targeted book is invested almost every
+    bar, so the whole sample is one "episode" and removing the best five
+    removes the strategy.
+
+    The contribution is subtracted from the affected bars rather than the bars
+    being deleted, so the series keeps its length and its autocorrelation
+    structure — deleting bars would flatter the Sharpe by shortening the sample
+    as well as removing the winners.
+    """
+    live = held.abs() > 1e-12
+    if not live.to_numpy().any():
+        return net
+    pnl = (held * returns.reindex_like(held).fillna(0.0)).fillna(0.0)
+    starts = live & ~live.shift(1, fill_value=False)
+    trade_id = starts.cumsum().where(live)
+
+    totals: list[tuple[float, str, float]] = []
+    for symbol in held.columns:
+        ids = trade_id[symbol].dropna()
+        if ids.empty:
+            continue
+        for identifier, value in pnl[symbol].groupby(ids).sum().items():
+            totals.append((float(value), symbol, float(identifier)))
+    if not totals:
+        return net
+    best = sorted(totals, reverse=True)[:n]
+
+    mask = pd.DataFrame(False, index=held.index, columns=held.columns)
+    for _, symbol, identifier in best:
+        mask[symbol] |= trade_id[symbol] == identifier
+    return net - pnl.where(mask, 0.0).sum(axis=1)
+
+
+def _regime_sharpes(net: pd.Series, panel: Panel, periods_per_year: float, lookback: int = 60) -> dict[str, float]:
+    """Sharpe within each trailing-volatility tercile of the universe.
+
+    Terciles of a trailing cross-sectional volatility estimate, computed from
+    the panel rather than from the strategy's own returns — using the
+    strategy's own volatility would sort bars by how much the strategy was
+    doing, not by what the market was doing.
+    """
+    market = panel.returns().mean(axis=1, skipna=True)
+    trailing = market.rolling(lookback, min_periods=lookback // 2).std().reindex(net.index)
+    usable = trailing.dropna()
+    if len(usable) < 3 * lookback:
+        return {}
+    low, high = usable.quantile([1 / 3, 2 / 3])
+    buckets = {
+        "low": net[trailing <= low],
+        "mid": net[(trailing > low) & (trailing <= high)],
+        "high": net[trailing > high],
+    }
+    return {
+        name: st.annualised_sharpe(values, periods_per_year) if len(values) > 30 else float("nan")
+        for name, values in buckets.items()
+    }
 
 
 def _free_parameters(ctx: GateContext) -> int:

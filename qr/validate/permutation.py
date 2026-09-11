@@ -251,3 +251,37 @@ class PermutationSuite:
         return pd.DataFrame(
             [{"test": r.name, "verdict": r.verdict(), **r.summary()} for r in self.results]
         )
+
+
+def shuffle_columns(weights: pd.DataFrame, seed: int = 0) -> pd.DataFrame:
+    """Reassign each bar's weights to different symbols, keeping the shape.
+
+    The shuffled-ticker placebo. Every bar keeps exactly the same *set* of
+    weights — same gross exposure, same concentration, same turnover profile —
+    but they are attached to the wrong coins.
+
+    A signal that genuinely picks symbols collapses. A signal that is really
+    market timing wearing a cross-sectional costume does **not**, because which
+    coin it held never mattered: it was long when the market rose. That
+    distinction is invisible in a Sharpe ratio and decisive for whether the
+    strategy is what its author thinks it is.
+    """
+    rng = np.random.default_rng(seed)
+    values = weights.to_numpy().copy()
+    for row in range(values.shape[0]):
+        values[row] = values[row][rng.permutation(values.shape[1])]
+    return pd.DataFrame(values, index=weights.index, columns=weights.columns)
+
+
+def shuffled_ticker_test(
+    evaluate: Callable[[pd.DataFrame], float],
+    weights: pd.DataFrame,
+    observed: float,
+    n_permutations: int = 200,
+    seed: int = 0,
+) -> PermutationResult:
+    """Does it matter *which* symbols the strategy picked?"""
+    null = np.array(
+        [evaluate(shuffle_columns(weights, seed=seed + i)) for i in range(n_permutations)]
+    )
+    return PermutationResult("shuffled_ticker", observed, null, n_permutations)

@@ -28,3 +28,25 @@ Status figures are from the 11 Sept 2026 GitHub API pulls in `03_engines_and_sto
 - **Verdict: SKIP.** REFERENCE only if you want to read a clean example of order/broker semantics; NautilusTrader covers that ground for us.
 
 **Net effect on `PLAN.md`:** no changes. vectorbt confirmed; freqtrade noted as a Phase 4 crypto-live alternative and a loader reference; TradingAgents' role decomposition noted for the prompt library.
+
+## Set 2
+
+### 5. hummingbot/hummingbot — https://github.com/hummingbot/hummingbot
+- **What it is:** Open-source market-making and arbitrage runtime. ~20k stars, Apache-2.0, v2.16.0, 40+ CEX and DEX connectors (CLOB and AMM), paper mode, V2 "controllers" backtestable through the Hummingbot dashboard; sustained by the Hummingbot Foundation.
+- **Fit with the plan:** none for the trial or the first phases. It is a live execution runtime for quoting both sides of a book; our strategies are daily-bar directional. Market making is a stated non-goal (`PLAN.md` §8) because it needs L2 data, latency engineering and inventory risk management that are a different product.
+- **Verdict: SKIP.** REFERENCE only for exchange-connector edge cases (rate limits, order-status quirks) if we write our own Binance adapter instead of using Nautilus's.
+
+### 6. ccxt/ccxt — https://github.com/ccxt/ccxt
+- **What it is:** Unified exchange API for 104+ venues in Python/JS/C#/PHP/Go/Java/Rust; near-weekly releases; built-in rate limiter; `set_sandbox_mode(True)` for testnets; CCXT Pro (WebSockets) now bundled. Unified `fetchOHLCV` (with `paginate`), `fetchTradingFees`, `fetchFundingRateHistory`, `createOrder`.
+- **Fit with the plan:** three concrete jobs.
+  1. **Phase 1, delta pulls:** the bulk history comes from the Binance bucket; CCXT fetches the last day or two each night so the lake is current without re-downloading zips. It is a convenience layer, not an archive (REST trade depth is days, not years).
+  2. **Cost model:** `fetchTradingFees()` on your authenticated Binance account returns *your* maker/taker tier, so the cost model uses the real fee rather than the list price.
+  3. **Phase 4, execution:** either directly (simple daily-bar orders on Binance spot) or indirectly through NautilusTrader's Binance adapter. Testnet via sandbox mode for the first paper runs.
+- **Verdict: ADOPT** (already implied in the plan; now explicit).
+
+### 7. AI4Finance-Foundation/FinRL — https://github.com/AI4Finance-Foundation/FinRL
+- **What it is:** Deep reinforcement learning for trading: gym-style environments plus notebooks. 16.3k stars, MIT, last formal release 0.3.5 (June 2022); repo pushed July 2026 but notebook-centric, 312 open issues; the team steers users to FinRL-Meta/FinRL-X and ran contests 2023–2025.
+- **Fit with the plan:** none. RL agents trained on a few years of daily prices are the textbook overfitting case: thousands of implicit parameters, reward on in-sample returns, no multiple-testing control, and the published examples use survivorship-biased Yahoo data. Nothing here would survive gates 4–7, and the code quality is educational.
+- **Verdict: SKIP.** REFERENCE only for the gym environment interface if an RL experiment is ever pre-registered as a research question, which is not on the roadmap.
+
+**Net effect on `PLAN.md`:** CCXT written into Phase 1 (nightly deltas, fee lookup) and Phase 4 (execution/testnet). hummingbot and FinRL confirm existing non-goals.

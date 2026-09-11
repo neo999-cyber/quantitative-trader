@@ -58,15 +58,22 @@ qr trial verify
 
 Send back `qa_1d.md` and the `manifest hash` line from `qr data ingest`. Everything after that runs against the lake, and the manifest hash is what every Hypothesis Report will cite as its data version.
 
-## Open question for you
+## The cost model is frozen for the trial
 
-The cost model currently assumes **Binance spot VIP0: 0.10% taker, no BNB discount**, plus a 2 bps half-spread per side — 12 bps per side in total. That is the pessimistic default and it is what gate 2 is being judged against. If your actual tier or BNB setting differs, say so and it changes one line:
+Verified against the account's own fee panel on **11 September 2026**: 30-day spot volume 0.00 USD, so **VIP0**, with the **BNB fee discount on** — 0.07500% maker and taker.
 
-```bash
-qr backtest --tier VIP1 --bnb --spread 1.5 ...
-```
+| Component | bps per side |
+|---|---|
+| Binance spot taker fee (VIP0, −25% BNB) | 7.5 |
+| Half-spread | 2.0 |
+| **Total** | **9.5** (19 bps a round trip) |
 
-The fee table is a snapshot and carries a `verified_on` field. It must be re-checked against the published schedule before any cost model is frozen for a live strategy.
+`CostModel.trial()` is that model, it is the default for `qr backtest` and `run_backtest()`, and its `fees_verified_on` date travels into the trial log with every run — so a Hypothesis Report cannot quietly cite an unverified fee. Gate 2 additionally requires the edge to survive `stressed(2.0)`: 38 bps a round trip.
+
+Two caveats worth keeping in view:
+
+- **The BNB discount is conditional.** It applies only while "pay fees in BNB" stays on and there is BNB in the account to pay with. If the balance runs out mid-month the real fee silently reverts to 10 bps. `qr backtest --no-bnb` runs the unverified 12 bps-per-side version, and any strategy whose verdict flips between the two is too cost-marginal to trade.
+- **The 2 bps half-spread is the weakest number here**, not the fee. Top-30 USDT pairs mostly quote inside 1 bp, so it is deliberately pessimistic, but it is a guess rather than a measurement. It is the first thing to replace once the bucket's 1h bars give a real intrabar estimate.
 
 ## Next (Day 2–3)
 

@@ -136,7 +136,7 @@ def run_backtest(
     the strategy trade on information from the bar it is predicting — if Sharpe
     explodes at `lag=0` relative to `lag=1`, the signal is reading the future.
     """
-    costs = costs or CostModel.binance_spot()
+    costs = costs or CostModel.trial()
     returns = panel.returns()
     targets = strategy.target_weights(panel, universe)
     targets = targets.reindex_like(panel.close).fillna(0.0)

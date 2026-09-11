@@ -60,3 +60,21 @@ def test_impact_adds_to_the_linear_charge():
     with_impact = model.charge(turnover, equity=1e6, adv_notional=adv, volatility=vol).iloc[0]
     assert with_impact > linear
     assert with_impact == pytest.approx(linear + 0.5 * 0.04 * np.sqrt(5e5 / 1e8))
+
+
+def test_the_trial_model_is_vip0_with_the_bnb_discount():
+    model = CostModel.trial()
+    assert model.fee_bps == pytest.approx(7.5)
+    assert model.linear_bps == pytest.approx(9.5)
+    assert model.name == "binance_spot_vip0_bnb_taker"
+
+
+def test_the_trial_model_carries_its_verification_date():
+    described = CostModel.trial().describe()
+    assert described["fees_verified_on"] == "2026-09-11"
+    assert CostModel.binance_spot().describe()["fees_verified_on"] == "unverified"
+
+
+def test_gate_two_stress_is_double_the_round_trip():
+    model = CostModel.trial()
+    assert 2 * model.stressed(2.0).linear_bps == pytest.approx(38.0)

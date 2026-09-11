@@ -29,7 +29,7 @@ from qr.data.lake import Lake
 from qr.data.panel import Panel
 from qr.data.qa import check_klines, report_markdown, summarise
 from qr.data.universe import UniverseSpec, as_instruments, membership
-from qr.execution.costs import CostModel
+from qr.execution.costs import TRIAL_BNB_DISCOUNT, TRIAL_FEE_TIER, CostModel
 from qr.report import table
 from qr.validate.trial_log import TrialLog, TrialLogCorrupt
 
@@ -233,7 +233,7 @@ def cmd_backtest(args) -> int:
     spec = UniverseSpec(n=args.n, lookback=args.lookback, min_history=args.min_history)
     universe = membership(panel, spec)
     strategy = getattr(library, FAMILIES[args.family])(**_parse_params(args.param))
-    costs = CostModel.binance_spot(tier=args.tier, bnb_discount=args.bnb, half_spread_bps=args.spread)
+    costs = _costs(args)
 
     result = run_backtest(panel, strategy, costs, universe, charge_impact=args.impact)
     stats = result.stats()
@@ -261,6 +261,13 @@ def cmd_backtest(args) -> int:
         )
         print("\nrecorded in the trial log")
     return 0
+
+
+def _costs(args) -> CostModel:
+    """The trial's verified model unless the tier or the BNB switch is overridden."""
+    if args.tier.upper() == TRIAL_FEE_TIER and args.bnb == TRIAL_BNB_DISCOUNT:
+        return CostModel.trial(half_spread_bps=args.spread)
+    return CostModel.binance_spot(tier=args.tier, bnb_discount=args.bnb, half_spread_bps=args.spread)
 
 
 def _parse_params(pairs: list[str] | None) -> dict:
@@ -351,8 +358,13 @@ def build_parser() -> argparse.ArgumentParser:
     bt.add_argument("--start")
     bt.add_argument("--end")
     add_universe_args(bt)
-    bt.add_argument("--tier", default="VIP0")
-    bt.add_argument("--bnb", action="store_true", help="fees paid in BNB (-25%%)")
+    bt.add_argument("--tier", default=TRIAL_FEE_TIER, help="Binance spot VIP tier")
+    bt.add_argument(
+        "--bnb",
+        action=argparse.BooleanOptionalAction,
+        default=TRIAL_BNB_DISCOUNT,
+        help="fees paid in BNB (-25%%); on by default, matching the account",
+    )
     bt.add_argument("--spread", type=float, default=2.0, help="half-spread in bps per side")
     bt.add_argument("--impact", action="store_true", help="charge square-root impact too")
     bt.add_argument("--crosscheck", action="store_true", help="verify against the share-ledger engine")

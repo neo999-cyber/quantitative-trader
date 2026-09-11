@@ -127,3 +127,30 @@ def test_backtest_params_accept_json_values(env, capsys):
     capsys.readouterr()
     assert run(env, "backtest", "--family", "tsmom", "--param", "vol_target=null", "--n", "3", "--min-history", "60") == 0
     assert "ann_vol" in capsys.readouterr().out
+
+
+def test_backtest_defaults_to_the_verified_trial_cost_model():
+    from qr.cli import _costs, build_parser
+
+    described = _costs(build_parser().parse_args(["backtest"])).describe()
+    assert described["linear_bps_per_side"] == 9.5
+    assert described["fees_verified_on"] == "2026-09-11"
+
+
+def test_no_bnb_falls_back_to_the_unverified_schedule():
+    from qr.cli import _costs, build_parser
+
+    described = _costs(build_parser().parse_args(["backtest", "--no-bnb"])).describe()
+    assert described["linear_bps_per_side"] == 12.0
+    assert described["fees_verified_on"] == "unverified"
+
+
+def test_the_trial_log_records_the_cost_model_that_was_used(env, tmp_path, capsys):
+    run(env, "data", "ingest")
+    capsys.readouterr()
+    run(env, "backtest", "--family", "tsmom", "--param", "lookback=30", "--n", "3", "--min-history", "60", "--log")
+    capsys.readouterr()
+
+    record = TrialLog(paths(tmp_path / "lake").trial_log).records(kind="run")[0]
+    assert record.payload["costs"]["fees_verified_on"] == "2026-09-11"
+    assert record.payload["costs"]["linear_bps_per_side"] == 9.5

@@ -17,7 +17,12 @@ and get their own model (`PerpCostModel`) when Phase 4 needs it.
 
 The fee schedule below is a snapshot and must be re-verified against
 <https://www.binance.com/en/fee/schedule> before a cost model is frozen for a
-live strategy — `BinanceSpotFees.verified_on` records when it last was.
+live strategy — `verified_on` records when it last was, and it travels with the
+model into the trial log so a Hypothesis Report can never quietly cite an
+unverified fee.
+
+`trial_costs()` is the one the crypto trial runs on: VIP0 with the BNB discount
+on, checked against the account's own fee panel on 2026-09-11.
 """
 from __future__ import annotations
 
@@ -69,6 +74,18 @@ class BinanceSpotFees:
         return cls(maker, taker, key, bnb_discount, verified_on)
 
 
+#: The account's own fee panel, read on this date: 30-day volume 0.00 USD, so
+#: VIP0, with the BNB fee discount switched on -> 0.07500% maker and taker.
+TRIAL_FEE_TIER = "VIP0"
+TRIAL_BNB_DISCOUNT = True
+TRIAL_FEES_VERIFIED_ON = "2026-09-11"
+
+#: Half the quoted spread, per side. 2 bps is a deliberately pessimistic stand-in
+#: for the top-30 USDT pairs, which mostly quote inside 1 bp; it is the number to
+#: replace first once the bucket's 1h bars give a real intrabar spread estimate.
+TRIAL_HALF_SPREAD_BPS = 2.0
+
+
 @dataclass(frozen=True)
 class CostModel:
     """Per-side transaction costs in basis points of traded notional.
@@ -83,6 +100,7 @@ class CostModel:
     use_maker: bool = False
     multiplier: float = 1.0
     name: str = "binance_spot_vip0_taker"
+    verified_on: str = "unverified"
 
     @classmethod
     def binance_spot(
@@ -100,6 +118,23 @@ class CostModel:
             half_spread_bps=half_spread_bps,
             impact_coef=impact_coef,
             name=f"binance_spot_{fees.tier.lower()}{suffix}_taker",
+            verified_on=verified_on,
+        )
+
+    @classmethod
+    def trial(cls, half_spread_bps: float = TRIAL_HALF_SPREAD_BPS, impact_coef: float = 1.0) -> "CostModel":
+        """The crypto trial's frozen cost model. Every gate is judged against this.
+
+        VIP0 + BNB discount = 7.5 bps of fee per side, plus the half-spread, so
+        9.5 bps per side and 19 bps for a round trip. Gate 2 additionally
+        requires the edge to survive `stressed(2.0)`, i.e. 38 bps a round trip.
+        """
+        return cls.binance_spot(
+            tier=TRIAL_FEE_TIER,
+            bnb_discount=TRIAL_BNB_DISCOUNT,
+            half_spread_bps=half_spread_bps,
+            impact_coef=impact_coef,
+            verified_on=TRIAL_FEES_VERIFIED_ON,
         )
 
     @property
@@ -168,4 +203,5 @@ class CostModel:
             "use_maker": self.use_maker,
             "multiplier": self.multiplier,
             "linear_bps_per_side": self.linear_bps,
+            "fees_verified_on": self.verified_on,
         }

@@ -52,5 +52,9 @@ Realistic: first honest verdict ~1 week after go, 10 days with one fix cycle. Th
 - **Accounts already held:** Binance (a few transactions over the years) and Interactive Brokers (same). IBKR is the equities/ETF/futures venue for later phases; its official MCP is connected in the cloud session. Alpaca is not needed.
 - The Centaur rulebook's Rule 3 regime inputs (SPY/QQQ/VIX/DXY) and the ETF-basket second trial will use IBKR market data or Tiingo, not yfinance.
 
+## Build progress
+
+- **Day 1–2 done (11 Sept 2026).** Data layer, strategy interface, cost model, two-engine backtest runner and hash-chained trial log are in on `claude/admiring-ptolemy-tfp528`; 152 tests, all offline. Details and the laptop commands: `docs/02_DATA_LAYER.md`. **Waiting on you:** run `qr data pull` on the laptop (the sandbox cannot reach Binance) and confirm your Binance fee tier.
+
 ## Before "go" (still thinking)
 - Review GitHub repos the user will share; each gets a one-by-one assessment in `docs/research/06_repo_reviews.md`: adopt / borrow / reference / skip, and where it changes `PLAN.md`.

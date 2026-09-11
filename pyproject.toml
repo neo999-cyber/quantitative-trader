@@ -19,12 +19,25 @@ dependencies = [
 [project.optional-dependencies]
 ai = ["anthropic>=1.0"]
 dev = ["pytest>=7.0"]
+# The research platform (`qr`). Kept optional so the discretionary `centaur`
+# assistant still installs on a machine with none of the heavy stack.
+qr = [
+    "pyarrow>=15",
+    "duckdb>=1.0",
+    "scipy>=1.11",
+]
+research = [
+    "vectorbt>=1.0",
+    # vectorbt 1.1 still imports plotly's removed scattermapbox trace.
+    "plotly<6",
+]
 
 [project.scripts]
 centaur = "centaur.cli:main"
+qr = "qr.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["centaur*"]
+include = ["centaur*", "qr*"]
 
 [tool.setuptools.package-data]
 centaur = ["data/*.csv"]

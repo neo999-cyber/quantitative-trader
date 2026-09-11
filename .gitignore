@@ -11,3 +11,6 @@ briefs/
 journal/
 *.jsonl
 !examples/*.jsonl
+lake/
+.qr/
+runs/

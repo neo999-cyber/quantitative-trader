@@ -354,6 +354,69 @@ def cmd_gates(args) -> int:
     return 0 if verdict != "FAIL" else 1
 
 
+def cmd_families(args) -> int:
+    """Run the four registered trial families through the gates."""
+    from qr.research.families import BY_ID, TRIAL_FAMILIES, run_family, summarise
+    from qr.validate.report import write_report
+
+    lake = _lake(args)
+    panel = lake.load_panel(interval=args.interval, start=args.start, end=args.end)
+    spec = UniverseSpec(n=args.n, lookback=args.lookback, min_history=args.min_history)
+    universe = membership(panel, spec)
+    costs = _costs(args)
+    log = TrialLog(paths(args.root).ensure().trial_log)
+
+    holdout_panel = holdout_universe = None
+    if args.holdout_start:
+        holdout_panel = lake.load_panel(interval=args.interval, start=args.holdout_start, end=args.holdout_end)
+        holdout_universe = membership(holdout_panel, spec)
+
+    chosen = [BY_ID[h] for h in args.only] if args.only else TRIAL_FAMILIES
+    missing = [f.hypothesis_id for f in chosen if not log.records(kind="prereg", hypothesis_id=f.hypothesis_id)]
+    if missing and not args.skip_prereg_check:
+        print(
+            "not pre-registered: " + ", ".join(missing) + "\n"
+            "Register each before running, or gate 0 will fail them — which it should:\n"
+            + "\n".join(f"  qr trial prereg {h} --file docs/prereg/{h}.md" for h in missing),
+            file=sys.stderr,
+        )
+        return 2
+
+    runs = []
+    for family in chosen:
+        print(f"\n### {family.hypothesis_id} — {family.summary} ({family.n_variants} variants)\n", file=sys.stderr)
+        run = run_family(
+            family,
+            panel,
+            costs,
+            universe,
+            spec.name,
+            trial_log=log,
+            manifest_hash=lake.manifest_hash(),
+            holdout_panel=holdout_panel,
+            holdout_universe=holdout_universe,
+            permutations=args.permutations,
+            upto=args.upto,
+            stop_on_fail=not args.all_gates,
+        )
+        runs.append(run)
+        md, _ = write_report(run.report, paths(args.root).reports, log, run.sweep.results[run.best_variant].stats())
+        print(table(run.report.to_frame()), file=sys.stderr)
+        print(f"wrote {md}", file=sys.stderr)
+
+    print("\n# Trial summary\n")
+    print(table(summarise(runs, log)))
+    passed = [r for r in runs if r.row(log)["verdict"] != "FAIL" and not r.spec.control]
+    control_passed = [r for r in runs if r.row(log)["verdict"] != "FAIL" and r.spec.control]
+    if control_passed:
+        print(
+            "\nThe CONTROL passed. Check the engine before believing the strategy — "
+            "see docs/prereg/rsi_reversal_v1.md."
+        )
+    print(f"\n{len(passed)} of {len([r for r in runs if not r.spec.control])} real families survived.")
+    return 0
+
+
 def _parse_grid(pairs: list[str] | None) -> dict:
     """`--grid lookback=[30,60,90]` -> {"lookback": [30, 60, 90]}."""
     out: dict[str, object] = {}
@@ -553,6 +616,28 @@ def build_parser() -> argparse.ArgumentParser:
     gt.add_argument("--upto", type=int, default=9, help="highest gate to run")
     gt.add_argument("--all-gates", action="store_true", dest="all_gates", help="do not stop at the first FAIL")
     gt.set_defaults(func=cmd_gates)
+
+    fam = sub.add_parser("families", help="run the four registered trial families through the gates")
+    fam.add_argument("--only", nargs="*", help="hypothesis ids to run (default: all four)")
+    fam.add_argument("--interval", default="1d")
+    fam.add_argument("--start")
+    fam.add_argument("--end")
+    fam.add_argument("--holdout-start", dest="holdout_start")
+    fam.add_argument("--holdout-end", dest="holdout_end")
+    add_universe_args(fam)
+    fam.add_argument("--tier", default=TRIAL_FEE_TIER)
+    fam.add_argument("--bnb", action=argparse.BooleanOptionalAction, default=TRIAL_BNB_DISCOUNT)
+    fam.add_argument("--spread", type=float, default=2.0)
+    fam.add_argument("--permutations", type=int, default=200)
+    fam.add_argument("--upto", type=int, default=9)
+    fam.add_argument("--all-gates", action="store_true", dest="all_gates")
+    fam.add_argument(
+        "--skip-prereg-check",
+        action="store_true",
+        dest="skip_prereg_check",
+        help="run without pre-registrations; gate 0 will fail them, which is the point",
+    )
+    fam.set_defaults(func=cmd_families)
 
     return parser
 

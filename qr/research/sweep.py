@@ -12,6 +12,7 @@ the pipeline offers a way to run variants without counting them.
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from typing import Iterable, Sequence
 
@@ -22,6 +23,8 @@ from qr.data.panel import Panel
 from qr.execution.costs import CostModel
 from qr.research.runner import BacktestResult, run_backtest
 from qr.strategies.base import Strategy
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -45,8 +48,29 @@ class Sweep:
         return list(self.returns.columns)
 
     def best(self, by: str = "sharpe") -> str:
-        """The variant a naive backtest would have reported. Named, not hidden."""
-        return str(self.stats[by].idxmax())
+        """The variant a naive backtest would have reported. Named, not hidden.
+
+        When no variant produced a finite score — the usual cause being a
+        strategy whose entry condition never fired, so every variant is flat —
+        this returns the first variant rather than raising. "It never traded"
+        is a finding the gates should report (gate 3 on significance, gate 8 on
+        round trips), not an exception that stops the report being written.
+        """
+        scores = self.stats[by].astype(float)
+        if not np.isfinite(scores).any():
+            log.warning(
+                "no variant of %r produced a finite %s — the strategy appears never to have "
+                "taken a position; reporting the first variant so the gates can say so",
+                self.family,
+                by,
+            )
+            return str(self.names[0])
+        return str(scores.idxmax())
+
+    @property
+    def ever_traded(self) -> bool:
+        """Did any variant take a position at all?"""
+        return bool((self.stats["round_trips"] > 0).any())
 
     def best_result(self, by: str = "sharpe") -> BacktestResult:
         return self.results[self.best(by)]

@@ -457,6 +457,14 @@ def gate_8_robustness(ctx: GateContext) -> GateResult:
 
     round_trips = result_stats["round_trips"]
     stats["round_trips"] = round_trips
+    if round_trips == 0:
+        return GateResult(
+            8,
+            "robustness and regime",
+            FAIL,
+            "the strategy never took a position: its entry condition did not fire once",
+            stats,
+        )
     if round_trips < ctx.thresholds.min_round_trips:
         problems.append(f"only {round_trips:.0f} round trips")
 

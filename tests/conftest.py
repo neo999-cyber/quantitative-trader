@@ -52,3 +52,39 @@ def risk_off() -> RegimeAssessment:
 @pytest.fixture
 def today() -> dt.date:
     return dt.date(2026, 9, 10)
+
+
+# ---------------------------------------------------------------------------
+# `qr` platform fixtures. They live here rather than in tests/qr_platform/ because
+# a second conftest.py on sys.path shadows this one for the centaur tests, which
+# import `make_ohlcv` from it by module name.
+# ---------------------------------------------------------------------------
+from qr.data.binance import BinanceBucket  # noqa: E402
+from qr.data.fixtures import SyntheticPair, build_mirror  # noqa: E402
+
+
+@pytest.fixture()
+def pairs():
+    """A universe with a delisted pair, a late lister and a volume ladder."""
+    return [
+        SyntheticPair("BTCUSDT", "2023-01-01", "2024-06-30", price=30_000, quote_volume=9e8, seed=1),
+        SyntheticPair("ETHUSDT", "2023-01-01", "2024-06-30", price=2_000, quote_volume=5e8, seed=2),
+        SyntheticPair("SOLUSDT", "2023-01-01", "2024-06-30", price=20, quote_volume=2e8, seed=3),
+        SyntheticPair("DEADUSDT", "2023-01-01", "2023-08-15", price=1.0, quote_volume=6e8, seed=4),
+        SyntheticPair("LATEUSDT", "2024-01-10", "2024-06-30", price=5.0, quote_volume=7e8, seed=5),
+    ]
+
+
+@pytest.fixture()
+def mirror(tmp_path, pairs):
+    return build_mirror(tmp_path / "mirror", pairs)
+
+
+@pytest.fixture()
+def bucket(mirror):
+    return BinanceBucket(mirror)
+
+
+@pytest.fixture()
+def frames(bucket):
+    return {s: bucket.load_klines(s) for s in bucket.symbols()}

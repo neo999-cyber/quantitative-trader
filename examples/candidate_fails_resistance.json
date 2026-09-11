@@ -1,0 +1,17 @@
+{
+  "ticker": "AAPL",
+  "direction": "long",
+  "entry": 150.0,
+  "stop": 145.0,
+  "target": 165.0,
+  "signals": [
+    "technical: bouncing off the 200-day moving average",
+    "fundamental: buyback announced",
+    "sentiment_flow: unusual call buying"
+  ],
+  "catalyst": "buyback",
+  "avg_dollar_volume": 9500000000,
+  "resistance_levels": [158.0],
+  "next_earnings": "2026-10-29",
+  "holding_days": 10
+}

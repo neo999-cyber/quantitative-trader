@@ -1,0 +1,15 @@
+{
+  "regime": "RISK_OFF",
+  "composite": -0.55,
+  "confidence": 0.85,
+  "as_of": "2026-09-10",
+  "components": [
+    {"name": "trend_spy", "score": -1.0, "weight": 0.2, "detail": "SPY below 50d and 200d; lower highs & lower lows"},
+    {"name": "trend_qqq", "score": -1.0, "weight": 0.2, "detail": "QQQ below 50d and 200d"},
+    {"name": "vix_level", "score": -1.0, "weight": 0.15, "detail": "VIX 33 (+40% over 5 days)"},
+    {"name": "vix_term_structure", "score": -1.0, "weight": 0.15, "detail": "VIX/VIX3M 1.12 (backwardation)"},
+    {"name": "yield_curve", "score": -0.25, "weight": 0.15, "detail": "10y-3m -0.3% (inverted)"},
+    {"name": "dollar_dxy", "score": -0.8, "weight": 0.15, "detail": "DXY +2.4% over 20 days"}
+  ],
+  "warnings": []
+}

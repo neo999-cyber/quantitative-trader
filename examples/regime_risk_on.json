@@ -1,0 +1,15 @@
+{
+  "regime": "RISK_ON",
+  "composite": 0.46,
+  "confidence": 0.82,
+  "as_of": "2026-09-10",
+  "components": [
+    {"name": "trend_spy", "score": 1.0, "weight": 0.2, "detail": "SPY above 50d and 200d; higher highs & higher lows"},
+    {"name": "trend_qqq", "score": 0.75, "weight": 0.2, "detail": "QQQ above 50d and 200d"},
+    {"name": "vix_level", "score": 0.5, "weight": 0.15, "detail": "VIX 16.2"},
+    {"name": "vix_term_structure", "score": 0.5, "weight": 0.15, "detail": "VIX/VIX3M 0.91 (contango)"},
+    {"name": "yield_curve", "score": 0.25, "weight": 0.15, "detail": "10y-3m +0.45%"},
+    {"name": "dollar_dxy", "score": -0.3, "weight": 0.15, "detail": "DXY +0.9% over 20 days"}
+  ],
+  "warnings": []
+}

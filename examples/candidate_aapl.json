@@ -1,0 +1,18 @@
+{
+  "ticker": "AAPL",
+  "direction": "long",
+  "entry": 150.0,
+  "stop": 145.0,
+  "target": 165.0,
+  "signals": [
+    "technical: bouncing off the 200-day moving average after a 3-day capitulation, RSI 28",
+    "fundamental: $90B share buyback program announced",
+    "sentiment_flow: unusual institutional call buying detected yesterday (4.2x 30-day average, 12 DTE)"
+  ],
+  "catalyst": "Buyback announcement into an oversold tape; sector rotation back into mega-cap tech",
+  "avg_dollar_volume": 9500000000,
+  "resistance_levels": [170.0, 182.5],
+  "next_earnings": "2026-10-29",
+  "holding_days": 10,
+  "ai_thesis": "3-day capitulation on rising volume with RSI < 30; this setup on AAPL has a 64% 5-day win rate over 31 occurrences (edge +1.1%)."
+}

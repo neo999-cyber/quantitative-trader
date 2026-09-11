@@ -15,7 +15,7 @@ Conventions
 
 Build instructions (one-week trial)
 - Package name: `qr` (placeholder; rename later). Keep `centaur/` untouched.
-- Day 1–2: Binance bucket loader (daily + 1h klines, top-30 pairs by quote volume, listing/delisting dates from the bucket listing, microsecond timestamps from 2025-01-01), Parquet lake + DuckDB manifest, QA checks, Fear & Greed ingestor, `Strategy` interface, cost model (Binance spot taker fee + spread; ask the user for their actual fee tier), vectorbt runner, append-only hash-chained trial log.
+- Day 1–2: Binance bucket loader (daily + 1h klines, top-30 pairs by quote volume, listing/delisting dates from the bucket listing, microsecond timestamps from 2025-01-01), Parquet lake + DuckDB manifest, QA checks, Fear & Greed ingestor, `Strategy` interface, cost model (Binance spot: user's verified tier is VIP 0 with BNB discount ON → maker 0.075%, taker 0.075%; use taker 0.075% = 7.5 bps per side, plus spread; do not ask again), vectorbt runner, append-only hash-chained trial log.
 - Day 2–3: gates 1–9 on arch / statsmodels / skfolio (or purgedcv) / jsharpe plus own CSCV and permutation code; synthetic self-test (noise searched over 200 variants must FAIL at gate 4/5; planted edge must PASS). Hypothesis Report generator with the factor-decomposition row (beta to BTC, alpha t-stat).
 - Day 4–5: four families through all gates: TSMOM (vol-targeted), cross-sectional momentum (12-1 skip-month convention), weekly reversal, and the existing 3-down-day RSI setup as a control.
 - The cloud sandbox cannot reach Binance or Hugging Face; write loaders against local fixtures in the bucket's exact CSV format and ask the user to run `qr data pull` on the laptop.

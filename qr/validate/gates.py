@@ -443,10 +443,17 @@ def gate_8_robustness(ctx: GateContext) -> GateResult:
     net = ctx.result.net.dropna()
     result_stats = ctx.result.stats()
 
-    n_params = len([k for k, v in ctx.strategy.params.items() if v is not None])
+    # "Free" means *searched over*, not "present in the constructor". A vol
+    # target held fixed at 0.20 across every variant is a policy choice and
+    # costs no degrees of freedom; a lookback swept over forty values costs
+    # one. Counting constructor arguments would fail every strategy with a
+    # couple of fixed implementation knobs and let a two-argument strategy
+    # swept over ten thousand combinations through.
+    n_params = _free_parameters(ctx)
     stats["free_parameters"] = float(n_params)
+    stats["constructor_parameters"] = float(len([v for v in ctx.strategy.params.values() if v is not None]))
     if n_params > ctx.thresholds.max_free_params:
-        problems.append(f"{n_params} free parameters (limit {ctx.thresholds.max_free_params})")
+        problems.append(f"{n_params} swept parameters (limit {ctx.thresholds.max_free_params})")
 
     round_trips = result_stats["round_trips"]
     stats["round_trips"] = round_trips
@@ -553,6 +560,20 @@ GATES: list[Callable[[GateContext], GateResult]] = [
     gate_8_robustness,
     gate_9_holdout,
 ]
+
+
+def _free_parameters(ctx: GateContext) -> int:
+    """How many parameters the search actually varied.
+
+    From the sweep when there is one — the honest source, since it is the
+    record of what was tried. Without a sweep there is nothing to measure, so
+    it falls back to counting the strategy's own non-None parameters, which
+    over-counts and is the safe direction to be wrong in.
+    """
+    if ctx.sweep is not None and len(ctx.sweep) > 1:
+        frame = ctx.sweep.param_frame()
+        return int(sum(frame[column].astype(str).nunique() > 1 for column in frame.columns))
+    return len([v for v in ctx.strategy.params.values() if v is not None])
 
 
 def _lookback_of(strategy: Strategy) -> int:

@@ -33,7 +33,14 @@ from qr.execution.costs import TRIAL_BNB_DISCOUNT, TRIAL_FEE_TIER, CostModel
 from qr.report import table
 from qr.validate.trial_log import TrialLog, TrialLogCorrupt
 
-FAMILIES = {"buy_and_hold": "BuyAndHold", "tsmom": "TSMOM", "random_entry": "RandomEntry"}
+FAMILIES = {
+    "buy_and_hold": "BuyAndHold",
+    "tsmom": "TSMOM",
+    "xsmom": "CrossSectionalMomentum",
+    "reversal": "ShortTermReversal",
+    "rsi_reversal": "RSIReversal",
+    "random_entry": "RandomEntry",
+}
 
 
 def _lake(args) -> Lake:

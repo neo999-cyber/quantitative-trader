@@ -28,3 +28,42 @@ Ask three questions before spending a minute on a site: (1) Does it have an API?
 - https://crypto-fundraising.info/api/ · https://crypto-fundraising.info/
 - https://web3.bitget.com/en/dapp/dexu-ai-29705
 - Coinglass and Trading Economics: see `02_crypto_forex_macro_alt_data.md`
+
+---
+
+# Datasets from social media (set 2)
+
+### mito0o852/OHLCV-1m — https://huggingface.co/datasets/mito0o852/OHLCV-1m
+- **What it is:** 1-minute OHLCV bars for "thousands of US stocks", one Parquet file per month from `ohlcv_1992-01.parquet` to `ohlcv_2025-05.parquet` (the card says 1992–2026), columns timestamp/open/high/low/close/volume/ticker. The card states the data was **sourced from Finnhub.io's bulk historical archives** and re-packed. Same author also publishes `OHLCV-1m-Forex` (Dukascopy 1-minute) and `dukascopy-ticks`.
+- **Why it is interesting:** free minute bars for US equities would otherwise cost $300–1,000 one-off (FirstRate) or a Databento subscription. If delisted names are present, it is the missing cheap piece of the equities budget tier.
+- **What must be verified on the laptop (Hugging Face is blocked from the sandbox):**
+  1. **Survivorship.** Open a 2007 monthly file and check for tickers that no longer exist (LEH, BSC, WM, CFC, GM-old). If they are absent, the set is current-constituents-only and inherits the same bias as yfinance; it would then be usable only for *execution-cost* research, not for strategy validation.
+  2. **Adjustment.** Compare a split (AAPL 2014-06-09 7:1, NVDA 2024-06-10 10:1) across the boundary: raw prices jump ⇒ unadjusted (good, we adjust ourselves with a corporate-actions table); no jump ⇒ pre-adjusted with an unknown method.
+  3. **Coverage per year.** The 1992 start is implausible for minute data on "thousands" of names; count distinct tickers per year. Expect a handful before ~2000 and a steep ramp later.
+  4. **Gaps and quality.** Finnhub's minute history has known holes; count missing regular-session minutes per ticker-day against the exchange calendar, and cross-check daily closes aggregated from these minutes against Tiingo daily for 20 random tickers.
+  5. **Licence and persistence.** Finnhub's terms prohibit redistribution, so this repack could be taken down. Mirror whatever passes QA into the lake immediately; never depend on the Hub copy at run time. For personal research use the legal exposure is the uploader's, not ours, but the *reliability* risk is ours.
+- **Size warning:** thousands of tickers × 390 minutes × ~250 days × 25 years is on the order of tens to hundreds of GB. Pull months selectively with `huggingface_hub.hf_hub_download`, never `load_dataset(...)` on the whole thing on a 16 GB laptop.
+- **Verdict: BORROW, pending QA.** Not for the crypto trial. For the equities phase it becomes: (a) the free source of US minute bars for cost/impact modelling (gate 2) and intraday execution studies; (b) a daily-bar source only if check 1 passes. Tiingo (adjusted daily, delisted names) stays the system of record for daily equity research either way.
+- **Companion datasets by the same author:** `OHLCV-1m-Forex` and `dukascopy-ticks` are a shortcut to Dukascopy history without hammering Dukascopy's throttled servers. Same QA applies; the Dukascopy origin is a plus because we already planned to use it.
+
+**Laptop QA script (run in the repo venv; ~10 minutes, downloads two monthly files):**
+```
+pip install huggingface_hub polars
+python - <<'PY'
+from huggingface_hub import hf_hub_download
+import polars as pl
+repo = "mito0o852/OHLCV-1m"
+for month in ["2007-09", "2014-06"]:
+    p = hf_hub_download(repo, f"data/ohlcv_{month}.parquet", repo_type="dataset")
+    df = pl.read_parquet(p)
+    print(month, df.shape, df.columns)
+    print("  distinct tickers:", df["ticker"].n_unique())
+    print("  delisted present:", [t for t in ["LEH","BSC","WM","CFC","GM"] if t in set(df["ticker"].unique())])
+    if month == "2014-06":
+        a = df.filter(pl.col("ticker")=="AAPL").sort("timestamp")
+        print("  AAPL close 6 Jun vs 9 Jun 2014 (7:1 split):",
+              a.filter(pl.col("timestamp").dt.date()==pl.date(2014,6,6))["close"].tail(1).item(),
+              a.filter(pl.col("timestamp").dt.date()==pl.date(2014,6,9))["close"].head(1).item())
+PY
+```
+If the column names differ from the card, print `df.columns` and adjust; the checks are the point, not the exact code.

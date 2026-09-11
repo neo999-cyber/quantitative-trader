@@ -13,10 +13,13 @@ not installed, because the research extra is heavy and the gates do not need it.
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
+
+log = logging.getLogger(__name__)
 
 from qr.data.panel import Panel
 from qr.execution.costs import BPS, CostModel
@@ -95,13 +98,34 @@ def compare(
     return Comparison(weights, shares, error, error <= tolerance, tolerance)
 
 
+def vectorbt_status() -> tuple[object | None, str]:
+    """The vectorbt module, or None and why not.
+
+    Three outcomes, and the difference between the last two matters: "absent"
+    is a choice (the research extra is optional), "broken" is a bad environment
+    that must not be allowed to look like a choice. vectorbt 1.1 imports
+    plotly's removed `scattermapbox`, so installing anything that pulls plotly
+    >= 6 — skfolio does — silently disables the third engine. A cross-check
+    that quietly stops running is worse than no cross-check, because it still
+    reads as a tick.
+    """
+    try:
+        import vectorbt as vbt
+    except ModuleNotFoundError:
+        return None, "absent: vectorbt is not installed (pip install -e '.[research]')"
+    except Exception as exc:  # installed, but its own imports fail
+        return None, f"broken: vectorbt is installed but will not import ({type(exc).__name__}: {exc})"
+    return vbt, "ok"
+
+
 def vectorbt_equity(
     panel: Panel, result: BacktestResult, costs: CostModel, initial_equity: float = 10_000.0
 ) -> pd.Series | None:
-    """A third opinion from vectorbt, or None when it is not installed."""
-    try:
-        import vectorbt as vbt
-    except Exception:  # pragma: no cover - the research extra is optional
+    """A third opinion from vectorbt, or None when it is unavailable."""
+    vbt, status = vectorbt_status()
+    if vbt is None:
+        if status.startswith("broken"):
+            log.warning("third-engine cross-check skipped — %s", status)
         return None
     close = panel.close.ffill()
     portfolio = vbt.Portfolio.from_orders(

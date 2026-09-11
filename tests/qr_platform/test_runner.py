@@ -5,7 +5,7 @@ import pytest
 from qr.data.panel import Panel
 from qr.data.universe import UniverseSpec, membership
 from qr.execution.costs import BPS, CostModel
-from qr.research.crosscheck import compare, vectorbt_equity
+from qr.research.crosscheck import compare, vectorbt_equity, vectorbt_status
 from qr.research.runner import drift, leakage_probe, run_backtest
 from qr.strategies.base import Strategy
 from qr.strategies.library import BuyAndHold, RandomEntry, TSMOM
@@ -154,12 +154,26 @@ def test_the_share_ledger_engine_agrees_with_the_weight_engine(panel, universe):
         assert comparison.agrees, f"{strategy.name}: {comparison.max_relative_error:.2e}"
 
 
+def test_a_broken_vectorbt_is_never_mistaken_for_an_absent_one():
+    """An installed-but-unimportable vectorbt must say so, not go quiet.
+
+    vectorbt 1.1 imports plotly's removed `scattermapbox`, so anything that
+    pulls plotly >= 6 disables the third engine. If that reads as "not
+    installed", the cross-check stops running and still looks like a tick.
+    """
+    _, status = vectorbt_status()
+    assert not status.startswith("broken"), status
+    assert status in {"ok"} or status.startswith("absent")
+
+
 def test_vectorbt_agrees_too_when_it_is_installed(panel, universe):
+    module, status = vectorbt_status()
+    if module is None:
+        pytest.skip(status)
     costs = CostModel.binance_spot()
     result = run_backtest(panel, TSMOM(lookback=45), costs, universe)
     equity = vectorbt_equity(panel, result, costs)
-    if equity is None:
-        pytest.skip("vectorbt is not installed")
+    assert equity is not None
     both = pd.concat([result.equity, equity], axis=1).dropna()
     assert ((both.iloc[:, 0] - both.iloc[:, 1]).abs() / both.iloc[:, 1]).max() < 5e-3
 

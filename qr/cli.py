@@ -58,16 +58,25 @@ def cmd_doctor(args) -> int:
         {"item": "manifest hash", "value": lake.manifest_hash()[:16] + "…", "state": ""},
         {"item": "trial log", "value": str(p.trial_log), "state": _trial_state(p.trial_log)},
     ]
-    for name in ("pandas", "numpy", "pyarrow", "duckdb", "scipy", "vectorbt"):
+    for name in ("pandas", "numpy", "pyarrow", "duckdb", "scipy", "arch", "statsmodels", "skfolio", "jsharpe"):
         rows.append({"item": name, "value": _version(name), "state": ""})
+    # Reported separately: vectorbt can be installed and still refuse to import
+    # (plotly >= 6 removes a trace it references), and a third engine that has
+    # quietly stopped running must not read as one that was never asked for.
+    from qr.research.crosscheck import vectorbt_status
+
+    rows.append({"item": "vectorbt", "value": _version("vectorbt"), "state": vectorbt_status()[1]})
     print(table(pd.DataFrame(rows)))
     return 0
 
 
 def _version(module: str) -> str:
+    """Installed version, without conflating "absent" with "has no __version__"."""
+    from importlib.metadata import PackageNotFoundError, version
+
     try:
-        return __import__(module).__version__
-    except Exception:
+        return version(module)
+    except PackageNotFoundError:
         return "not installed"
 
 

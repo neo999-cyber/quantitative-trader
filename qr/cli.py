@@ -185,6 +185,35 @@ def cmd_fng_show(args) -> int:
     return 0
 
 
+def cmd_trial_prereg(args) -> int:
+    """Stamp a pre-registration document before any run touches the data."""
+    log = TrialLog(paths(args.root).ensure().trial_log)
+    doc = Path(args.file).read_text(encoding="utf-8") if args.file else args.text
+    if not doc or not doc.strip():
+        print("a pre-registration needs a mechanism, a predicted sign and size, "
+              "the universe, the horizon, the parameter ranges and the OOS period", file=sys.stderr)
+        return 2
+    existing = log.records(kind="run", hypothesis_id=args.hypothesis)
+    if existing:
+        print(
+            f"{args.hypothesis!r} already has {len(existing)} run(s) in the log. Registering now "
+            "does not make this a test — gate 0 will fail, and correctly so. Use a new "
+            "hypothesis id for a genuinely new prediction.",
+            file=sys.stderr,
+        )
+    record = log.prereg(args.hypothesis, doc, source=args.file or "inline")
+    print(f"registered {args.hypothesis!r} at seq {record.seq}, doc sha256 {record.payload['doc_sha256'][:16]}…")
+    return 0
+
+
+def cmd_trial_note(args) -> int:
+    """Write the justification a WARN requires."""
+    log = TrialLog(paths(args.root).ensure().trial_log)
+    record = log.note(args.hypothesis, args.text)
+    print(f"noted at seq {record.seq}")
+    return 0
+
+
 def cmd_trial_verify(args) -> int:
     log = TrialLog(paths(args.root).trial_log)
     try:
@@ -232,6 +261,102 @@ def _summarise_payload(kind: str, payload: dict) -> str:
     return json.dumps({k: v for k, v in payload.items() if k != "agent"})[:80]
 
 
+def cmd_selftest(args) -> int:
+    """Point the validation engine at data whose answer is known in advance."""
+    from qr.validate.selftest import run_selftest
+
+    log = TrialLog(paths(args.root).ensure().trial_log) if args.log else None
+    report = run_selftest(
+        n_variants=args.variants,
+        permutations=args.permutations,
+        trial_log=log,
+        seed=args.seed,
+        stop_on_fail=not args.all_gates,
+    )
+    print(table(report.to_frame()))
+    if report.ok:
+        print("\nself-test OK: noise is rejected at the deflation gates, the planted edge survives.")
+        return 0
+    print("\nSELF-TEST BROKEN — the gates cannot be trusted until this passes:\n", file=sys.stderr)
+    print(report.failure_summary(), file=sys.stderr)
+    for case in report.cases:
+        if not case.passed:
+            print(f"\n--- {case.name} ---", file=sys.stderr)
+            print(table(case.report.to_frame()), file=sys.stderr)
+    return 2
+
+
+def cmd_gates(args) -> int:
+    """Run a family through the gates and write its Hypothesis Report."""
+    from qr.research.sweep import run_sweep
+    from qr.strategies import library
+    from qr.validate.gates import GateContext, GateThresholds, run_gates
+    from qr.validate.report import headline_verdict, write_report
+
+    lake = _lake(args)
+    panel = lake.load_panel(interval=args.interval, start=args.start, end=args.end)
+    spec = UniverseSpec(n=args.n, lookback=args.lookback, min_history=args.min_history)
+    universe = membership(panel, spec)
+    costs = _costs(args)
+    log = TrialLog(paths(args.root).ensure().trial_log)
+
+    cls = getattr(library, FAMILIES[args.family])
+    grid = cls.grid(**_parse_grid(args.grid)) if args.grid else [cls(**_parse_params(args.param))]
+    hypothesis_id = args.hypothesis or args.family
+
+    sweep = run_sweep(
+        panel, grid, costs, universe, spec.name, trial_log=log, hypothesis_id=hypothesis_id
+    )
+    log.run(
+        hypothesis_id,
+        family=sweep.family,
+        params={"grid": f"{len(grid)} variants"},
+        universe=spec.name,
+        metrics={"best_sharpe": float(sweep.sharpes().max())},
+        variants=len(grid),
+        manifest_hash=lake.manifest_hash(),
+    )
+
+    best = sweep.best()
+    holdout_panel = None
+    if args.holdout_start:
+        holdout_panel = lake.load_panel(interval=args.interval, start=args.holdout_start, end=args.holdout_end)
+
+    context = GateContext(
+        hypothesis_id=hypothesis_id,
+        panel=panel,
+        strategy=next(s for s in grid if s.name == best),
+        costs=costs,
+        result=sweep.results[best],
+        sweep=sweep,
+        universe=universe,
+        trial_log=log,
+        manifest_hash=lake.manifest_hash(),
+        holdout_panel=holdout_panel,
+        holdout_universe=membership(holdout_panel, spec) if holdout_panel is not None else None,
+        permutations=args.permutations,
+    )
+    report = run_gates(context, upto=args.upto, stop_on_fail=not args.all_gates)
+
+    print(table(report.to_frame()))
+    verdict, reason = headline_verdict(report, log)
+    print(f"\nverdict: {verdict} — {reason}")
+
+    md, js = write_report(report, paths(args.root).reports, log, sweep.results[best].stats())
+    print(f"\nwrote {md}\n      {js}")
+    return 0 if verdict != "FAIL" else 1
+
+
+def _parse_grid(pairs: list[str] | None) -> dict:
+    """`--grid lookback=[30,60,90]` -> {"lookback": [30, 60, 90]}."""
+    out: dict[str, object] = {}
+    for item in pairs or []:
+        key, _, value = item.partition("=")
+        parsed = json.loads(value)
+        out[key] = parsed if isinstance(parsed, list) else [parsed]
+    return out
+
+
 def cmd_backtest(args) -> int:
     from qr.research import crosscheck
     from qr.research.runner import leakage_probe, run_backtest
@@ -256,7 +381,11 @@ def cmd_backtest(args) -> int:
         print("\n## gate 1 leakage probe\n")
         probe = leakage_probe(panel, strategy, costs, universe)
         print(table(probe.reset_index()))
-        print(f"\nlag-0 / lag-1 gross Sharpe ratio: {probe.attrs['leak_ratio']:.2f} (near 1 is clean)")
+        print(
+            f"\npeek ratio (lag 0 / lag 1): {probe.attrs['peek_ratio']:.2f} — high is normal, not a leak"
+            f"\nspike ratio (lag 1 / its neighbours): {probe.attrs['spike_ratio']:.2f} — above 1.5 means"
+            f" the edge exists only at the reported lag, which is either a one-bar-ahead signal or a look-ahead"
+        )
 
     if args.log:
         TrialLog(paths(args.root).trial_log).run(
@@ -349,6 +478,15 @@ def build_parser() -> argparse.ArgumentParser:
     fng_show.set_defaults(func=cmd_fng_show)
 
     trial = sub.add_parser("trial", help="the trial log").add_subparsers(dest="subcommand", required=True)
+    prereg = trial.add_parser("prereg", help="stamp a pre-registration (gate 0) before running anything")
+    prereg.add_argument("hypothesis")
+    prereg.add_argument("--file", help="path to the pre-registration document")
+    prereg.add_argument("--text", help="the document inline, instead of --file")
+    prereg.set_defaults(func=cmd_trial_prereg)
+    note = trial.add_parser("note", help="write the justification a WARN requires")
+    note.add_argument("hypothesis")
+    note.add_argument("text", help='e.g. "gate 3: short sample by design, CI still excludes zero"')
+    note.set_defaults(func=cmd_trial_note)
     verify = trial.add_parser("verify", help="check the hash chain")
     verify.set_defaults(func=cmd_trial_verify)
     show = trial.add_parser("show", help="recent records")
@@ -381,6 +519,33 @@ def build_parser() -> argparse.ArgumentParser:
     bt.add_argument("--log", action="store_true", help="record the run in the trial log")
     bt.add_argument("--hypothesis", help="hypothesis id for the trial log")
     bt.set_defaults(func=cmd_backtest)
+
+    st = sub.add_parser("selftest", help="check the validation engine against known answers")
+    st.add_argument("--variants", type=int, default=200, help="grid size for each world")
+    st.add_argument("--permutations", type=int, default=100)
+    st.add_argument("--seed", type=int, default=0)
+    st.add_argument("--log", action="store_true", help="record the self-test in the trial log")
+    st.add_argument("--all-gates", action="store_true", dest="all_gates", help="do not stop at the first FAIL")
+    st.set_defaults(func=cmd_selftest)
+
+    gt = sub.add_parser("gates", help="run a family through the gates and write its Hypothesis Report")
+    gt.add_argument("--family", choices=sorted(FAMILIES), default="tsmom")
+    gt.add_argument("--param", action="append", help="name=value for a single variant")
+    gt.add_argument("--grid", action="append", help="name=[v1,v2,...] to sweep, repeatable")
+    gt.add_argument("--hypothesis", help="hypothesis id (default: the family name)")
+    gt.add_argument("--interval", default="1d")
+    gt.add_argument("--start")
+    gt.add_argument("--end")
+    gt.add_argument("--holdout-start", dest="holdout_start", help="gate 9 period, opened exactly once")
+    gt.add_argument("--holdout-end", dest="holdout_end")
+    add_universe_args(gt)
+    gt.add_argument("--tier", default=TRIAL_FEE_TIER)
+    gt.add_argument("--bnb", action=argparse.BooleanOptionalAction, default=TRIAL_BNB_DISCOUNT)
+    gt.add_argument("--spread", type=float, default=2.0)
+    gt.add_argument("--permutations", type=int, default=200)
+    gt.add_argument("--upto", type=int, default=9, help="highest gate to run")
+    gt.add_argument("--all-gates", action="store_true", dest="all_gates", help="do not stop at the first FAIL")
+    gt.set_defaults(func=cmd_gates)
 
     return parser
 

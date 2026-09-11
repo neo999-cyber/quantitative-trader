@@ -202,9 +202,15 @@ class TrialLog:
         )
 
     def gate(self, hypothesis_id: str, gate: int, name: str, verdict: str, stats: dict[str, Any]) -> TrialRecord:
+        """Record one gate's verdict.
+
+        SKIP is a permitted verdict and is recorded like any other: a gate that
+        did not run is the most important thing to have on the record, because
+        it is the one a reader is most likely to mistake for a pass.
+        """
         verdict = verdict.upper()
-        if verdict not in {"PASS", "WARN", "FAIL"}:
-            raise ValueError(f"verdict must be PASS/WARN/FAIL, got {verdict!r}")
+        if verdict not in {"PASS", "WARN", "FAIL", "SKIP"}:
+            raise ValueError(f"verdict must be PASS/WARN/FAIL/SKIP, got {verdict!r}")
         return self.append(
             "gate", hypothesis_id, {"gate": gate, "name": name, "verdict": verdict, "stats": stats}
         )

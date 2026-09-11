@@ -51,6 +51,13 @@ def test_gate_records_require_a_known_verdict(log):
         log.gate("h", 3, "significance", "probably fine", {})
 
 
+def test_a_skipped_gate_is_recorded_rather_than_dropped(log):
+    """A gate that did not run is the one most easily mistaken for a pass."""
+    log.gate("h", 9, "true holdout", "SKIP", {"reason": "no holdout supplied"})
+    assert log.records(kind="gate")[0].payload["verdict"] == "SKIP"
+    assert log.verify() == 1
+
+
 def test_editing_a_record_breaks_the_chain(log):
     log.run("h", "tsmom", {"lookback": 30}, "u", {"sharpe": 0.2})
     log.run("h", "tsmom", {"lookback": 60}, "u", {"sharpe": 2.9})

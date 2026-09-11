@@ -192,25 +192,47 @@ def leakage_probe(
     costs: CostModel | None = None,
     universe: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
-    """Gate 1's one-switch test, as a table.
+    """Gate 1's one-switch test: the same strategy at lag 0, 1 and 2.
 
-    Run the same strategy at lag 0, 1 and 2. An honest signal degrades smoothly
-    from 1 to 2 and gains only modestly at 0; one that reads the future posts a
-    Sharpe at lag 0 that it cannot come close to at lag 1.
+    Lag 1 is the honest setting. What the three numbers mean is less obvious
+    than it looks, and getting it wrong makes the test useless in both
+    directions:
+
+    * **`peek_ratio` = S(0) / S(1)** is *not* a leak detector. Letting any
+      return-based signal act on the bar it is predicting is an enormous and
+      entirely expected advantage — an honest TSMOM scores 4 to 8 times its
+      lag-1 Sharpe at lag 0. Flagging that flags everything.
+
+    * **`spike_ratio` = S(1) / max(S(0), S(2))** is the real signature. A
+      strategy that reaches forward inside its own `target_weights` — the leak
+      the runner's shift cannot protect against — has its peek aligned exactly
+      onto the bar it predicted, so it posts a huge Sharpe at lag 1 that
+      **collapses on both sides**. Measured on a planted example: 45.9 at lag 1
+      against 0.7 and 1.0 either side, where an honest strategy peaks at lag 0
+      and declines monotonically.
+
+    A spike is not proof on its own: a genuine short-horizon signal (a one-day
+    reversal) also predicts exactly one bar ahead and will show one. The thing
+    that separates them is magnitude — a real daily edge earns a Sharpe of 1 or
+    2, a leak earns 45 — which is why gate 1 blocks on an implausible Sharpe and
+    only warns on the shape.
     """
     rows = []
     for lag in (0, 1, 2):
         result = run_backtest(panel, strategy, costs, universe, lag=lag)
         rows.append({"lag": lag, "sharpe": result.sharpe(), "gross_sharpe": result.sharpe(gross=True)})
     frame = pd.DataFrame(rows).set_index("lag")
-    frame.attrs["leak_ratio"] = _leak_ratio(frame.loc[0, "gross_sharpe"], frame.loc[1, "gross_sharpe"])
+    honest = frame.loc[1, "gross_sharpe"]
+    frame.attrs["peek_ratio"] = _ratio(frame.loc[0, "gross_sharpe"], honest)
+    frame.attrs["spike_ratio"] = _ratio(honest, max(frame.loc[0, "gross_sharpe"], frame.loc[2, "gross_sharpe"]))
+    frame.attrs["honest_sharpe"] = float(honest)
     return frame
 
 
-def _leak_ratio(peek: float, honest: float) -> float:
-    """How much better peeking is. Infinite when only the peeking version works."""
-    if not np.isfinite(peek) or not np.isfinite(honest):
+def _ratio(numerator: float, denominator: float) -> float:
+    """`numerator / denominator`, or infinity when only the numerator works."""
+    if not np.isfinite(numerator) or not np.isfinite(denominator):
         return np.nan
-    if honest > 0:
-        return float(peek / honest)
-    return np.inf if peek > 0 else np.nan
+    if denominator > 0:
+        return float(numerator / denominator)
+    return np.inf if numerator > 0 else np.nan

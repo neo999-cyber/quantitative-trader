@@ -265,9 +265,17 @@ def haircut_sharpe(
         raise ValueError(f"unknown haircut method {method!r}; use bonferroni, holm or bhy")
     if observed_sharpe <= 0:
         return observed_sharpe, adjusted
+
     # One-sided normal quantiles: a p of 1 means no evidence, hence no Sharpe.
-    t_observed = sps.norm.ppf(1.0 - min(p_value, 0.5 - 1e-12))
-    t_adjusted = sps.norm.ppf(1.0 - min(adjusted, 0.5 - 1e-12)) if adjusted < 1.0 else 0.0
+    # Both p's are floored away from zero before inversion — a p of exactly 0
+    # (which a bootstrap or a rounded t can produce) sends ppf to infinity, and
+    # inf/inf silently yields a NaN haircut instead of the near-total one the
+    # numbers actually imply.
+    def _to_t(p: float) -> float:
+        return float(sps.norm.ppf(1.0 - min(max(p, 1e-16), 0.5 - 1e-12)))
+
+    t_observed = _to_t(p_value)
+    t_adjusted = _to_t(adjusted) if adjusted < 1.0 else 0.0
     if t_observed <= 0:
         return 0.0, adjusted
     return float(observed_sharpe * max(0.0, t_adjusted) / t_observed), float(adjusted)

@@ -98,12 +98,21 @@ class RandomEntry(Strategy):
         allowed = panel.tradable()
         if universe is not None:
             allowed = allowed & universe.reindex_like(allowed).fillna(False)
-        raw = pd.DataFrame(0.0, index=panel.index, columns=panel.symbols)
-        current: list[str] = []
-        for i, stamp in enumerate(panel.index):
-            candidates = list(allowed.columns[allowed.loc[stamp].to_numpy()])
-            if i % hold == 0 or not set(current) <= set(candidates):
-                take = min(n_held, len(candidates))
-                current = list(rng.choice(candidates, size=take, replace=False)) if take else []
-            raw.loc[stamp, [c for c in current if c in candidates]] = 1.0
-        return self.normalise(self.mask_to_universe(raw, panel, universe))
+
+        # Choose only on rebalance bars and assign whole blocks of rows at once.
+        # Gate 6 runs this hundreds of times per hypothesis, and a per-bar loop
+        # made the random-entry baseline 200x slower than the strategy it is
+        # meant to be a cheap null for.
+        mask = allowed.to_numpy()
+        raw = np.zeros(mask.shape)
+        for start in range(0, len(mask), hold):
+            candidates = np.flatnonzero(mask[start])
+            take = min(n_held, len(candidates))
+            if take:
+                chosen = rng.choice(candidates, size=take, replace=False)
+                raw[start : start + hold, chosen] = 1.0
+        # A name that stops trading mid-block simply drops out and the book
+        # renormalises, which is what the real strategies do too.
+        raw *= mask
+        frame = pd.DataFrame(raw, index=panel.index, columns=panel.symbols)
+        return self.normalise(self.mask_to_universe(frame, panel, universe))

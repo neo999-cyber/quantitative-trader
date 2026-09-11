@@ -111,17 +111,41 @@ def test_a_delisted_pair_earns_nothing_after_its_last_bar(panel, free):
     assert result.gross.loc[after].abs().sum() == pytest.approx(0.0)
 
 
-def test_the_leakage_probe_catches_a_strategy_that_reads_the_future(panel, free):
-    probe = leakage_probe(panel, Oracle(), free)
-    assert probe.loc[0, "gross_sharpe"] > 5.0
-    assert probe.loc[0, "gross_sharpe"] > probe.loc[1, "gross_sharpe"] + 4.0
-    assert probe.attrs["leak_ratio"] > 3.0
+class ForwardLooking(Strategy):
+    """Reaches forward inside `target_weights`, where the runner's shift cannot
+    protect against it. This is the leak gate 1 has to catch."""
+
+    family = "forward"
+
+    def target_weights(self, panel, universe=None):
+        tomorrow = panel.returns().shift(-1)
+        return self.normalise(self.mask_to_universe((tomorrow > 0).astype(float), panel, universe))
 
 
-def test_the_leakage_probe_degrades_smoothly_for_an_honest_strategy(panel, free):
+def test_the_probe_spikes_at_the_reported_lag_for_a_forward_looking_strategy(panel, free):
+    """A real leak is aligned by the honest shift, so it collapses either side."""
+    probe = leakage_probe(panel, ForwardLooking(), free)
+    honest = probe.loc[1, "gross_sharpe"]
+    assert honest > 10.0
+    assert honest > probe.loc[0, "gross_sharpe"]
+    assert honest > probe.loc[2, "gross_sharpe"]
+    assert probe.attrs["spike_ratio"] > 5.0
+
+
+def test_an_honest_strategy_peaks_at_lag_zero_not_at_the_reported_lag(panel, free):
+    """Peeking helps any return-based signal, which is why peek_ratio is not a
+    leak detector — an honest TSMOM scores several times its lag-1 Sharpe at
+    lag 0, and flagging that would flag everything."""
+    probe = leakage_probe(panel, TSMOM(lookback=30), free)
+    assert probe.attrs["peek_ratio"] > 1.5
+    assert probe.attrs["spike_ratio"] < 1.5
+
+
+def test_the_leakage_probe_is_flat_for_a_strategy_with_no_signal(panel, free):
     probe = leakage_probe(panel, BuyAndHold(), free)
-    # Buy-and-hold carries no signal, so shifting it changes almost nothing.
+    # Buy-and-hold carries no timing signal, so shifting it changes almost nothing.
     assert probe["gross_sharpe"].std() < 0.2
+    assert probe.attrs["spike_ratio"] < 1.5
 
 
 def test_vol_targeting_lands_near_its_target(panel, free):

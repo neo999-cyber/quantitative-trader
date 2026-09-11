@@ -59,12 +59,35 @@ class CSCVResult:
     def median_logit(self) -> float:
         return float(np.median(self.logits)) if len(self.logits) else float("nan")
 
-    def verdict(self, fail_above: float = 0.20, pass_below: float = 0.10) -> str:
+    def verdict(
+        self, fail_above: float = 0.20, pass_below: float = 0.10, max_prob_oos_loss: float | None = None
+    ) -> str:
+        """PBO alone over-rejects; `max_prob_oos_loss` is the necessary companion.
+
+        A high PBO says the in-sample winner is often *not* the out-of-sample
+        winner. That is damning when the variants disagree about whether there
+        is any edge — and merely uninteresting when they are two hundred
+        near-identical parameterisations of the same real one, where the
+        "winner" among near-ties is arbitrary by construction and any of them
+        would have done.
+
+        The two cases separate on whether the selected variant actually **loses**
+        out of sample. Measured on the self-test worlds: pure noise gives
+        PBO 0.87 with the choice losing 25% of the time; a planted edge gives
+        PBO 0.25 with it losing 2% of the time. So when `max_prob_oos_loss` is
+        supplied, a high PBO whose selections stay profitable is a WARN rather
+        than a FAIL — the finding is "your variants are interchangeable", which
+        is worth knowing and is not overfitting.
+        """
         if not np.isfinite(self.pbo):
             return "FAIL"
         if self.pbo < pass_below:
             return "PASS"
-        return "WARN" if self.pbo <= fail_above else "FAIL"
+        if self.pbo <= fail_above:
+            return "WARN"
+        if max_prob_oos_loss is not None and np.isfinite(self.prob_oos_loss):
+            return "FAIL" if self.prob_oos_loss > max_prob_oos_loss else "WARN"
+        return "FAIL"
 
     def summary(self) -> dict[str, float]:
         return {

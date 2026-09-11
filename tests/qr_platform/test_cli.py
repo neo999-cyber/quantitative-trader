@@ -145,6 +145,62 @@ def test_no_bnb_falls_back_to_the_unverified_schedule():
     assert described["fees_verified_on"] == "unverified"
 
 
+def test_prereg_then_gates_then_report(env, tmp_path, capsys):
+    """The whole workflow: register the prediction, run it, get a report."""
+    run(env, "data", "ingest")
+    capsys.readouterr()
+
+    assert run(env, "trial", "prereg", "tsmom_v1", "--text", "trends persist; long-only; top 3") == 0
+    assert "registered" in capsys.readouterr().out
+
+    run(env, "gates", "--family", "tsmom", "--grid", "lookback=[20,40]", "--n", "3",
+        "--min-history", "60", "--permutations", "5", "--all-gates", "--hypothesis", "tsmom_v1")
+    out = capsys.readouterr().out
+    assert "pre-registration | PASS" in out.replace("| pre-registration | PASS", "pre-registration | PASS")
+    assert "wrote" in out
+
+    report = tmp_path / "lake" / "reports" / "tsmom_v1.md"
+    assert report.exists()
+    assert "# Hypothesis Report" in report.read_text()
+
+    log = TrialLog(paths(tmp_path / "lake").trial_log)
+    assert log.verify() > 0
+    assert log.trial_count("tsmom_v1") == 2
+
+
+def test_gates_without_a_preregistration_fails_at_gate_zero(env, tmp_path, capsys):
+    run(env, "data", "ingest")
+    capsys.readouterr()
+    code = run(env, "gates", "--family", "tsmom", "--grid", "lookback=[20,40]", "--n", "3",
+               "--min-history", "60", "--permutations", "5", "--hypothesis", "unregistered")
+    out = capsys.readouterr().out
+    assert code == 1
+    assert "exploratory, not a test" in out
+
+
+def test_registering_after_the_fact_warns_loudly(env, tmp_path, capsys):
+    log = TrialLog(paths(tmp_path / "lake").ensure().trial_log)
+    log.run("late", "tsmom", {"lookback": 30}, "u")
+    assert run(env, "trial", "prereg", "late", "--text", "a prediction made after the fact") == 0
+    assert "does not make this a test" in capsys.readouterr().err
+
+
+def test_an_empty_preregistration_is_refused(env, capsys):
+    assert run(env, "trial", "prereg", "h", "--text", "   ") == 2
+    assert "needs a mechanism" in capsys.readouterr().err
+
+
+def test_a_note_justifies_a_warning(env, tmp_path, capsys):
+    assert run(env, "trial", "note", "h", "gate 3: short sample by design") == 0
+    log = TrialLog(paths(tmp_path / "lake").trial_log)
+    assert "gate 3" in log.records(kind="note")[0].payload["text"]
+
+
+def test_selftest_runs_from_the_cli_and_passes(env, capsys):
+    assert run(env, "selftest", "--variants", "40", "--permutations", "10") == 0
+    assert "self-test OK" in capsys.readouterr().out
+
+
 def test_the_trial_log_records_the_cost_model_that_was_used(env, tmp_path, capsys):
     run(env, "data", "ingest")
     capsys.readouterr()

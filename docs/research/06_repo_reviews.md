@@ -50,3 +50,23 @@ Status figures are from the 11 Sept 2026 GitHub API pulls in `03_engines_and_sto
 - **Verdict: SKIP.** REFERENCE only for the gym environment interface if an RL experiment is ever pre-registered as a research question, which is not on the roadmap.
 
 **Net effect on `PLAN.md`:** CCXT written into Phase 1 (nightly deltas, fee lookup) and Phase 4 (execution/testnet). hummingbot and FinRL confirm existing non-goals.
+
+## Set 3
+
+### 8. nautechsystems/nautilus_trader — https://github.com/nautechsystems/nautilus_trader
+- **What it is:** Rust-core, event-driven backtest and live platform with a Python control plane. 28.8k stars, LGPL-3.0, pushed daily. 1.231.0 (Aug 2026) is the last Cython-era release; 2.0.0rc4 (Sept 2026) is the Rust-only line. Stable adapters include Binance, Bybit, OKX, Coinbase, Kraken, Interactive Brokers, Databento, Tardis, dYdX, Hyperliquid and Polymarket. Fill models with partial fills and slippage probability, maker/taker fee models, margin accounts, perp funding, Parquet data catalog.
+- **Fit with the plan:** it *is* layer 5. Both of your venues (Binance and IBKR) have first-party adapters, which is the strongest argument for it over alternatives. Not used in the one-week trial (vectorbt is enough for daily-bar gates); enters in Phase 4 for execution-realistic re-runs and paper/live.
+- **Risks:** learning curve; the 2.0 migration is mid-flight, so pin 1.231.0 and wrap its API behind a thin layer of ours.
+- **Verdict: ADOPT** (Phase 4, as already planned).
+
+### 9. github.com/polymarket (organisation) — https://github.com/polymarket
+- **What it is:** Not a single repo but the org behind the Polymarket prediction market: `py-clob-client` (Python client for its order book), the TypeScript `clob-client`, an `agents` framework for LLM trading bots on Polymarket, and contract repos. Markets are binary outcome shares priced 0–1 on Polygon, settled in USDC.
+- **Fit with the plan:** a different asset class with different statistics. Payoffs are binary, so the right metrics are calibration and Brier score rather than Sharpe; liquidity is thin outside headline markets; edges come from information and resolution timing, not price patterns; and the LLM-agent repo has the same look-ahead problem as TradingAgents. NautilusTrader has a Polymarket adapter, so the architecture would not block it later. Jurisdiction: Polymarket geo-restricts some countries (the US among them); UAE access and legality need checking before any account is opened.
+- **Verdict: SKIP for the trial and Phases 1–5.** Park as a possible Phase 6 research question ("is there a systematic edge in Polymarket pricing vs resolution?") only after a data source for historical order books is confirmed and legality is verified. Do not use the `agents` repo.
+
+### 10. Lumiwealth/lumibot — https://github.com/Lumiwealth/lumibot
+- **What it is:** Python strategy framework with a broker abstraction: Alpaca, Interactive Brokers, Tradier, Schww/Tradovate/TopstepX, Polymarket, CCXT (Coinbase/Kraken/Binance). Backtest data from Yahoo (default), Polygon, ThetaData, Databento, CSV. ~2.1k stars, LICENSE file is GPL-3.0 (README summary says MIT; trust the file), 91 open issues, active pushes, minute-bar simulation only, newer "AI agents" runtime.
+- **Fit with the plan:** overlaps NautilusTrader's Phase 4 role with weaker realism (no fill-probability models, no L2, Yahoo as default data) and a copyleft licence. Its one attraction, a simple IBKR paper path for daily-bar strategies, is also covered by IBKR's official MCP for staged orders and by ib_async.
+- **Verdict: SKIP.** REFERENCE only for its IBKR connection boilerplate if we write our own thin adapter.
+
+**Net effect on `PLAN.md`:** none. Nautilus confirmed for Phase 4 with both Binance and IBKR adapters; Polymarket parked as a possible Phase 6 question with legality and data caveats.

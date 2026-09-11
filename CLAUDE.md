@@ -15,4 +15,5 @@ Conventions
 
 User context
 - MacBook Air M2 16 GB (research), Hetzner CX23 shared with other projects (ops later), budget path first, ~$1,000 available after the trial verdict, no new hardware for now.
-- Next input from the user: a list of GitHub repos to assess one by one against the plan.
+- Dubai-based; holds Binance and Interactive Brokers accounts. Crypto trial models Binance spot; IBKR for equities later.
+- Next input from the user: a list of GitHub repos to assess one by one against the plan (record in `docs/research/06_repo_reviews.md`).

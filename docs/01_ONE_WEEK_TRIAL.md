@@ -47,6 +47,10 @@ Realistic: first honest verdict ~1 week after go, 10 days with one fix cycle. Th
 - The live clock after the verdict.
 - The discipline: pre-registration + trial log stay in even in the minimal build. Speed without them is p-hacking.
 
+## Resolved 11 Sept 2026 (evening)
+- **Residency: Dubai.** Binance.com is available (VARA-licensed), so the crypto trial models **Binance spot** end to end: bucket data, Binance fee schedule (base 0.10% taker, lower with BNB or VIP tiers — verify the current schedule before the cost model is frozen), Binance as the paper/live venue. No US restrictions apply.
+- **Accounts already held:** Binance (a few transactions over the years) and Interactive Brokers (same). IBKR is the equities/ETF/futures venue for later phases; its official MCP is connected in the cloud session. Alpaca is not needed.
+- The Centaur rulebook's Rule 3 regime inputs (SPY/QQQ/VIX/DXY) and the ETF-basket second trial will use IBKR market data or Tiingo, not yfinance.
+
 ## Before "go" (still thinking)
-- Review GitHub repos the user will share; each gets a one-by-one assessment: does it improve or add to `PLAN.md`, and where.
-- Residency (US or not) → venue for fees/data (Binance vs Kraken/Coinbase).
+- Review GitHub repos the user will share; each gets a one-by-one assessment in `docs/research/06_repo_reviews.md`: adopt / borrow / reference / skip, and where it changes `PLAN.md`.

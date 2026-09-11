@@ -70,3 +70,18 @@ Status figures are from the 11 Sept 2026 GitHub API pulls in `03_engines_and_sto
 - **Verdict: SKIP.** REFERENCE only for its IBKR connection boilerplate if we write our own thin adapter.
 
 **Net effect on `PLAN.md`:** none. Nautilus confirmed for Phase 4 with both Binance and IBKR adapters; Polymarket parked as a possible Phase 6 question with legality and data caveats.
+
+## Set 4 — tools, not repos
+
+### 11. Cloud9 Markets "Claude + TradingView backtest" — https://www.cloud9markets.com/claude-tv-backtest.html
+- **What it is (page blocked from sandbox; description from search snippets and the companion setup page):** a free bridge that lets Claude Code drive TradingView Desktop: Claude converts a written trading plan into a Pine Script strategy, injects it into the Pine editor, compiles (typically 2–3 fix cycles), applies it to the chart, and reads the Strategy Tester output back (net profit, win rate, profit factor, max drawdown, trade list). Not related to the older Cloud9Trader platform that search results conflate it with.
+- **What it is good for:** turning an idea into a chart you can *see* in minutes, on TradingView's own data, for any symbol TradingView has. As a visual sanity check and for discretionary chart study it is genuinely convenient.
+- **Why it cannot be part of the validation pipeline** (all already established in `05_platforms_brokers_strategies.md` and `04_statistical_rigor.md`):
+  1. **The Strategy Tester is a weak backtester.** Bar-magnifier intrabar snapshots rather than true fills, single-symbol only, simplistic commission/slippage, no borrow or funding, no portfolio-level sizing, bar-count limits by subscription tier.
+  2. **No survivorship or point-in-time control.** Whatever symbol you type is a survivor; no delisted universe; no historical constituents.
+  3. **Pine-specific look-ahead traps** that an LLM reproduces from public examples: `request.security` without `lookahead=barmerge.lookahead_off`, `calc_on_every_tick`, repainting indicators, strategies that reference the current bar's close for entries on that bar.
+  4. **It is p-hacking at agent speed.** "Claude iterates until the tester looks good" is exactly the loop the trial log, deflated Sharpe and PBO exist to catch, and this workflow has none of them. Each compile-and-tweak cycle is an uncounted trial.
+  5. **Non-portable.** Pine cannot run in vectorbt or NautilusTrader; a strategy validated here would have to be rewritten and re-validated anyway.
+- **Verdict: REFERENCE / discretionary aid only.** Fine for the Centaur morning review when you want to eyeball a setup on a chart. Never a source of a Hypothesis Report, and any idea that "looks good in TradingView" enters our pipeline as an untested pre-registration, with the trial count starting at zero for our engine but the fact that it was chart-selected noted (selection on the same data is still selection).
+
+**Net effect on `PLAN.md`:** none.

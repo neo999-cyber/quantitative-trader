@@ -15,6 +15,8 @@ kept rather than recomputed.
 """
 from __future__ import annotations
 
+import math
+
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -216,6 +218,34 @@ def leakage_probe(
     that separates them is magnitude — a real daily edge earns a Sharpe of 1 or
     2, a leak earns 45 — which is why gate 1 blocks on an implausible Sharpe and
     only warns on the shape.
+
+    **`spike_z` is the statistic that decides, and `spike_ratio` is kept only
+    for continuity.** A ratio divides by a Sharpe that can sit on either side of
+    zero, so it produces numbers of arbitrary magnitude: measured over synthetic
+    worlds, `RSIReversal` scored a spike *ratio* of `inf` on data with no edge
+    planted in it at all, and 0.55 on data with a genuine one-bar reversal
+    planted. It ordered the two worlds backwards. On real data it reported 5.88
+    for the trial's control family, and I read that as possible evidence of a
+    look-ahead in a strategy that turns out to be clean.
+
+    The fix is to stop dividing. What the test actually asks is whether lag 1
+    stands above its neighbours by more than estimation noise, which is a
+    difference measured in standard errors:
+
+        spike_z = (S(1) - max(S(0), S(2))) / sqrt(periods_per_year / n_bars)
+
+    The denominator is one standard error of an annualised Sharpe of zero over
+    this sample, so it is never zero and never near it. Two Sharpes that are
+    both noise give a small `z` however their ratio behaves, and a planted
+    oracle — whose neighbours really do collapse to nothing — gives a very large
+    one. That is the ordering the statistic is supposed to have and the ratio
+    did not.
+
+    This is the second place in the engine where a ratio was dividing by
+    something that could pass through zero, after walk-forward efficiency
+    (`docs/07_ENGINE_FIXES.md` §4). Finding the first should have prompted a
+    search for the rest. It did not, and this one was found only by
+    investigating the strategy it had wrongly accused.
     """
     rows = []
     for lag in (0, 1, 2):
@@ -223,8 +253,17 @@ def leakage_probe(
         rows.append({"lag": lag, "sharpe": result.sharpe(), "gross_sharpe": result.sharpe(gross=True)})
     frame = pd.DataFrame(rows).set_index("lag")
     honest = frame.loc[1, "gross_sharpe"]
+    neighbours = max(frame.loc[0, "gross_sharpe"], frame.loc[2, "gross_sharpe"])
+    # One standard error of an annualised Sharpe of zero over this sample.
+    standard_error = math.sqrt(panel.periods_per_year / max(1, len(panel)))
     frame.attrs["peek_ratio"] = _ratio(frame.loc[0, "gross_sharpe"], honest)
-    frame.attrs["spike_ratio"] = _ratio(honest, max(frame.loc[0, "gross_sharpe"], frame.loc[2, "gross_sharpe"]))
+    frame.attrs["spike_ratio"] = _ratio(honest, neighbours)
+    frame.attrs["spike_z"] = (
+        float((honest - neighbours) / standard_error)
+        if np.isfinite(honest) and np.isfinite(neighbours)
+        else float("nan")
+    )
+    frame.attrs["sharpe_standard_error"] = float(standard_error)
     frame.attrs["honest_sharpe"] = float(honest)
     return frame
 

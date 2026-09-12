@@ -48,6 +48,41 @@ def _lake(args) -> Lake:
     return Lake(paths(getattr(args, "root", None)))
 
 
+def _restrict_to_universe(panel, membership_frame, label: str = ""):
+    """Drop symbols the universe never admits. Identical backtests, ~4x faster.
+
+    `load_panel` returns every symbol in the lake — 734 of them for the crypto
+    trial — and every backtest then computes over 734 columns to hold at most
+    thirty. The rest are masked to zero before anything is summed, so they
+    contribute nothing but time, and they contribute a lot of it: gate 6 alone
+    re-runs 25 variants over 100 permuted panels.
+
+    Membership must be decided on the **full** panel first, because ranking the
+    top thirty is a comparison against everything that existed on the day. Only
+    once that ranking is done is it safe to drop what it never chose.
+
+    One thing this genuinely changes, stated rather than buried: gate 1's
+    shuffled-ticker placebo reassigns each bar's weights to different columns,
+    so a smaller column set is a different null. The restricted one is the
+    better-posed of the two — the question that placebo asks is whether the
+    strategy picked the right names *among those it could have held*, and
+    scattering its weights onto delisted microcaps it was never eligible to buy
+    makes the null easier to beat for a reason that has nothing to do with the
+    strategy. It is a change to a gate's null all the same, which is why it is
+    a documented default with a way to turn it off rather than a silent
+    optimisation.
+    """
+    ever = [s for s in panel.symbols if bool(membership_frame[s].any())]
+    if not ever or len(ever) == len(panel.symbols):
+        return panel, membership_frame
+    print(
+        f"{label}restricted panel to {len(ever)} of {len(panel.symbols)} symbols "
+        f"(the rest are never in the universe)",
+        file=sys.stderr,
+    )
+    return panel.select(ever), membership_frame[ever]
+
+
 def _progress(line: str) -> None:
     """Gate-by-gate progress to stderr, flushed, so a slow gate is visible."""
     print(line, file=sys.stderr, flush=True)
@@ -384,6 +419,8 @@ def cmd_gates(args) -> int:
     panel = _load_panel(lake, args.interval, args.start, args.end)
     spec = UniverseSpec(n=args.n, lookback=args.lookback, min_history=args.min_history)
     universe = membership(panel, spec)
+    if not args.no_restrict_universe:
+        panel, universe = _restrict_to_universe(panel, universe)
     costs = _costs(args)
     log = TrialLog(paths(args.root).ensure().trial_log)
 
@@ -405,9 +442,14 @@ def cmd_gates(args) -> int:
     )
 
     best = sweep.best()
-    holdout_panel = None
+    holdout_panel = holdout_universe = None
     if args.holdout_start:
         holdout_panel = _load_panel(lake, args.interval, args.holdout_start, args.holdout_end)
+        holdout_universe = membership(holdout_panel, spec)
+        if not args.no_restrict_universe:
+            holdout_panel, holdout_universe = _restrict_to_universe(
+                holdout_panel, holdout_universe, "holdout: "
+            )
 
     context = GateContext(
         hypothesis_id=hypothesis_id,
@@ -420,7 +462,7 @@ def cmd_gates(args) -> int:
         trial_log=log,
         manifest_hash=lake.manifest_hash(),
         holdout_panel=holdout_panel,
-        holdout_universe=membership(holdout_panel, spec) if holdout_panel is not None else None,
+        holdout_universe=holdout_universe,
         permutations=args.permutations,
         vol_preserving_permutations=args.vol_permutations,
     )
@@ -446,6 +488,8 @@ def cmd_families(args) -> int:
     panel = _load_panel(lake, args.interval, args.start, args.end)
     spec = UniverseSpec(n=args.n, lookback=args.lookback, min_history=args.min_history)
     universe = membership(panel, spec)
+    if not args.no_restrict_universe:
+        panel, universe = _restrict_to_universe(panel, universe)
     costs = _costs(args)
     log = TrialLog(paths(args.root).ensure().trial_log)
 
@@ -453,6 +497,10 @@ def cmd_families(args) -> int:
     if args.holdout_start:
         holdout_panel = _load_panel(lake, args.interval, args.holdout_start, args.holdout_end)
         holdout_universe = membership(holdout_panel, spec)
+        if not args.no_restrict_universe:
+            holdout_panel, holdout_universe = _restrict_to_universe(
+                holdout_panel, holdout_universe, "holdout: "
+            )
 
     chosen = [BY_ID[h] for h in args.only] if args.only else TRIAL_FAMILIES
     missing = [f.hypothesis_id for f in chosen if not log.records(kind="prereg", hypothesis_id=f.hypothesis_id)]
@@ -724,6 +772,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="permutations for gate 6's volatility-preserving null (0 skips it; default: same as --permutations)",
     )
+    gt.add_argument(
+        "--no-restrict-universe",
+        action="store_true",
+        dest="no_restrict_universe",
+        help="keep every symbol in the lake in the panel, not only those the universe admits (slower; changes gate 1's shuffled-ticker null)",
+    )
     gt.add_argument("--upto", type=int, default=9, help="highest gate to run")
     gt.add_argument("--all-gates", action="store_true", dest="all_gates", help="do not stop at the first FAIL")
     gt.set_defaults(func=cmd_gates)
@@ -746,6 +800,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=None,
         help="permutations for gate 6's volatility-preserving null (0 skips it; default: same as --permutations)",
+    )
+    fam.add_argument(
+        "--no-restrict-universe",
+        action="store_true",
+        dest="no_restrict_universe",
+        help="keep every symbol in the lake in the panel, not only those the universe admits (slower; changes gate 1's shuffled-ticker null)",
     )
     fam.add_argument("--upto", type=int, default=9)
     fam.add_argument("--all-gates", action="store_true", dest="all_gates")

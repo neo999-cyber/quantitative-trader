@@ -1,9 +1,9 @@
-# Four engine defects the first real run exposed
+# Six engine defects the real runs exposed
 
 *Written 12 September 2026, after the four-family run against real Binance data
 and before the confirmation re-run.*
 
-The first run against real data produced four numbers that meant something
+The runs against real data produced six numbers that meant something
 other than what they said. None of them changed the verdict — every family
 failed gates 3, 4, 5 and 9 independently, and the holdout agreed — which is
 precisely why this was the moment to fix them. A threshold moved while a
@@ -184,9 +184,91 @@ edge — and `wfe_windows` records how many were left. The pooled figure is stil
 reported as `wfe_pooled` so the two can be compared, and the per-window ratios
 are a column on the returned frame.
 
+## 5. The lag-spike statistic was a ratio of noise to noise
+
+**Symptom.** After fix 1 unblocked gate 1, `rsi_reversal_v1` warned that its
+Sharpe *"peaks at the reported lag, 5.88x its neighbours"* — the signature of a
+look-ahead, on the one family pre-registered as having no edge. I read it as
+possible evidence of a leak in `RSIReversal`.
+
+**`RSIReversal` is clean.** Its indicators are causal at a read — `close.diff()`,
+`rolling().sum()`, `volume.shift(1).rolling()` — and the decisive test is
+behavioural rather than textual: a look-ahead earns a Sharpe in data with
+nothing in it. Over synthetic worlds with no edge planted, `RSIReversal` scores
+lag-1 gross Sharpes of +0.41, +0.17 and +0.06. A planted oracle in the same
+harness scores far outside that range. There is nothing to find.
+
+**The statistic was the problem.** `spike_ratio` is
+`S(1) / max(S(0), S(2))` — a ratio whose denominator is a Sharpe, and a Sharpe
+passes through zero. Over the same worlds:
+
+| world | lag-1 Sharpe | neighbours | `spike_ratio` | `spike_z` |
+|---|---|---|---|---|
+| no edge, seed 0 | +0.41 | +0.42 | 0.98 | −0.0 |
+| no edge, seed 1 | +0.17 | +0.08 | 2.07 | +0.2 |
+| no edge, seed 2 | +0.06 | −0.22 | **inf** | +0.7 |
+| planted bounce, seed 1 | +0.19 | +0.34 | **0.55** | −0.4 |
+| planted bounce, seed 2 | +0.25 | +0.03 | **9.92** | +0.5 |
+
+The ratio ranges from 0.55 to infinity across worlds that are qualitatively the
+same, and it ranks a world with a *genuine* one-bar edge below one with none.
+
+**Fix.** Stop dividing. What the test asks is whether lag 1 stands above its
+neighbours by more than estimation noise, which is a difference in standard
+errors:
+
+```
+spike_z = (S(1) − max(S(0), S(2))) / sqrt(periods_per_year / n_bars)
+```
+
+The denominator is one standard error of an annualised Sharpe of zero over the
+sample, so it is never near zero. Gate 1 now warns on `spike_z` above 3 and
+`spike_ratio` is kept only as a reported number. Across all six worlds above
+`z` stays within ±0.7 — correctly "no spike" — while a planted oracle scores
+|z| > 40.
+
+**A first attempt at this was wrong and is worth recording.** I initially kept
+the ratio and refused to report it when the *denominator* fell below the noise
+floor. That silences the true positive: an oracle's neighbours genuinely do
+collapse to nothing, so the case the statistic exists to catch is exactly the
+case that has no denominator. The existing `Oracle` test caught it immediately.
+A ratio cannot be repaired by guarding it, because it conflates "large
+numerator" with "small denominator", and only one of those is the signal.
+
+**This is the second ratio-over-zero in the engine, after walk-forward
+efficiency (§4).** Finding the first should have prompted a search for the rest.
+It did not, and this one was found only by investigating the strategy it had
+wrongly accused.
+
+## 6. Every backtest computed over 734 columns to hold thirty
+
+**Symptom.** Runs took hours. Gate 6 re-optimises 25 variants over 100 permuted
+panels, and each of those 2,500 backtests ran over every symbol in the lake.
+
+**Cause.** `load_panel` returns all 734 pairs. The universe admits at most
+thirty on any day and 161 over the whole sample; the rest are masked to zero
+before anything is summed, so they cost time and contribute nothing.
+
+**Fix.** Restrict the panel to symbols the universe ever admits, after
+membership has been decided on the full panel — the ranking has to see
+everything that existed on the day, and only what it never chose can be
+dropped. Measured on a 734-symbol, 7-year panel: **275 ms → 61 ms per
+backtest, 4.5x**, with the net return series **bit-identical** (`max |diff| =
+0.000e+00`). Gate 6 falls from about 12 minutes to 3 per family.
+
+One thing it genuinely changes, stated rather than buried: gate 1's
+shuffled-ticker placebo reassigns each bar's weights to different columns, so a
+smaller column set is a different null. The restricted one is better posed —
+that placebo asks whether the strategy picked the right names *among those it
+could have held*, and scattering weights onto delisted microcaps it was never
+eligible to buy makes the null easier to beat for reasons that have nothing to
+do with the strategy. It is a change to a gate's null all the same, which is
+why it is a documented default with `--no-restrict-universe` to turn it off,
+rather than a silent optimisation.
+
 ## What was checked afterwards
 
-`pytest -q` — 401 tests, including 24 new ones written against these four
+`pytest -q` — 408 tests, including 31 new ones written against these six
 defects specifically. The regression tests are the useful part of this: each one
 reproduces the original defect with the fix switched off, which is how we know
 the fix is the fix and not a coincidence.

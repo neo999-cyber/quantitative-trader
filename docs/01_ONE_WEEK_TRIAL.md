@@ -90,6 +90,14 @@ Realistic: first honest verdict ~1 week after go, 10 days with one fix cycle. Th
   correctly and an oversight in how the re-run was specified. Details:
   `docs/06_TRIAL_VERDICT.md`.
 
+- **Two more defects fixed (12 September 2026).** Investigating the control
+  family's lag-spike warning found the strategy clean and the *statistic*
+  broken — another ratio dividing by a Sharpe that passes through zero, the
+  same shape as the walk-forward-efficiency bug, now a difference in standard
+  errors. And every backtest was computing over all 734 symbols in the lake to
+  hold at most thirty; restricting the panel to symbols the universe ever
+  admits is **4.5x faster and bit-identical**. `docs/07_ENGINE_FIXES.md` §5-6.
+
 ## Decision, 12 September 2026
 
 **Do not spend the $1,000.** The rule agreed on 11 September applies as

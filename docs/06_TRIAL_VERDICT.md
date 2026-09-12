@@ -198,14 +198,26 @@ must in general be capped with `--upto 8`.
 
 ### One finding the fixes uncovered
 
-`rsi_reversal_v1` gate 1 now warns that its Sharpe **peaks at the reported lag,
-5.88x its neighbours**. That was invisible in the first run because gate 1
-returned on the QA failure before reaching the lag probe — so fixing gate 1 did
-not only unblock four families, it surfaced something the old gate had been
-hiding. A spike that size on a strategy pre-registered as having no edge is the
-signature of a look-ahead inside `RSIReversal`, and it is open: it needs
-answering in the trial log or in the code, not shrugging at. It does not change
-the control's verdict, which failed gates 3 through 8 on its own merits.
+`rsi_reversal_v1` gate 1 warned that its Sharpe **peaks at the reported lag,
+5.88x its neighbours** — invisible in the first run, because gate 1 returned on
+the QA failure before reaching the lag probe. A spike that size on a strategy
+pre-registered as having no edge is the signature of a look-ahead, so it was
+investigated rather than noted.
+
+**`RSIReversal` is clean; the statistic was broken.** A look-ahead earns a
+Sharpe in data with nothing in it, and over synthetic worlds with no edge
+planted the strategy scores lag-1 Sharpes of +0.41, +0.17 and +0.06. What
+produced 5.88 was `spike_ratio = S(1) / max(S(0), S(2))`, a ratio dividing by a
+Sharpe that can sit either side of zero — the **same defect as the
+walk-forward efficiency of 13.62**, in a second place, found only because it
+accused a strategy loudly enough to be checked. It is now a difference in
+standard errors, which cannot divide by zero
+(`docs/07_ENGINE_FIXES.md` §5).
+
+So the fix to gate 1 did not only unblock four families: it surfaced a second
+broken statistic that the old gate had been returning before it could be seen.
+Neither changes the control's verdict, which failed gates 3 through 8 on its
+own merits.
 
 ## The decision
 

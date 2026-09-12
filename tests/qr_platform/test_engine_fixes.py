@@ -446,3 +446,123 @@ def test_an_empty_lake_is_refused_with_the_root_it_looked_in(tmp_path, capsys):
     assert str(tmp_path) in message
     assert "QR_ROOT" in message
     assert "qr data ingest" in message
+
+
+# ------------------------------ 6. the lag-spike statistic, and the panel it runs on
+
+
+def _rsi_world(n=1500, seed=0, bounce=0.0):
+    """Random walk with real volume variation, optionally with a planted
+    one-bar bounce after three down closes — a causal short-horizon edge."""
+    rng = np.random.default_rng(seed)
+    index = pd.date_range("2018-01-01", periods=n, freq="D", tz="UTC")
+    symbols = [f"S{i}USDT" for i in range(6)]
+    close, volume = {}, {}
+    for symbol in symbols:
+        r = rng.normal(0.0003, 0.04, n)
+        if bounce:
+            for t in range(3, n):
+                if r[t - 1] < 0 and r[t - 2] < 0 and r[t - 3] < 0:
+                    r[t] += bounce
+        close[symbol] = 100 * np.exp(np.cumsum(r))
+        volume[symbol] = rng.lognormal(10, 0.8, n)
+    close = pd.DataFrame(close, index=index)
+    volume = pd.DataFrame(volume, index=index)
+    open_ = close.shift(1).bfill()
+    return Panel(
+        {
+            "open": open_,
+            "high": np.maximum(close, open_) * 1.005,
+            "low": np.minimum(close, open_) * 0.995,
+            "close": close,
+            "volume": volume,
+            "quote_volume": volume * close,
+        },
+        "1d",
+    )
+
+
+def test_the_lag_spike_statistic_is_not_a_ratio_of_two_noise_terms(costs):
+    """`spike_ratio` accused the trial's control family of a look-ahead.
+
+    It is S(1) / max(S(0), S(2)), and when both lags score near zero that is a
+    ratio of noise to noise. Over worlds with nothing planted in them it
+    produced values from 0.98 to `inf`. `spike_z` measures the same gap in
+    standard errors, so it cannot divide by zero and orders the worlds sanely.
+    """
+    from qr.research.runner import leakage_probe
+    from qr.strategies.library import RSIReversal
+
+    ratios, zs = [], []
+    for seed in range(4):
+        probe = leakage_probe(_rsi_world(seed=seed), RSIReversal(), costs)
+        ratios.append(probe.attrs["spike_ratio"])
+        zs.append(probe.attrs["spike_z"])
+
+    # No edge is planted in any of these, so none of them should look like one.
+    assert all(abs(z) < 3.0 for z in zs), zs
+    # ...which the ratio does not manage: it is unbounded over the same worlds.
+    assert max(abs(r) for r in ratios if np.isfinite(r)) > 1.5 or any(
+        not np.isfinite(r) for r in ratios
+    )
+
+
+def test_rsi_reversal_does_not_read_the_bar_it_predicts(costs):
+    """The accusation, tested directly. A look-ahead earns a Sharpe in data
+    with nothing in it; an honest strategy earns roughly nothing."""
+    from qr.research.runner import leakage_probe
+    from qr.strategies.library import RSIReversal
+
+    for seed in range(3):
+        probe = leakage_probe(_rsi_world(seed=seed), RSIReversal(), costs)
+        assert abs(probe.loc[1, "gross_sharpe"]) < 1.0, seed
+
+
+def test_the_probe_still_catches_a_planted_look_ahead(costs):
+    """The fix must not be a way of never warning again."""
+    from qr.research.runner import leakage_probe
+    from qr.strategies.base import Strategy
+
+    class Oracle(Strategy):
+        family = "oracle"
+
+        def target_weights(self, panel, universe=None):
+            return self.normalise(
+                self.mask_to_universe((panel.returns() > 0).astype(float), panel, universe)
+            )
+
+    probe = leakage_probe(_rsi_world(seed=0), Oracle(), costs)
+    # The peek lands on lag 0, so lag 1 sits far *below* its neighbours — a
+    # large |z| either way is the signature the flat case does not produce.
+    assert abs(probe.attrs["spike_z"]) > 10
+
+
+def test_restricting_the_panel_to_the_universe_changes_no_number(costs):
+    """The 734-column panel: 4.5x faster, and it must be bit-identical."""
+    from qr.cli import _restrict_to_universe
+    from qr.data.universe import UniverseSpec, membership
+
+    panel = edge_world(n_symbols=40, years=4, seed=4)
+    spec = UniverseSpec(n=8, lookback=30, min_history=90)
+    universe = membership(panel, spec)
+    small, small_universe = _restrict_to_universe(panel, universe)
+    assert len(small.symbols) < len(panel.symbols)
+
+    strategy = TSMOM(lookback=60)
+    full = run_backtest(panel, strategy, costs, universe)
+    cut = run_backtest(small, strategy, costs, small_universe)
+    assert float((full.net - cut.net).abs().max()) == 0.0
+    assert full.sharpe() == cut.sharpe()
+
+
+def test_the_restriction_keeps_every_symbol_the_universe_ever_admits(costs):
+    """Membership is decided on the full panel; only what it never chose goes."""
+    from qr.cli import _restrict_to_universe
+    from qr.data.universe import UniverseSpec, membership
+
+    panel = edge_world(n_symbols=40, years=4, seed=4)
+    universe = membership(panel, UniverseSpec(n=8, lookback=30, min_history=90))
+    small, small_universe = _restrict_to_universe(panel, universe)
+    ever = {s for s in panel.symbols if bool(universe[s].any())}
+    assert set(small.symbols) == ever
+    assert small_universe.equals(universe[list(small.symbols)])

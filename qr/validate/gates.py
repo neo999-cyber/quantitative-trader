@@ -60,6 +60,11 @@ class GateThresholds:
     # data has a bug, not an edge; the shape test only warns, because a genuine
     # short-horizon reversal produces the same shape as a leak.
     implausible_sharpe: float = 8.0
+    #: How far lag 1 may stand above its neighbours, in standard errors of a
+    #: Sharpe over the sample. Three is the usual "not noise" line, and this
+    #: replaces a ratio that divided by a Sharpe which could be zero — see
+    #: `leakage_probe` and `docs/07_ENGINE_FIXES.md` §5.
+    max_spike_z: float = 3.0
     max_spike_ratio: float = 1.50
     # Above this, reassigning the weights to random symbols does about as
     # well: the symbol selection carries nothing.
@@ -284,6 +289,7 @@ def gate_1_data_integrity(ctx: GateContext) -> GateResult:
     probe = leakage_probe(ctx.panel, ctx.strategy, ctx.costs, ctx.universe)
     honest = float(probe.loc[1, "gross_sharpe"])
     spike = probe.attrs.get("spike_ratio", float("nan"))
+    spike_z = probe.attrs.get("spike_z", float("nan"))
     stats.update(
         {
             "lag0_gross_sharpe": float(probe.loc[0, "gross_sharpe"]),
@@ -291,6 +297,8 @@ def gate_1_data_integrity(ctx: GateContext) -> GateResult:
             "lag2_gross_sharpe": float(probe.loc[2, "gross_sharpe"]),
             "peek_ratio": probe.attrs.get("peek_ratio", float("nan")),
             "spike_ratio": spike,
+            "spike_z": spike_z,
+            "sharpe_standard_error": probe.attrs.get("sharpe_standard_error", float("nan")),
         }
     )
 
@@ -324,14 +332,20 @@ def gate_1_data_integrity(ctx: GateContext) -> GateResult:
                 f"expected for a timing strategy, damning for a cross-sectional one"
             )
 
-    if np.isfinite(spike) and spike > ctx.thresholds.max_spike_ratio:
+    # Decided on `spike_z`, the gap in standard errors, not on the ratio: a
+    # ratio of two Sharpes that are both noise is itself noise, and it accused
+    # the trial's control family of a look-ahead it does not have.
+    if np.isfinite(spike_z) and spike_z > ctx.thresholds.max_spike_z:
         verdict = WARN
         detail_parts.append(
-            f"Sharpe peaks at the reported lag ({spike:.2f}x its neighbours): either a "
-            f"genuinely one-bar-ahead signal or a look-ahead — say which in the trial log"
+            f"Sharpe peaks at the reported lag, {spike_z:.1f} standard errors above its "
+            f"neighbours: either a genuinely one-bar-ahead signal or a look-ahead — "
+            f"say which in the trial log"
         )
+    elif np.isfinite(spike_z):
+        detail_parts.append(f"no lag spike ({spike_z:+.1f} standard errors over its neighbours)")
     else:
-        detail_parts.append(f"no lag spike (peak/neighbours {spike:.2f})")
+        detail_parts.append("lag profile not measurable")
     return GateResult(1, "data integrity", verdict, "; ".join(detail_parts) or "clean", stats)
 
 

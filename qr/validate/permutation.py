@@ -162,9 +162,14 @@ def permute_panel(
         raise ValueError("cannot permute fewer than three bars")
 
     returns = close.pct_change(fill_method=None)
+    # The traded price travels as a ratio like the intrabar shape, because the
+    # adjustment factor belongs to its own bar: a permuted panel that dropped
+    # it would price commissions off the adjusted close while the observed run
+    # used the real one, and gate 6 would be comparing two different cost
+    # models rather than two orderings of the same market.
     ratios = {
         field_name: (panel[field_name] / close)
-        for field_name in ("open", "high", "low")
+        for field_name in ("open", "high", "low", "close_unadjusted")
         if field_name in panel.fields
     }
 

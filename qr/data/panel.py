@@ -14,7 +14,13 @@ from typing import Iterable, Mapping
 import numpy as np
 import pandas as pd
 
-FIELDS = ("open", "high", "low", "close", "volume", "quote_volume", "trades")
+#: `close_unadjusted` is the price that actually changed hands, kept alongside
+#: the dividend-adjusted `close` because share counts, a per-share commission
+#: and a broker's per-order minimum all key off the former while every return
+#: in the book comes from the latter. A source that has no such distinction
+#: (crypto) simply does not carry the column, and `from_frames` drops any field
+#: that is not present for every symbol.
+FIELDS = ("open", "high", "low", "close", "close_unadjusted", "volume", "quote_volume", "trades")
 
 
 @dataclass(frozen=True)

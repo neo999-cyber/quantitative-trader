@@ -380,3 +380,70 @@ def test_weekends_are_not_missing_bars_for_a_market_that_is_shut():
     gaps = {r.name: r for r in sessions.checks}["calendar_gaps"]
     assert len(gaps.offenders) < 25  # holidays only; the fixture is bdays
     assert len({r.name: r for r in continuous.checks}["calendar_gaps"].offenders) > 300
+
+
+# ------------------------------------------------- the traded price in the panel
+
+
+def _basket_panel(tmp_path, n=800, dividend=0.04):
+    mirror = LocalTiingo(tmp_path)
+    for ticker in ("SPY", "TLT", "GLD"):
+        mirror.write(ticker, tiingo_rows(n=n, dividend=dividend, seed=hash(ticker) % 100))
+    loader = TiingoDaily(mirror)
+    return Panel.from_frames({t: loader.load(t) for t in ("SPY", "TLT", "GLD")})
+
+
+def test_the_panel_carries_the_price_that_actually_changed_hands(tmp_path):
+    """Share counts and a per-share commission key off the traded price.
+
+    The panel's field list stopped at OHLCV, so the traded price was dropped at
+    the lake boundary and every consumer silently fell back to the adjusted
+    close. For SPY in 2007 those differ by a third, so the commission was
+    computed on a third more shares than the order would have bought.
+    """
+    panel = _basket_panel(tmp_path)
+    assert "close_unadjusted" in panel.fields
+    factor = panel["close"] / panel["close_unadjusted"]
+    assert (factor > 1.0).any().any()  # dividends were actually paid
+
+
+def test_gate_one_sees_the_same_bars_the_qa_command_does(tmp_path):
+    """The four-family ETF run failed gate 1 on data `qr data qa` called clean.
+
+    Gate 1 rebuilds each symbol's frame from the panel, so a column the panel
+    never carried was a column the check could not see — and without the traded
+    price the VWAP check has nothing to reconcile the adjusted range against.
+    """
+    from qr.validate.gates import _panel_frames, gate_1_data_integrity
+    from qr.validate.gates import GateContext
+    from qr.execution.costs import CostModel
+    from qr.research.runner import run_backtest
+    from qr.strategies.library import BuyAndHold
+
+    panel = _basket_panel(tmp_path)
+    strategy = BuyAndHold()
+    costs = CostModel.etf_trial()
+    ctx = GateContext(
+        hypothesis_id="etf_buyhold_v1",
+        panel=panel,
+        strategy=strategy,
+        costs=costs,
+        result=run_backtest(panel, strategy, costs),
+        calendar="xnys",
+    )
+    for symbol, frame in _panel_frames(ctx).items():
+        assert "close_unadjusted" in frame.columns, symbol
+    assert gate_1_data_integrity(ctx).stats["qa_failures"] == 0
+
+
+def test_a_permuted_panel_keeps_the_traded_price_with_its_bar(tmp_path):
+    """Otherwise gate 6's null prices commissions off a different series."""
+    from qr.validate.permutation import permute_panel
+
+    panel = _basket_panel(tmp_path)
+    permuted = permute_panel(panel, seed=3)
+    assert "close_unadjusted" in permuted.fields
+    ratio = (permuted["close"] / permuted["close_unadjusted"]).stack().dropna()
+    original = (panel["close"] / panel["close_unadjusted"]).stack().dropna()
+    # The same multiset of adjustment factors, in a different order.
+    assert np.isclose(sorted(ratio)[len(ratio) // 2], sorted(original)[len(original) // 2])

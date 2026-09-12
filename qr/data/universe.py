@@ -141,11 +141,27 @@ def fixed_basket(panel: Panel, symbols: Iterable[str] = ETF_BASKET) -> pd.DataFr
     intersects tradability, so an ETF is out of the book before its inception
     and after any delisting, exactly as a delisted crypto pair was.
     """
-    wanted = [s for s in symbols if s in panel.close.columns]
+    names = list(symbols)
+    wanted = [s for s in names if s in panel.close.columns]
+    if not wanted:
+        # Every named instrument is missing, so the universe would be empty and
+        # every strategy would hold nothing — and the gates would dutifully
+        # report verdicts on an empty book rather than on a mistake. That is
+        # what happened when a crypto lake was handed an ETF basket: the run
+        # went all the way to gate 6 before anyone could tell it was measuring
+        # nothing. An empty basket is never a legitimate universe.
+        raise ValueError(
+            f"none of the {len(names)} basket instruments are in this panel "
+            f"({', '.join(names[:4])}…). The panel holds {len(panel.symbols)} symbols "
+            f"starting {', '.join(panel.symbols[:4])}. Wrong lake, or `qr data etf-ingest` "
+            f"has not run."
+        )
+    missing = [s for s in names if s not in panel.close.columns]
     out = pd.DataFrame(False, index=panel.index, columns=panel.symbols)
-    if wanted:
-        out.loc[:, wanted] = True
-    return out & panel.tradable()
+    out.loc[:, wanted] = True
+    frame = out & panel.tradable()
+    frame.attrs["missing"] = missing
+    return frame
 
 
 def rank_asof(

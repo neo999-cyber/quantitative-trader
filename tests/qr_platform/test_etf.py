@@ -156,6 +156,44 @@ def test_membership_still_stops_at_an_inception_date(tmp_path):
     assert bool(members["DBC"].iloc[-1])
 
 
+def test_a_basket_with_nothing_in_the_panel_refuses_instead_of_emptying(tmp_path):
+    """The failure that let an ETF run reach gate 6 over a crypto lake.
+
+    Every basket name was absent, so membership was all-False, every strategy
+    held nothing, and the gates reported verdicts on an empty book. An empty
+    universe is never a legitimate one — it is a pointed-at-the-wrong-lake bug,
+    and it has to stop the run and say so.
+    """
+    mirror = LocalTiingo(tmp_path)
+    mirror.write("BTCUSDT", tiingo_rows(n=260))
+    loader = TiingoDaily(mirror)
+    panel = Panel.from_frames(
+        {"BTCUSDT": loader.load("BTCUSDT")},
+        fields=("open", "high", "low", "close", "volume", "quote_volume"),
+    )
+    with pytest.raises(ValueError) as caught:
+        fixed_basket(panel, ETF_BASKET)
+    message = str(caught.value)
+    assert "SPY" in message and "BTCUSDT" in message
+    assert "etf-ingest" in message
+
+
+def test_a_partly_present_basket_runs_and_names_what_is_absent(tmp_path):
+    """Half a basket is a run worth having, but not silently: the pre-registered
+    universe is all twelve, and the caller has to be able to say which it got."""
+    mirror = LocalTiingo(tmp_path)
+    for ticker in ("SPY", "TLT"):
+        mirror.write(ticker, tiingo_rows(n=260, seed=hash(ticker) % 100))
+    loader = TiingoDaily(mirror)
+    panel = Panel.from_frames(
+        {t: loader.load(t) for t in ("SPY", "TLT")},
+        fields=("open", "high", "low", "close", "volume", "quote_volume"),
+    )
+    members = fixed_basket(panel, ETF_BASKET)
+    assert members["SPY"].any() and members["TLT"].any()
+    assert set(members.attrs["missing"]) == set(ETF_BASKET) - {"SPY", "TLT"}
+
+
 # --------------------------------------------------------------- the commission
 
 

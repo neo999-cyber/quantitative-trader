@@ -604,7 +604,19 @@ def cmd_families(args) -> int:
         from qr.data.universe import ETF_BASKET, fixed_basket
 
         spec = UniverseSpec(n=len(ETF_BASKET), name="etf_basket_12")
-        universe = fixed_basket(panel, ETF_BASKET)
+        try:
+            universe = fixed_basket(panel, ETF_BASKET)
+        except ValueError as exc:
+            print(f"{exc}", file=sys.stderr)
+            raise SystemExit(2) from None
+        missing = universe.attrs.get("missing") or []
+        if missing:
+            print(
+                f"warning: {len(missing)} of {len(ETF_BASKET)} basket funds are not in the "
+                f"lake ({', '.join(missing)}); running on the {len(ETF_BASKET) - len(missing)} "
+                f"that are. The pre-registered universe is all twelve.",
+                file=sys.stderr,
+            )
     else:
         spec = UniverseSpec(n=args.n, lookback=args.lookback, min_history=args.min_history)
         universe = membership(panel, spec)

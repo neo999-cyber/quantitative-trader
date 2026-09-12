@@ -16,6 +16,7 @@ so the universe itself does not generate turnover every bar.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Iterable
 
 import numpy as np
 import pandas as pd
@@ -96,6 +97,55 @@ class UniverseSpec:
         if symbol in self.exclude_symbols:
             return True
         return self.exclude_leveraged and symbol.endswith(LEVERAGED_SUFFIXES)
+
+
+#: The ETF trial's basket: twelve US-listed ETFs spanning the four things a
+#: multi-asset trend or rotation strategy needs something to rotate *between* —
+#: equities, duration, credit and real assets. Named rather than ranked,
+#: because a dozen instruments that all still trade have no membership problem
+#: to solve, which removes a whole class of error the crypto universe needed
+#: two filters and an amendment to handle.
+#:
+#: What it does **not** remove is selection of the basket itself. Picking
+#: today's well-known ETFs is a choice made with hindsight — none of these has
+#: closed, and the ones that closed are not on the list because nobody
+#: remembers them. That bias is real, it is smaller than crypto's (these are
+#: the largest funds in their categories by a wide margin, chosen for coverage
+#: rather than for performance), and it belongs in the pre-registration where
+#: it can be argued with rather than in a comment here.
+ETF_BASKET: tuple[str, ...] = (
+    # equities
+    "SPY",   # US large cap
+    "QQQ",   # US tech / growth
+    "IWM",   # US small cap
+    "EFA",   # developed ex-US
+    "EEM",   # emerging markets
+    # duration and credit
+    "TLT",   # 20+ year treasuries
+    "IEF",   # 7-10 year treasuries
+    "LQD",   # investment-grade credit
+    "HYG",   # high yield
+    # real assets
+    "GLD",   # gold
+    "DBC",   # broad commodities
+    "VNQ",   # US REITs
+)
+
+
+def fixed_basket(panel: Panel, symbols: Iterable[str] = ETF_BASKET) -> pd.DataFrame:
+    """Membership for a named basket: in the list, and trading on the day.
+
+    There is no ranking and no rebalance schedule, because there is no
+    selection decision being made through time — which is the whole reason a
+    fixed basket is the right universe for the second trial. Membership still
+    intersects tradability, so an ETF is out of the book before its inception
+    and after any delisting, exactly as a delisted crypto pair was.
+    """
+    wanted = [s for s in symbols if s in panel.close.columns]
+    out = pd.DataFrame(False, index=panel.index, columns=panel.symbols)
+    if wanted:
+        out.loc[:, wanted] = True
+    return out & panel.tradable()
 
 
 def rank_asof(

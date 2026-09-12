@@ -178,7 +178,20 @@ def run_backtest(
 
     adv = volume_adv(panel) if charge_impact else None
     vol = panel.returns().rolling(30, min_periods=5).std() if charge_impact else None
-    cost = costs.charge(turnover_matrix, equity=equity if charge_impact else None, adv_notional=adv, volatility=vol)
+    # The traded price, for a venue that charges per share rather than per
+    # dollar. `close_unadjusted` where the loader supplies it: a back-adjusted
+    # price is not what the order fills at, and share counts come from the fill.
+    prices = panel.get("close_unadjusted")
+    if prices is None:
+        prices = panel.close
+    needs_equity = charge_impact or costs.per_share_usd > 0
+    cost = costs.charge(
+        turnover_matrix,
+        equity=equity if needs_equity else None,
+        adv_notional=adv,
+        volatility=vol,
+        prices=prices,
+    )
     net = (gross - cost).rename("net")
 
     return BacktestResult(

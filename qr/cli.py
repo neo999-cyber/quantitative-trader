@@ -3,6 +3,8 @@
     qr doctor                     what is reachable and where things live
     qr data pull   --symbols ...  fill the local Binance mirror (needs network)
     qr data ingest                mirror -> Parquet lake + manifest
+    qr data etf-pull              fill the Tiingo mirror (ETF trial; needs network)
+    qr data etf-ingest            Tiingo mirror -> lake, dividend-adjusted
     qr data qa                    QA report over the lake
     qr data universe              the point-in-time top-N, as of today
     qr fng pull | fng show        Fear & Greed index
@@ -255,6 +257,97 @@ def cmd_data_ingest(args) -> int:
     if written:
         lake.write_reference("instruments", bucket.instruments(symbols, args.interval))
     print(table(pd.DataFrame(written)))
+    print(f"manifest hash: {lake.manifest_hash()}")
+    return 0 if written else 1
+
+
+def _tiingo_mirror(args):
+    from qr.data.tiingo import LocalTiingo
+
+    root = getattr(args, "tiingo_mirror", None)
+    return LocalTiingo(Path(root).expanduser() if root else paths(args.root).root / "mirror" / "tiingo")
+
+
+def cmd_etf_pull(args) -> int:
+    """Fill the local Tiingo mirror. Laptop only — the sandbox cannot reach it."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    from qr.data.tiingo import HttpTiingo
+    from qr.data.universe import ETF_BASKET
+
+    tickers = args.symbols or list(ETF_BASKET)
+    mirror = _tiingo_mirror(args)
+    try:
+        client = HttpTiingo()
+    except ValueError as exc:
+        print(f"{exc}", file=sys.stderr)
+        return 2
+
+    def fetch(ticker: str):
+        rows = client.prices(ticker, args.start, args.end)
+        meta = {}
+        try:
+            meta = client.meta(ticker)
+        except Exception as exc:  # metadata is a nicety, prices are not
+            log_line = f"  {ticker}: metadata unavailable ({exc})"
+            print(log_line, file=sys.stderr)
+        mirror.write(ticker, rows, meta)
+        return ticker, len(rows)
+
+    rows = []
+    with ThreadPoolExecutor(max_workers=args.workers) as pool:
+        futures = {pool.submit(fetch, t): t for t in tickers}
+        for future in as_completed(futures):
+            ticker = futures[future]
+            try:
+                name, count = future.result()
+                rows.append({"symbol": name, "bars": count})
+            except Exception as exc:
+                rows.append({"symbol": ticker, "bars": 0, "error": str(exc)[:60]})
+    print(table(pd.DataFrame(rows).sort_values("symbol")))
+    print(f"mirrored into {mirror.root}")
+    return 0 if any(r["bars"] for r in rows) else 1
+
+
+def cmd_etf_ingest(args) -> int:
+    """Tiingo mirror -> Parquet lake, adjusted for dividends and splits."""
+    from qr.data.tiingo import TiingoDaily
+
+    mirror = _tiingo_mirror(args)
+    loader = TiingoDaily(mirror, adjusted=not args.unadjusted)
+    lake = _lake(args)
+    tickers = args.symbols or mirror.tickers()
+    if not tickers:
+        print(f"the Tiingo mirror at {mirror.root} is empty; run `qr data etf-pull`", file=sys.stderr)
+        return 2
+
+    written = []
+    for ticker in tickers:
+        frame = loader.load(ticker, args.start, args.end)
+        if frame.empty:
+            print(f"  {ticker}: no bars in the mirror", file=sys.stderr)
+            continue
+        lake.write_klines(ticker.upper(), frame, args.interval, source="tiingo", market="etf")
+        written.append(
+            {
+                "symbol": ticker.upper(),
+                "bars": len(frame),
+                "start": frame.index[0].date(),
+                "end": frame.index[-1].date(),
+                "adjusted": frame.attrs.get("adjusted", False),
+            }
+        )
+    if written:
+        lake.write_reference("etf_instruments", loader.instruments(tickers), source="tiingo")
+    print(table(pd.DataFrame(written)))
+    unadjusted = [r["symbol"] for r in written if not r["adjusted"]]
+    if unadjusted:
+        print(
+            f"\nWARNING: no adjusted prices for {', '.join(unadjusted)}. Returns will "
+            f"understate total return by the distribution yield, which for a bond or "
+            f"REIT ETF is several percent a year in one direction.",
+            file=sys.stderr,
+        )
     print(f"manifest hash: {lake.manifest_hash()}")
     return 0 if written else 1
 
@@ -676,6 +769,28 @@ def build_parser() -> argparse.ArgumentParser:
     ingest.add_argument("--end")
     ingest.add_argument("--no-verify", action="store_true", dest="no_verify")
     ingest.set_defaults(func=cmd_data_ingest)
+
+    etf_pull = data.add_parser("etf-pull", help="fill the local Tiingo mirror (needs network + TIINGO_API_KEY)")
+    etf_pull.add_argument("--symbols", nargs="*", help="default: the twelve-ETF trial basket")
+    etf_pull.add_argument("--start", help="earliest date, default: each fund's inception")
+    etf_pull.add_argument("--end")
+    etf_pull.add_argument("--workers", type=int, default=4)
+    etf_pull.add_argument("--tiingo-mirror", dest="tiingo_mirror")
+    etf_pull.set_defaults(func=cmd_etf_pull)
+
+    etf_ingest = data.add_parser("etf-ingest", help="Tiingo mirror -> Parquet lake (dividend-adjusted)")
+    etf_ingest.add_argument("--symbols", nargs="*")
+    etf_ingest.add_argument("--interval", default="1d")
+    etf_ingest.add_argument("--start")
+    etf_ingest.add_argument("--end")
+    etf_ingest.add_argument("--tiingo-mirror", dest="tiingo_mirror")
+    etf_ingest.add_argument(
+        "--unadjusted",
+        action="store_true",
+        help="use traded rather than dividend-adjusted prices. Almost always wrong: a "
+        "bond or REIT ETF on unadjusted prices looks like a steady loser",
+    )
+    etf_ingest.set_defaults(func=cmd_etf_ingest)
 
     qa = data.add_parser("qa", help="QA report over the lake")
     qa.add_argument("--symbols", nargs="*")

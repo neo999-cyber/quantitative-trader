@@ -83,6 +83,10 @@ TRIAL_FEES_VERIFIED_ON = "2026-09-11"
 #: Half the quoted spread, per side. 2 bps is a deliberately pessimistic stand-in
 #: for the top-30 USDT pairs, which mostly quote inside 1 bp; it is the number to
 #: replace first once the bucket's 1h bars give a real intrabar spread estimate.
+#: The ETF trial models the account that exists, not a comfortable one. See
+#: `CostModel.etf_trial` for why this single number decides what gate 2 means.
+ETF_TRIAL_EQUITY = 1_000.0
+
 TRIAL_HALF_SPREAD_BPS = 2.0
 
 
@@ -96,6 +100,14 @@ class CostModel:
 
     fee_bps: float = 10.0
     half_spread_bps: float = 2.0
+    #: Per-share commission in dollars, with a per-order floor and a cap as a
+    #: share of notional. Zero means a purely proportional venue, which is what
+    #: a crypto exchange is; a US equity broker is not, and the difference
+    #: decides whether a small account can trade a basket at all. See
+    #: `commission_bps`.
+    per_share_usd: float = 0.0
+    min_commission_usd: float = 0.0
+    max_commission_pct: float = 0.0
     impact_coef: float = 1.0
     #: Charge impact only for what it costs *beyond* crossing the spread,
     #: which `linear_bps` already charges. See `impact_bps`. False restores the
@@ -122,6 +134,64 @@ class CostModel:
             half_spread_bps=half_spread_bps,
             impact_coef=impact_coef,
             name=f"binance_spot_{fees.tier.lower()}{suffix}_taker",
+            verified_on=verified_on,
+        )
+
+    @classmethod
+    def etf_trial(cls, equity: float = ETF_TRIAL_EQUITY) -> "CostModel":
+        """The ETF trial's frozen cost model. Every gate is judged against this.
+
+        IBKR Tiered against the account that actually exists: **$1,000**. That
+        choice is the trial's most consequential one and it is deliberate. At
+        this size the $0.35 per-order minimum, not the spread and not impact,
+        is the binding cost — one leg of a twelve-ETF basket is an $83 order
+        paying 42 bps, four times what a Binance taker pays. At $100,000 the
+        same trade costs 0.42 bps and the basket is twenty times cheaper than
+        crypto.
+
+        So gate 2 is being asked a different question from the crypto trial's.
+        There it was "does the edge survive the venue"; here it is "does the
+        edge survive *this account*". A family that fails gate 2 at $1,000 and
+        would pass at $10,000 has not been shown to lack an edge — it has been
+        shown to be unaffordable, and the report must say which. The capacity
+        ladder in gate 2 reports both, so the crossover is visible rather than
+        inferred.
+        """
+        return replace(cls.ibkr_etf(), name=f"ibkr_us_etf_tiered_{int(equity)}usd")
+
+    @classmethod
+    def ibkr_etf(
+        cls,
+        per_share_usd: float = 0.0035,
+        min_commission_usd: float = 0.35,
+        max_commission_pct: float = 0.01,
+        half_spread_bps: float = 1.0,
+        verified_on: str = "unverified",
+    ) -> "CostModel":
+        """IBKR US equities/ETFs, Tiered. **Verify before freezing a trial.**
+
+        The snapshot is Tiered pricing: $0.0035 a share, a $0.35 order minimum
+        and a 1% of notional cap, plus about 1 bp of half-spread on a liquid US
+        ETF. `verified_on` stays "unverified" until a human has checked it
+        against their own account, exactly as the Binance tier was — an
+        unverified cost model must never reach a Hypothesis Report.
+
+        The structure matters more than the level here, and it is the opposite
+        of crypto's. A Binance taker pays a fixed 7.5 bps whether the order is
+        $10 or $10,000. IBKR charges per *share* with a floor per *order*, so
+        the cost in basis points depends on the share price and collapses or
+        explodes with order size: 0.05 bps on a $700 slice of SPY, and 42 bps
+        on the same trade at $83 — which is what one leg of a twelve-ETF
+        basket looks like in a $1,000 account. The commission minimum, not the
+        spread and not impact, is the binding cost at that size.
+        """
+        return cls(
+            fee_bps=0.0,
+            half_spread_bps=half_spread_bps,
+            per_share_usd=per_share_usd,
+            min_commission_usd=min_commission_usd,
+            max_commission_pct=max_commission_pct,
+            name="ibkr_us_etf_tiered",
             verified_on=verified_on,
         )
 
@@ -203,12 +273,59 @@ class CostModel:
             law = np.maximum(law - self.half_spread_bps, 0.0)
         return self.multiplier * law
 
+    def commission_bps(
+        self,
+        turnover: pd.DataFrame,
+        equity: pd.Series | float,
+        prices: pd.DataFrame,
+    ) -> pd.DataFrame:
+        """Per-order commission, in basis points of that order's notional.
+
+            commission = clip(per_share x shares, min_per_order, max_pct x notional)
+
+        This is the cost structure of a share-traded venue and it does not
+        reduce to a basis-point fee, which is why it needs prices and an equity
+        level rather than a rate. Two consequences the crypto trial never had
+        to face:
+
+        * **Cheap in basis points when the share price is high.** $0.0035 on a
+          $700 share of SPY is 0.05 bps, twenty times cheaper than Binance's
+          taker fee.
+        * **Ruinous when the order is small.** The per-order minimum is a fixed
+          dollar amount, so rebalancing an $83 position — one leg of a
+          twelve-name basket in a $1,000 account — pays 42 bps whatever the
+          share price is. A strategy that rebalances weekly pays that 52 times
+          a year on every leg.
+
+        The 1% cap is the broker's, and it bites exactly where the minimum does.
+        """
+        eq = pd.Series(equity, index=turnover.index) if np.isscalar(equity) else equity.reindex(turnover.index)
+        notional = turnover.mul(eq, axis=0)
+        price = prices.reindex_like(turnover)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            shares = notional.div(price.where(price > 0))
+        commission = (shares.abs() * self.per_share_usd).fillna(0.0)
+        if self.min_commission_usd > 0:
+            commission = commission.clip(lower=self.min_commission_usd)
+        if self.max_commission_pct > 0:
+            commission = np.minimum(commission, notional.abs() * self.max_commission_pct)
+        commission = pd.DataFrame(
+            np.asarray(commission), index=turnover.index, columns=turnover.columns
+        )
+        # No order, no commission. Without this the minimum is charged on every
+        # bar for every symbol the strategy is merely holding.
+        commission = commission.where(turnover.abs() > 1e-12, 0.0)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            out = commission.div(notional.abs().where(notional.abs() > 0)) / BPS
+        return out.fillna(0.0) * self.multiplier
+
     def charge(
         self,
         turnover: pd.DataFrame,
         equity: pd.Series | float | None = None,
         adv_notional: pd.DataFrame | None = None,
         volatility: pd.DataFrame | None = None,
+        prices: pd.DataFrame | None = None,
     ) -> pd.Series:
         """Return drag per bar, as a positive fraction of equity.
 
@@ -216,8 +333,17 @@ class CostModel:
         and `volatility` supplied, the square-root impact term is added on top
         of the linear one; without them the model is linear, which is the right
         default while position sizes are small relative to Binance's book.
+
+        With `prices` and a per-share schedule, the proportional fee is replaced
+        by a real per-order commission — see `commission_bps`. A model with no
+        per-share schedule ignores `prices` entirely, so the crypto path is
+        untouched.
         """
         linear = turnover.sum(axis=1) * self.linear_bps * BPS
+        if self.per_share_usd > 0 and prices is not None and equity is not None:
+            spread = turnover.sum(axis=1) * self.multiplier * self.half_spread_bps * BPS
+            fees = self.commission_bps(turnover, equity, prices)
+            linear = (turnover * fees).sum(axis=1) * BPS + spread
         if adv_notional is None or volatility is None or equity is None:
             return linear.rename("cost")
         eq = pd.Series(equity, index=turnover.index) if np.isscalar(equity) else equity.reindex(turnover.index)
@@ -235,6 +361,9 @@ class CostModel:
             "fee_bps": self.fee_bps,
             "half_spread_bps": self.half_spread_bps,
             "impact_coef": self.impact_coef,
+            "per_share_usd": self.per_share_usd,
+            "min_commission_usd": self.min_commission_usd,
+            "max_commission_pct": self.max_commission_pct,
             "net_impact_against_spread": self.net_impact_against_spread,
             "use_maker": self.use_maker,
             "multiplier": self.multiplier,

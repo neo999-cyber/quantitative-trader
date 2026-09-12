@@ -21,8 +21,8 @@ class BuyAndHold(Strategy):
 
     family = "buy_and_hold"
 
-    def __init__(self, gross: float = 1.0) -> None:
-        super().__init__(gross=gross)
+    def __init__(self, gross: float = 1.0, rebalance_on: str | None = None) -> None:
+        super().__init__(gross=gross, **({"rebalance_on": rebalance_on} if rebalance_on else {}))
 
     def target_weights(self, panel: Panel, universe: pd.DataFrame | None = None) -> pd.DataFrame:
         ones = pd.DataFrame(1.0, index=panel.index, columns=panel.symbols)
@@ -51,8 +51,10 @@ class TSMOM(Strategy):
         vol_target: float | None = 0.20,
         vol_lookback: int = 30,
         max_leverage: float = 1.0,
+        rebalance_on: str | None = None,
     ) -> None:
         super().__init__(
+            **({"rebalance_on": rebalance_on} if rebalance_on else {}),
             lookback=lookback,
             skip=skip,
             vol_target=vol_target,
@@ -78,7 +80,12 @@ class TSMOM(Strategy):
                 lookback=self.params["vol_lookback"],
                 max_leverage=self.params["max_leverage"],
             ).scale(weights, panel)
-        return weights.fillna(0.0)
+        # The schedule is applied *after* vol targeting, not before, and the
+        # order is not cosmetic. Vol targeting rescales the whole book on every
+        # bar as its volatility estimate moves, so a book scheduled first and
+        # scaled second still trades daily — the schedule has to be the last
+        # word on what the book actually is.
+        return self.schedule(weights.fillna(0.0), panel)
 
 
 class RandomEntry(Strategy):

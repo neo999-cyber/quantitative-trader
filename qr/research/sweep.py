@@ -123,6 +123,7 @@ def run_sweep(
     manifest_hash: str | None = None,
     charge_impact: bool = False,
     keep_results: bool = True,
+    equity: float | None = None,
 ) -> Sweep:
     """Run every strategy in `strategies` and record the whole sweep.
 
@@ -143,7 +144,7 @@ def run_sweep(
     results: dict[str, BacktestResult] = {}
 
     for strategy in strategies:
-        result = run_backtest(panel, strategy, costs, universe, charge_impact=charge_impact)
+        result = run_backtest(panel, strategy, costs, universe, charge_impact=charge_impact, **({'equity': equity} if equity else {}))
         name = strategy.name
         net[name] = result.net
         gross[name] = result.gross

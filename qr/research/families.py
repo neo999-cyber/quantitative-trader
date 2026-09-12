@@ -24,7 +24,7 @@ from qr.data.panel import Panel
 from qr.execution.costs import CostModel
 from qr.research.sweep import Sweep, run_sweep
 from qr.strategies.base import Strategy
-from qr.strategies.library import CrossSectionalMomentum, RSIReversal, ShortTermReversal, TSMOM
+from qr.strategies.library import BuyAndHold, CrossSectionalMomentum, RSIReversal, ShortTermReversal, TSMOM
 from qr.validate.gates import GateContext, GateReport, GateThresholds, run_gates
 from qr.validate.trial_log import TrialLog
 
@@ -60,7 +60,7 @@ class FamilySpec:
         """The variant count the pre-registration document claims, if it says."""
         if not self.prereg_path.exists():
             return None
-        match = re.search(r"\*\*([\d,]+) variants", self.prereg_path.read_text(encoding="utf-8"))
+        match = re.search(r"\*\*([\d,]+) variants?\b", self.prereg_path.read_text(encoding="utf-8"))
         return int(match.group(1).replace(",", "")) if match else None
 
 
@@ -98,7 +98,69 @@ TRIAL_FAMILIES: list[FamilySpec] = [
     ),
 ]
 
-BY_ID = {spec.hypothesis_id: spec for spec in TRIAL_FAMILIES}
+#: The ETF trial's four families, registered in `docs/prereg/etf_*.md`. Three
+#: hypotheses and one control, and the control is the interesting change: the
+#: crypto trial's cleanest finding was that none of 425 configurations beat
+#: buy-and-hold, so buy-and-hold is here as a fully gated hypothesis rather
+#: than as a benchmark computed inside gate 5 where it never faces gate 3, gate
+#: 6 or the holdout.
+#:
+#: Every grid carries `rebalance_on`, which the crypto families do not have and
+#: could not afford to need. A venue charging per order rather than per dollar
+#: makes the trading *calendar* a first-class parameter: the same strategy
+#: rebalanced daily rather than monthly pays four times the commission at this
+#: account size, which is the difference between a live strategy and a donation.
+ETF_FAMILIES: list[FamilySpec] = [
+    FamilySpec(
+        hypothesis_id="etf_tsmom_v1",
+        strategy_class=TSMOM,
+        grid={
+            "lookback": [60, 90, 120, 180, 252],
+            "skip": [0, 5, 20],
+            "vol_lookback": [30, 60],
+            "vol_target": [0.10],
+            "max_leverage": [1.0],
+            "rebalance_on": ["MS"],
+        },
+        summary="multi-asset time-series momentum, monthly",
+    ),
+    FamilySpec(
+        hypothesis_id="etf_xsmom_v1",
+        strategy_class=CrossSectionalMomentum,
+        grid={
+            "lookback": [60, 120, 180, 252],
+            "n_long": [3, 4, 6],
+            "skip": [0],
+            "rebalance": [21],
+            "vol_lookback": [60],
+            "vol_target": [0.10],
+            "max_leverage": [1.0],
+        },
+        summary="cross-sectional rotation across asset classes, monthly",
+    ),
+    FamilySpec(
+        hypothesis_id="etf_reversal_v1",
+        strategy_class=ShortTermReversal,
+        grid={
+            "lookback": [3, 5, 10, 21],
+            "n_long": [2, 3, 4],
+            "rebalance": [5],
+            "vol_lookback": [60],
+            "vol_target": [0.10],
+            "max_leverage": [1.0],
+        },
+        summary="short-term reversal on ETFs, weekly",
+    ),
+    FamilySpec(
+        hypothesis_id="etf_buyhold_v1",
+        strategy_class=BuyAndHold,
+        grid={"gross": [1.0], "rebalance_on": ["MS"]},
+        summary="equal-weighted basket, monthly (the control)",
+        control=True,
+    ),
+]
+
+BY_ID = {spec.hypothesis_id: spec for spec in TRIAL_FAMILIES + ETF_FAMILIES}
 
 
 @dataclass
@@ -142,13 +204,15 @@ def run_family(
     permutations: int = 200,
     vol_preserving_permutations: int | None = None,
     progress=None,
+    equity: float | None = None,
     upto: int = 9,
     stop_on_fail: bool = True,
 ) -> FamilyRun:
     """Sweep one family's registered grid and run it through the gates."""
     costs = costs or CostModel.trial()
     strategies = spec.strategies()
-    sweep = run_sweep(panel, strategies, costs, universe, universe_name)
+    kw = {"equity": equity} if equity else {}
+    sweep = run_sweep(panel, strategies, costs, universe, universe_name, **kw)
 
     if trial_log is not None:
         trial_log.run(
@@ -177,6 +241,7 @@ def run_family(
         thresholds=thresholds or GateThresholds(),
         permutations=permutations,
         vol_preserving_permutations=vol_preserving_permutations,
+        equity=equity,
     )
     return FamilyRun(spec, sweep, run_gates(context, upto=upto, stop_on_fail=stop_on_fail, progress=progress), best)
 

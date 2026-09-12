@@ -79,14 +79,22 @@ class Strategy(ABC):
     def schedule(self, weights: pd.DataFrame, panel: Panel) -> pd.DataFrame:
         """Apply this variant's `rebalance` parameter, if it has one.
 
-        A strategy with no `rebalance` parameter trades every bar, which is what
-        every crypto family does and what a proportional-fee venue can afford.
-        With one, the book is left to drift between rebalance dates — see
-        `hold_between`, and note that this is provably the identity when the
+        A strategy with no `rebalance_on` parameter trades every bar, which is
+        what every crypto family does and what a proportional-fee venue can
+        afford. With one, the book is left to drift between rebalance dates —
+        see `hold_between`, and note that this is provably the identity when the
         schedule marks every bar, so adding the call cannot change a crypto
         result.
+
+        **The parameter is `rebalance_on`, not `rebalance`, deliberately.**
+        `CrossSectionalMomentum` and `ShortTermReversal` already take a
+        `rebalance` parameter meaning *a number of bars*, and this one is a
+        calendar frequency string. Two meanings behind one name in one
+        `self.params` dict is a `KeyError` waiting for whoever wires the next
+        family up — it did not fire only because those two classes happen to
+        return through a different path and never reach this method.
         """
-        freq = self.params.get("rebalance")
+        freq = self.params.get("rebalance_on")
         if not freq:
             return weights
         marks = rebalance_mask(weights.index, freq)
@@ -100,6 +108,11 @@ class Strategy(ABC):
         return weights.mul(scale, axis=0).fillna(0.0)
 
 
+#: Calendar frequencies `rebalance_on` accepts, mapped to the pandas period
+#: they group by. Not a number of bars — see `Strategy.schedule`.
+_PERIOD = {"MS": "M", "M": "M", "W": "W", "QS": "Q", "Q": "Q", "YS": "Y", "D": "D"}
+
+
 def rebalance_mask(index: pd.DatetimeIndex, freq: str | None) -> pd.Series:
     """True on the bars a strategy is allowed to trade.
 
@@ -109,6 +122,12 @@ def rebalance_mask(index: pd.DatetimeIndex, freq: str | None) -> pd.Series:
     """
     if freq is None:
         return pd.Series(True, index=index)
+    if freq not in _PERIOD:
+        raise ValueError(
+            f"unknown rebalance frequency {freq!r}; expected one of {sorted(_PERIOD)}. "
+            f"Note this is a calendar frequency, not a number of bars — the `rebalance` "
+            f"parameter on the cross-sectional families is the latter."
+        )
     marks = pd.Series(False, index=index)
     if len(index) == 0:
         return marks
@@ -120,9 +139,6 @@ def rebalance_mask(index: pd.DatetimeIndex, freq: str | None) -> pd.Series:
     marks.loc[first_of_period.to_numpy()] = True
     marks.iloc[0] = True
     return marks
-
-
-_PERIOD = {"MS": "M", "M": "M", "W": "W", "QS": "Q", "Q": "Q", "YS": "Y", "D": "D"}
 
 
 def hold_between(

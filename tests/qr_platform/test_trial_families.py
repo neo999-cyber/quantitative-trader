@@ -55,8 +55,44 @@ def test_no_family_sweeps_more_than_five_parameters(spec: FamilySpec):
 
 
 def test_the_registry_is_addressable_by_hypothesis_id():
-    assert set(BY_ID) == {f.hypothesis_id for f in TRIAL_FAMILIES}
+    """One registry across both trials, so `--only` addresses either by name."""
+    from qr.research.families import ETF_FAMILIES
+
+    assert set(BY_ID) == {f.hypothesis_id for f in TRIAL_FAMILIES + ETF_FAMILIES}
     assert BY_ID["tsmom_v1"].strategy_class.family == "tsmom"
+    assert BY_ID["etf_buyhold_v1"].control
+
+
+def test_every_etf_family_matches_the_variant_count_it_registered():
+    """The grid in code and the number in the document must agree.
+
+    They are written in different places by the same hand and drift silently:
+    gate 4 deflates against the count in code, and a reader checks the one in
+    the document.
+    """
+    from qr.research.families import ETF_FAMILIES
+
+    for spec in ETF_FAMILIES:
+        assert spec.prereg_path.exists(), spec.hypothesis_id
+        assert spec.declared_variants() == spec.n_variants, spec.hypothesis_id
+
+
+def test_the_etf_grids_are_small_enough_for_the_sample():
+    """Minimum backtest length, applied before the run rather than after.
+
+    The crypto trial searched 200 variants over 7 years and gate 4 was right to
+    reject it. `2*ln(N)/SR^2` at a Sharpe of 0.6 must fit inside the ~20 years
+    of history this basket has.
+    """
+    import math
+
+    from qr.research.families import ETF_FAMILIES
+
+    for spec in ETF_FAMILIES:
+        if spec.n_variants < 2:
+            continue
+        years_needed = 2 * math.log(spec.n_variants) / 0.6**2
+        assert years_needed < 20, (spec.hypothesis_id, spec.n_variants, years_needed)
 
 
 def test_the_trial_counts_are_what_gate_four_will_deflate_against():

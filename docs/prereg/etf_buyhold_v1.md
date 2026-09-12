@@ -53,7 +53,7 @@ equal weight. Dividend- and split-adjusted.
 
 ## Parameter ranges
 
-**One variant.** No sweep, no search, nothing for gate 4 to deflate. This is
+**1 variant.** No sweep, no search, nothing for gate 4 to deflate. This is
 the cleanest available reading of what the deflation gates do when there is
 genuinely nothing to correct for: if gate 4 or 5 flags a single-variant
 strategy, the engine has a bug.

@@ -32,7 +32,7 @@ from qr.data.lake import Lake
 from qr.data.panel import Panel
 from qr.data.qa import check_klines, report_markdown, summarise
 from qr.data.universe import UniverseSpec, as_instruments, membership
-from qr.execution.costs import TRIAL_BNB_DISCOUNT, TRIAL_FEE_TIER, CostModel
+from qr.execution.costs import ETF_TRIAL_EQUITY, TRIAL_BNB_DISCOUNT, TRIAL_FEE_TIER, CostModel
 from qr.report import table
 from qr.validate.trial_log import TrialLog, TrialLogCorrupt
 
@@ -591,28 +591,41 @@ def cmd_gates(args) -> int:
 
 def cmd_families(args) -> int:
     """Run the four registered trial families through the gates."""
-    from qr.research.families import BY_ID, TRIAL_FAMILIES, run_family, summarise
+    from qr.research.families import BY_ID, ETF_FAMILIES, TRIAL_FAMILIES, run_family, summarise
     from qr.validate.report import write_report
 
+    etf = args.asset == "etf"
     lake = _lake(args)
     panel = _load_panel(lake, args.interval, args.start, args.end)
-    spec = UniverseSpec(n=args.n, lookback=args.lookback, min_history=args.min_history)
-    universe = membership(panel, spec)
+    if etf:
+        # A named basket, not a ranking: twelve funds that all still trade have
+        # no membership decision to make through time. `spec.name` still travels
+        # into the trial log, so a report says which universe it ran on.
+        from qr.data.universe import ETF_BASKET, fixed_basket
+
+        spec = UniverseSpec(n=len(ETF_BASKET), name="etf_basket_12")
+        universe = fixed_basket(panel, ETF_BASKET)
+    else:
+        spec = UniverseSpec(n=args.n, lookback=args.lookback, min_history=args.min_history)
+        universe = membership(panel, spec)
     if not args.no_restrict_universe:
         panel, universe = _restrict_to_universe(panel, universe)
-    costs = _costs(args)
+    costs = CostModel.etf_trial() if etf else _costs(args)
     log = TrialLog(paths(args.root).ensure().trial_log)
 
     holdout_panel = holdout_universe = None
     if args.holdout_start:
         holdout_panel = _load_panel(lake, args.interval, args.holdout_start, args.holdout_end)
-        holdout_universe = membership(holdout_panel, spec)
+        holdout_universe = (
+            fixed_basket(holdout_panel, ETF_BASKET) if etf else membership(holdout_panel, spec)
+        )
         if not args.no_restrict_universe:
             holdout_panel, holdout_universe = _restrict_to_universe(
                 holdout_panel, holdout_universe, "holdout: "
             )
 
-    chosen = [BY_ID[h] for h in args.only] if args.only else TRIAL_FAMILIES
+    default_families = ETF_FAMILIES if etf else TRIAL_FAMILIES
+    chosen = [BY_ID[h] for h in args.only] if args.only else default_families
     missing = [f.hypothesis_id for f in chosen if not log.records(kind="prereg", hypothesis_id=f.hypothesis_id)]
     if missing and not args.skip_prereg_check:
         print(
@@ -638,6 +651,7 @@ def cmd_families(args) -> int:
             holdout_universe=holdout_universe,
             permutations=args.permutations,
             vol_preserving_permutations=args.vol_permutations,
+            equity=args.equity if args.equity else (ETF_TRIAL_EQUITY if etf else None),
             upto=args.upto,
             stop_on_fail=not args.all_gates,
             progress=_progress,
@@ -925,6 +939,19 @@ def build_parser() -> argparse.ArgumentParser:
     fam.add_argument("--tier", default=TRIAL_FEE_TIER)
     fam.add_argument("--bnb", action=argparse.BooleanOptionalAction, default=TRIAL_BNB_DISCOUNT)
     fam.add_argument("--spread", type=float, default=2.0)
+    fam.add_argument(
+        "--asset",
+        choices=("crypto", "etf"),
+        default="crypto",
+        help="which trial: the Binance crypto families or the Tiingo ETF basket",
+    )
+    fam.add_argument(
+        "--equity",
+        type=float,
+        default=None,
+        help="account size the cost model prices orders against (ETF default: $1,000, "
+        "the account that exists — see CostModel.etf_trial)",
+    )
     fam.add_argument("--permutations", type=int, default=200)
     fam.add_argument(
         "--vol-permutations",

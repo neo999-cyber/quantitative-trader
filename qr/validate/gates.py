@@ -149,7 +149,17 @@ class GateContext:
     #: means "the same as `permutations`"; 0 skips it, which halves gate 6's
     #: cost at the price of the diagnostic.
     vol_preserving_permutations: int | None = None
+    #: Account size the cost model prices orders against. Only a venue charging
+    #: per order rather than per dollar cares, but for one it decides the
+    #: verdict: at $1,000 an ETF basket leg costs 42 bps, at $100,000 it costs
+    #: 0.42. A gate that re-runs a backtest must use the same account the sweep
+    #: did or it is pricing a different strategy.
+    equity: float | None = None
     seed: int = 0
+
+    @property
+    def backtest_kwargs(self) -> dict[str, float]:
+        return {"equity": self.equity} if self.equity else {}
 
     @property
     def periods_per_year(self) -> float:
@@ -354,7 +364,11 @@ def gate_2_cost_survival(ctx: GateContext) -> GateResult:
     result = ctx.result
     ratio = result.stats()["net_over_gross"]
     stressed = run_backtest(
-        ctx.panel, ctx.strategy, ctx.costs.stressed(ctx.thresholds.cost_stress), ctx.universe
+        ctx.panel,
+        ctx.strategy,
+        ctx.costs.stressed(ctx.thresholds.cost_stress),
+        ctx.universe,
+        **ctx.backtest_kwargs,
     )
     stressed_sharpe = stressed.sharpe()
     capacity = _capacity(ctx)
@@ -616,7 +630,8 @@ def gate_6_permutation(ctx: GateContext) -> GateResult:
         grid = [ctx.strategy]
 
     def best_over_grid(panel: Panel) -> float:
-        scores = [run_backtest(panel, s, ctx.costs, ctx.universe).sharpe(gross=True) for s in grid]
+        scores = [run_backtest(panel, s, ctx.costs, ctx.universe, **ctx.backtest_kwargs).sharpe(gross=True)
+            for s in grid]
         finite = [s for s in scores if np.isfinite(s)]
         return max(finite) if finite else float("nan")
 
@@ -631,7 +646,11 @@ def gate_6_permutation(ctx: GateContext) -> GateResult:
     n_held = max(1, int(round(len(ctx.panel.symbols) * time_in_market / 4)))
     random_entry = random_entry_test(
         lambda s: run_backtest(
-            ctx.panel, RandomEntry(n_held=n_held, hold=20, seed=s), ctx.costs, ctx.universe
+            ctx.panel,
+            RandomEntry(n_held=n_held, hold=20, seed=s),
+            ctx.costs,
+            ctx.universe,
+            **ctx.backtest_kwargs,
         ).sharpe(gross=True),
         observed,
         n_permutations=min(200, ctx.permutations),
@@ -839,7 +858,9 @@ def gate_9_holdout(ctx: GateContext) -> GateResult:
                 {"first_opened": opened[0].ts},
             )
 
-    holdout = run_backtest(ctx.holdout_panel, ctx.strategy, ctx.costs, ctx.holdout_universe)
+    holdout = run_backtest(
+        ctx.holdout_panel, ctx.strategy, ctx.costs, ctx.holdout_universe, **ctx.backtest_kwargs
+    )
     in_sample = ctx.result.sharpe()
     out_sample = holdout.sharpe()
     ratio = out_sample / in_sample if np.isfinite(in_sample) and in_sample > 0 else float("nan")

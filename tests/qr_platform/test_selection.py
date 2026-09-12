@@ -218,6 +218,8 @@ def _panel_from_returns(returns: np.ndarray, index: pd.DatetimeIndex, symbols: l
     frames = {}
     for j, symbol in enumerate(symbols):
         close = 100 * np.exp(np.cumsum(returns[:, j]))
+        # Bars that satisfy the platform's own QA: extremes bracket the bar,
+        # quote volume is base volume times price.
         frames[symbol] = pd.DataFrame(
             {
                 "open": close,
@@ -225,7 +227,7 @@ def _panel_from_returns(returns: np.ndarray, index: pd.DatetimeIndex, symbols: l
                 "low": close * 0.99,
                 "close": close,
                 "volume": 1e4,
-                "quote_volume": 1e8,
+                "quote_volume": 1e4 * close,
                 "trades": 100.0,
             },
             index=index,

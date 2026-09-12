@@ -210,7 +210,7 @@ def test_the_placebo_detects_selection_that_genuinely_matters(costs):
         close = 100 * np.exp(np.cumsum(rng.normal(drift, 0.01, len(index))))
         frames[f"S{i}USDT"] = pd.DataFrame(
             {"open": close, "high": close, "low": close, "close": close,
-             "volume": 1e4, "quote_volume": 1e8, "trades": 500.0},
+             "volume": 1e4, "quote_volume": 1e4 * close, "trades": 500.0},
             index=index,
         )
     panel = Panel.from_frames(frames)
@@ -254,8 +254,9 @@ def test_gate_one_reports_the_placebo_and_warns_when_picks_are_worthless(panel, 
 def test_capacity_is_reported_and_finite(panel, costs):
     result = gate_2_cost_survival(context(panel, TSMOM(lookback=60), costs))
     if "capacity_usd" in result.stats:
-        assert result.stats["capacity_usd"] > 0
-        assert "capacity about" in result.detail
+        capacity = result.stats["capacity_usd"]
+        assert np.isfinite(capacity) and capacity >= 0
+        # 0 is a real answer ("below the smallest size probed"), not a gap.
 
 
 def test_a_more_liquid_universe_has_more_capacity(costs):
@@ -319,3 +320,78 @@ def test_regimes_are_skipped_on_too_short_a_sample(costs):
     short = edge_world(n_symbols=3, years=1, seed=1)
     result = run_backtest(short, TSMOM(lookback=30), costs)
     assert _regime_sharpes(result.net, short, short.periods_per_year, lookback=200) == {}
+
+
+# --------------------------------------------------- gate 1: QA, actually wired
+
+
+def test_the_self_test_worlds_satisfy_the_platforms_own_qa():
+    """A fixture that cannot pass the checks being tested invites weakening them.
+
+    Both worlds used to fail `high_is_highest` on ~45% of bars (high was set
+    from the close while open was the previous close) and
+    `quote_volume_consistent` on every bar (a constant quote volume implying a
+    VWAP of 10,000 on a coin trading at 100). Nobody noticed because gate 1's
+    QA never ran on a real pipeline path.
+    """
+    from qr.data.qa import check_klines
+
+    for world in (edge_world(n_symbols=3, years=2, seed=1), noise_world(n_symbols=3, years=2, seed=1)):
+        for symbol in world.symbols:
+            frame = pd.DataFrame({name: world[name][symbol] for name in world.fields})
+            report = check_klines(frame[frame["close"].notna()], symbol, "1d")
+            assert report.verdict == PASS, (symbol, [c.name for c in report.failures])
+
+
+def test_qa_runs_even_when_no_caller_passes_raw_frames(panel, costs):
+    """The bug: the field existed, gate 1 read it, nothing ever set it."""
+    ctx = context(panel, TSMOM(lookback=60), costs)
+    assert ctx.raw_frames is None
+    result = gate_1_data_integrity(ctx)
+    assert result.stats["qa_failures"] == 0
+    assert result.stats["qa_failures_traded"] == 0
+
+
+def test_a_broken_symbol_the_strategy_holds_fails_the_gate(panel, costs):
+    from qr.data.panel import Panel
+
+    fields = {k: v.copy() for k, v in panel.fields.items()}
+    fields["high"].iloc[100, 0] = 0.01  # high below the bar's own low
+    broken = Panel(fields, panel.interval)
+
+    result = gate_1_data_integrity(context(broken, TSMOM(lookback=60), costs))
+    assert result.verdict == FAIL
+    assert "which this strategy holds" in result.detail
+    assert result.stats["qa_failures_traded"] >= 1
+
+
+def test_a_broken_symbol_the_strategy_never_holds_does_not_block(panel, costs):
+    """734 real pairs will always contain a few with impossible bars somewhere.
+
+    Failing a top-30 book because a delisted microcap it never touched has a
+    negative volume print would make gate 1 noise, and noise gets ignored. The
+    universe-wide audit is `qr data qa`; gate 1 checks what was traded.
+    """
+    from qr.data.panel import Panel
+
+    excluded = panel.symbols[-1]
+    universe = pd.DataFrame(True, index=panel.index, columns=panel.symbols)
+    universe[excluded] = False
+
+    fields = {k: v.copy() for k, v in panel.fields.items()}
+    fields["high"].loc[:, excluded] = 0.01
+    broken = Panel(fields, panel.interval)
+
+    strategy = TSMOM(lookback=60)
+    ctx = GateContext(
+        hypothesis_id="h",
+        panel=broken,
+        strategy=strategy,
+        costs=costs,
+        result=run_backtest(broken, strategy, costs, universe),
+        universe=universe,
+        permutations=5,
+    )
+    result = gate_1_data_integrity(ctx)
+    assert result.verdict != FAIL
+    assert result.stats["qa_failures_traded"] == 0

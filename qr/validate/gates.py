@@ -187,18 +187,36 @@ def gate_1_data_integrity(ctx: GateContext) -> GateResult:
     detail_parts: list[str] = []
     verdict = PASS
 
-    if ctx.raw_frames:
-        reports = [check_klines(f, s, ctx.panel.interval) for s, f in sorted(ctx.raw_frames.items())]
-        failures = [r.symbol for r in reports if r.verdict == FAIL]
-        warnings = [r.symbol for r in reports if r.verdict == WARN]
-        stats["qa_failures"], stats["qa_warnings"] = len(failures), len(warnings)
-        if failures:
+    # QA runs on the symbols the strategy actually **held** — the only ones
+    # whose bars entered the result. A universe of 734 real pairs always
+    # contains a few with impossible prints somewhere in their history, and
+    # failing a top-30 book because a delisted microcap it never touched had a
+    # negative volume in 2022 would make gate 1 noise; noise gets ignored.
+    # The universe-wide audit is `qr data qa`, which is a separate job.
+    frames = ctx.raw_frames if ctx.raw_frames is not None else _panel_frames(ctx)
+    if frames:
+        reports = [check_klines(f, s, ctx.panel.interval) for s, f in sorted(frames.items())]
+        failed = {r.symbol for r in reports if r.verdict == FAIL}
+        warned = {r.symbol for r in reports if r.verdict == WARN}
+        traded = _traded_symbols(ctx)
+        blocking = sorted(failed & traded)
+
+        stats["qa_failures"] = len(failed)
+        stats["qa_warnings"] = len(warned)
+        stats["qa_failures_traded"] = len(blocking)
+        stats["qa_failed_symbols"] = sorted(failed)[:20]
+
+        if blocking:
             return GateResult(
-                1, "data integrity", FAIL, f"QA failed for {', '.join(failures[:5])}", stats
+                1,
+                "data integrity",
+                FAIL,
+                f"QA failed for {', '.join(blocking[:5])}, which this strategy holds",
+                stats,
             )
-        if warnings:
-            verdict = WARN
-            detail_parts.append(f"{len(warnings)} symbols with QA warnings")
+        if warned & traded:
+            verdict = WARN if verdict == PASS else verdict
+            detail_parts.append(f"{len(warned & traded)} held symbols with QA warnings")
 
     probe = leakage_probe(ctx.panel, ctx.strategy, ctx.costs, ctx.universe)
     honest = float(probe.loc[1, "gross_sharpe"])
@@ -718,6 +736,32 @@ GATES: list[Callable[[GateContext], GateResult]] = [
 ]
 
 
+def _traded_symbols(ctx: GateContext) -> set[str]:
+    """Symbols the strategy actually held at any point."""
+    held = ctx.result.held
+    return {str(c) for c in held.columns[(held.abs() > 1e-12).any(axis=0)]}
+
+
+def _panel_frames(ctx: GateContext) -> dict[str, pd.DataFrame]:
+    """Per-symbol OHLCV frames reconstructed from the panel.
+
+    So gate 1's QA check cannot be skipped by a caller forgetting to pass
+    `raw_frames` — which is exactly what happened: the field existed, gate 1
+    read it, and no pipeline ever set it, so the check never ran on real data
+    at all. Each symbol's rows are trimmed back to its own listing window,
+    because the panel's outer join pads every pair with NaN and those pads are
+    not gaps in that pair's history.
+    """
+    if not _traded_symbols(ctx):
+        return {}
+    frames: dict[str, pd.DataFrame] = {}
+    for symbol in _traded_symbols(ctx):
+        columns = {name: ctx.panel[name][symbol] for name in ctx.panel.fields}
+        frame = pd.DataFrame(columns)
+        frames[symbol] = frame[frame["close"].notna()]
+    return frames
+
+
 def _capacity(ctx: GateContext, give_up_fraction: float = 0.10) -> dict[str, float]:
     """Roughly how much money this strategy can take before impact bites.
 
@@ -741,8 +785,11 @@ def _capacity(ctx: GateContext, give_up_fraction: float = 0.10) -> dict[str, flo
     volatility = ctx.panel.returns().rolling(30, min_periods=5).std()
 
     budget = give_up_fraction * gross_annual
-    previous = float("nan")
-    for equity in (1e4, 3e4, 1e5, 3e5, 1e6, 3e6, 1e7, 3e7, 1e8):
+    # 0.0 means "below the smallest size probed", which is a real answer for a
+    # strategy trading illiquid names. Returning NaN there reads as "unknown"
+    # and would let a capacity problem pass as a missing measurement.
+    previous = 0.0
+    for equity in (1e3, 1e4, 3e4, 1e5, 3e5, 1e6, 3e6, 1e7, 3e7, 1e8):
         impact = ctx.costs.impact_bps(turnover * equity, adv.reindex_like(turnover), volatility.reindex_like(turnover))
         drag = (turnover * pd.DataFrame(impact, index=turnover.index, columns=turnover.columns)).sum(axis=1)
         annual_drag = float(drag.mean() * ctx.periods_per_year * 1e-4)

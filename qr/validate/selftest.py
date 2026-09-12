@@ -54,17 +54,34 @@ DEFLATION_GATES_SET = set(DEFLATION_GATES)
 def _panel_from_returns(
     returns: np.ndarray, index: pd.DatetimeIndex, symbols: Sequence[str], start_price: float = 100.0
 ) -> Panel:
+    """Synthetic bars that satisfy the platform's own QA checks.
+
+    Getting this right matters more than it looks. The first version set
+    `high = close * 1.005` with `open` the previous close, so at crypto
+    volatility the open fell outside [low, high] on nearly half the bars, and
+    `quote_volume` was a constant unrelated to `volume x price`. Those are
+    exactly the two defects `check_klines` exists to catch — the self-test
+    worlds could not have passed gate 1. It went unnoticed only because gate 1
+    never ran its QA on a real pipeline path.
+
+    A fixture that cannot pass the checks being tested is a standing invitation
+    to weaken the checks.
+    """
     frames = {}
     for j, symbol in enumerate(symbols):
         close = start_price * np.exp(np.cumsum(returns[:, j]))
+        open_ = np.concatenate([[start_price], close[:-1]])
+        volume = np.full(len(index), 1e4)
         frames[symbol] = pd.DataFrame(
             {
-                "open": np.concatenate([[start_price], close[:-1]]),
-                "high": close * 1.005,
-                "low": close * 0.995,
+                "open": open_,
+                # The extremes must bracket both ends of the bar, not just the close.
+                "high": np.maximum(open_, close) * 1.005,
+                "low": np.minimum(open_, close) * 0.995,
                 "close": close,
-                "volume": 1e4,
-                "quote_volume": 1e8,
+                "volume": volume,
+                # Quote volume is base volume times price, by definition.
+                "quote_volume": volume * close,
                 "trades": 500.0,
             },
             index=index,

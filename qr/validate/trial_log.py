@@ -175,6 +175,62 @@ class TrialLog:
             "prereg", hypothesis_id, {"doc_sha256": content_hash(doc), "doc_chars": len(doc), **extra}
         )
 
+    def document_drift(self, root: Path | None = None) -> list[dict[str, Any]]:
+        """Pre-registrations whose document no longer hashes to what was logged.
+
+        The chain protects the log, not the files the log points at. A
+        pre-registration is a promise that a prediction was fixed before the
+        data was seen, and that promise is only checkable while the document
+        still hashes to the recorded value — so an edit after the fact, however
+        well-meant (appending the outcome is the obvious temptation, and one
+        this project's author reached for within an hour of the run), silently
+        voids the evidence. Editing is not prevented, because the file is the
+        author's; it is made visible.
+
+        Only the latest registration per hypothesis is checked, since an
+        amendment before the first run is legitimate and gate 0 polices the
+        ordering. A document that is absent is reported separately from one
+        that has changed: the first is a missing file, the second is a
+        different prediction.
+
+        A hypothesis registered from inline text rather than a file has no
+        document to drift from and is skipped — its wording lives in the record
+        and nowhere else, so the chain already covers it. Passing `root`
+        overrides that and looks for `<hypothesis_id>.md` there regardless.
+        """
+        from qr.config import REPO_ROOT
+
+        out: list[dict[str, Any]] = []
+        by_id: dict[str, TrialRecord] = {}
+        for rec in self.records(kind="prereg"):
+            by_id[rec.hypothesis_id] = rec  # records() is in sequence order
+        for hypothesis_id, rec in sorted(by_id.items()):
+            expected = rec.payload.get("doc_sha256")
+            if root is not None:
+                path = Path(root) / f"{hypothesis_id}.md"
+            else:
+                source = rec.payload.get("source")
+                if not source or source == "inline":
+                    continue
+                path = Path(source)
+                if not path.is_absolute():
+                    path = REPO_ROOT / path
+            if not path.exists():
+                out.append({"hypothesis": hypothesis_id, "state": "MISSING", "path": str(path)})
+                continue
+            actual = content_hash(path.read_text(encoding="utf-8"))
+            if actual != expected:
+                out.append(
+                    {
+                        "hypothesis": hypothesis_id,
+                        "state": "CHANGED",
+                        "registered": str(expected)[:16],
+                        "on_disk": actual[:16],
+                        "seq": rec.seq,
+                    }
+                )
+        return out
+
     def run(
         self,
         hypothesis_id: str,

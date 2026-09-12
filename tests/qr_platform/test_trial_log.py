@@ -87,3 +87,59 @@ def test_head_survives_a_log_longer_than_one_read_block(log):
     assert log.path.stat().st_size > 4096
     assert log.head().seq == 199
     assert log.verify() == 200
+
+
+def test_an_edited_preregistration_is_reported_even_though_the_chain_is_intact(tmp_path):
+    """The chain protects the log, not the documents the log points at.
+
+    Appending the outcome to a pre-registration after the run is the obvious
+    temptation — and it silently voids the one thing the stamp was for, because
+    the document no longer hashes to what was promised. The log itself stays
+    perfectly valid, which is exactly why this needs saying out loud.
+    """
+    prereg = tmp_path / "prereg"
+    prereg.mkdir()
+    doc = prereg / "h1.md"
+    doc.write_text("the prediction, written before the data was seen", encoding="utf-8")
+
+    log = TrialLog(tmp_path / "trial_log.jsonl")
+    log.prereg("h1", doc.read_text(encoding="utf-8"))
+    assert log.document_drift(prereg) == []
+
+    doc.write_text(doc.read_text(encoding="utf-8") + "\n\nOutcome: it failed.", encoding="utf-8")
+    drift = log.document_drift(prereg)
+    assert log.verify() > 0  # the chain is still sound
+    assert [d["hypothesis"] for d in drift] == ["h1"]
+    assert drift[0]["state"] == "CHANGED"
+
+
+def test_a_missing_document_is_reported_separately_from_a_changed_one(tmp_path):
+    """One is a lost file; the other is a different prediction."""
+    prereg = tmp_path / "prereg"
+    prereg.mkdir()
+    (prereg / "h1.md").write_text("a prediction", encoding="utf-8")
+    log = TrialLog(tmp_path / "trial_log.jsonl")
+    log.prereg("h1", "a prediction")
+    (prereg / "h1.md").unlink()
+    assert log.document_drift(prereg)[0]["state"] == "MISSING"
+
+
+def test_an_amendment_before_the_first_run_is_checked_against_the_latest_stamp(tmp_path):
+    """Gate 0 polices ordering; drift only asks whether the live text is stamped."""
+    prereg = tmp_path / "prereg"
+    prereg.mkdir()
+    doc = prereg / "h1.md"
+    log = TrialLog(tmp_path / "trial_log.jsonl")
+    doc.write_text("first draft", encoding="utf-8")
+    log.prereg("h1", "first draft")
+    doc.write_text("second draft, still before any run", encoding="utf-8")
+    log.prereg("h1", "second draft, still before any run")
+    assert log.document_drift(prereg) == []
+
+
+def test_a_hypothesis_registered_inline_has_no_document_to_drift_from(tmp_path):
+    """Its wording lives in the record, so the chain already covers it."""
+    log = TrialLog(tmp_path / "trial_log.jsonl")
+    log.prereg("h1", "typed straight in", source="inline")
+    log.prereg("h2", "no source recorded at all")
+    assert log.document_drift() == []

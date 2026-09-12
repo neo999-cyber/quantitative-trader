@@ -521,6 +521,17 @@ def cmd_trial_verify(args) -> int:
         print(f"TRIAL LOG CORRUPT: {exc}", file=sys.stderr)
         return 2
     print(f"chain verified: {count} records, {log.trial_count()} trials counted")
+    drift = log.document_drift(getattr(args, "prereg_dir", None))
+    if drift:
+        print(table(pd.DataFrame(drift)))
+        print(
+            f"\n{len(drift)} pre-registration document(s) no longer match what was stamped. "
+            "The chain is intact; the documents it points at are not, so those predictions "
+            "can no longer be shown to predate their runs.",
+            file=sys.stderr,
+        )
+        return 1
+    print("pre-registration documents match their stamps")
     return 0
 
 
@@ -944,7 +955,10 @@ def build_parser() -> argparse.ArgumentParser:
     note.add_argument("hypothesis")
     note.add_argument("text", help='e.g. "gate 3: short sample by design, CI still excludes zero"')
     note.set_defaults(func=cmd_trial_note)
-    verify = trial.add_parser("verify", help="check the hash chain")
+    verify = trial.add_parser(
+        "verify", help="check the hash chain and that pre-registrations still match their stamps"
+    )
+    verify.add_argument("--prereg-dir", help="where the documents live (default docs/prereg)")
     verify.set_defaults(func=cmd_trial_verify)
     show = trial.add_parser("show", help="recent records")
     show.add_argument("--kind", choices=["prereg", "run", "gate", "holdout", "note"])

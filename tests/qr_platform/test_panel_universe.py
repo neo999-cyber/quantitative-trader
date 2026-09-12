@@ -103,3 +103,64 @@ def test_as_instruments_summarises_membership(panel):
     summary = as_instruments(frame).set_index("symbol")
     assert summary.loc["DEADUSDT", "last_in"] == pd.Timestamp("2023-08-15", tz="UTC")
     assert summary["bars_in"].min() > 0
+
+
+# ------------------------------- bars that cannot be true, from the real bucket
+
+
+def _reproduce_real_defects(panel):
+    """The two defects found in Binance's published archive, planted verbatim.
+
+    BTTUSDT carries five bars of negative base volume in its first fortnight
+    (2019, when nominal volumes ran to 10^11 tokens); AUDUSDT has one bar whose
+    high sits below its own close. Both files' SHA-256 checksums verify, so the
+    corruption is upstream of this loader.
+    """
+    fields = {k: v.copy() for k, v in panel.fields.items()}
+    negative_volume_bar = panel.index[10]
+    high_below_close_bar = panel.index[20]
+    fields["volume"].loc[negative_volume_bar, "BTCUSDT"] = -6.159694e10
+    fields["high"].loc[high_below_close_bar, "ETHUSDT"] = (
+        fields["close"].loc[high_below_close_bar, "ETHUSDT"] * 0.997
+    )
+    return Panel(fields, panel.interval), negative_volume_bar, high_below_close_bar
+
+
+def test_a_bar_with_negative_volume_is_not_tradable(panel):
+    broken, bad_bar, _ = _reproduce_real_defects(panel)
+    assert panel.tradable().loc[bad_bar, "BTCUSDT"]
+    assert not broken.tradable().loc[bad_bar, "BTCUSDT"]
+
+
+def test_a_bar_whose_high_is_below_its_close_is_not_tradable(panel):
+    broken, _, bad_bar = _reproduce_real_defects(panel)
+    assert panel.tradable().loc[bad_bar, "ETHUSDT"]
+    assert not broken.tradable().loc[bad_bar, "ETHUSDT"]
+
+
+def test_only_the_impossible_bars_are_excluded_not_the_symbol(panel):
+    """Discarding a pair over five bad prints would reintroduce survivorship bias."""
+    broken, bad_volume, bad_high = _reproduce_real_defects(panel)
+    before, after = panel.tradable(), broken.tradable()
+    assert after["BTCUSDT"].sum() == before["BTCUSDT"].sum() - 1
+    assert after["ETHUSDT"].sum() == before["ETHUSDT"].sum() - 1
+    assert after.drop(columns=["BTCUSDT", "ETHUSDT"]).equals(
+        before.drop(columns=["BTCUSDT", "ETHUSDT"])
+    )
+
+
+def test_a_strategy_cannot_hold_an_impossible_bar(panel):
+    from qr.execution.costs import CostModel
+    from qr.research.runner import run_backtest
+    from qr.strategies.library import BuyAndHold
+
+    broken, bad_bar, _ = _reproduce_real_defects(panel)
+    result = run_backtest(broken, BuyAndHold(), CostModel(fee_bps=0.0, half_spread_bps=0.0))
+    assert result.held.loc[bad_bar, "BTCUSDT"] == 0.0
+
+
+def test_clean_bars_are_unaffected_by_the_sanity_checks(panel):
+    """The checks must not quietly shrink a universe that has nothing wrong."""
+    mask = panel.tradable()
+    assert mask.sum().sum() > 0
+    assert mask.equals(panel.close.notna() & (panel.get("quote_volume").fillna(0.0) > 0.0))

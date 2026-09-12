@@ -102,16 +102,45 @@ class Panel:
         return np.log(self.close).diff()
 
     def tradable(self, min_quote_volume: float = 0.0) -> pd.DataFrame:
-        """Where a bar is real: a price exists and the bar actually traded.
+        """Where a bar is real: a price exists, it traded, and it is possible.
 
-        This is the mask every strategy must intersect its positions with, and
-        it is what keeps a delisted pair out of the portfolio after its last bar
-        without pretending it was never there.
+        This is the mask every strategy must intersect its positions with. It
+        keeps a delisted pair out of the portfolio after its last bar without
+        pretending it was never there, and it excludes bars whose values cannot
+        be true.
+
+        That last part is not hypothetical. Binance's published archive — whose
+        SHA-256 checksums verify, so the corruption is upstream of this loader —
+        contains bars with **negative** base volume (BTTUSDT, five bars in its
+        first fortnight in 2019, when nominal volumes ran to 10^11 tokens) and
+        bars whose high is below their own close (AUDUSDT, 2020-11-13). Six such
+        bars in roughly 740,000 across 734 pairs.
+
+        Excluding them rather than repairing them is deliberate: a repaired
+        value is a number nobody measured, and it would propagate into a report
+        that claims to be reproducible from the manifest hash. Excluding them
+        rather than dropping the whole symbol is also deliberate: BTT's other
+        1,078 bars are fine, and discarding a pair over five bad prints would
+        quietly reintroduce the survivorship bias the bucket exists to avoid.
         """
-        mask = self.close.notna()
+        mask = self.close.notna() & (self.close > 0)
         quote = self.get("quote_volume")
         if quote is not None:
             mask &= quote.fillna(0.0) > min_quote_volume
+
+        volume = self.get("volume")
+        if volume is not None:
+            mask &= volume.fillna(0.0) >= 0.0
+
+        # A bar whose extremes do not bracket its own open and close is not a
+        # bar. Checked only where the fields exist, and tolerant of float noise.
+        high, low, open_ = self.get("high"), self.get("low"), self.get("open")
+        if high is not None and low is not None:
+            body = open_ if open_ is not None else self.close
+            body_high = np.maximum(self.close, body)
+            body_low = np.minimum(self.close, body)
+            mask &= (high >= body_high * (1 - 1e-9)) | high.isna()
+            mask &= (low <= body_low * (1 + 1e-9)) | low.isna()
         return mask
 
     #: Bars per year, for annualising. Crypto trades every day of the year.

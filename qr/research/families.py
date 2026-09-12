@@ -141,6 +141,7 @@ def run_family(
     thresholds: GateThresholds | None = None,
     permutations: int = 200,
     vol_preserving_permutations: int | None = None,
+    progress=None,
     upto: int = 9,
     stop_on_fail: bool = True,
 ) -> FamilyRun:
@@ -177,7 +178,7 @@ def run_family(
         permutations=permutations,
         vol_preserving_permutations=vol_preserving_permutations,
     )
-    return FamilyRun(spec, sweep, run_gates(context, upto=upto, stop_on_fail=stop_on_fail), best)
+    return FamilyRun(spec, sweep, run_gates(context, upto=upto, stop_on_fail=stop_on_fail, progress=progress), best)
 
 
 def summarise(runs: Sequence[FamilyRun], trial_log: TrialLog | None = None) -> pd.DataFrame:

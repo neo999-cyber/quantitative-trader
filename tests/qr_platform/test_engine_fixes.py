@@ -405,3 +405,44 @@ def test_the_second_null_can_be_switched_off(costs):
         context(panel, TSMOM(lookback=30), costs, permutations=4, vol_preserving_permutations=0)
     )
     assert "bar_permutation_vol_preserved_p_value" not in result.stats
+
+
+# ------------------------------------------- 5. the two operational traps this cost
+
+
+def test_run_gates_announces_each_gate_before_it_starts(panel, costs):
+    """Silence is indistinguishable from a hang, and a real run was killed on it."""
+    from qr.validate.gates import run_gates
+
+    lines: list[str] = []
+    run_gates(context(panel, TSMOM(lookback=60), costs), upto=2, progress=lines.append)
+
+    # Before, not only after: an announcement that arrives when the gate ends
+    # does not help anyone staring at gate 6 for forty minutes.
+    assert lines[0].strip().startswith("gate 0")
+    assert lines[0].strip().endswith("…")
+    assert any("PASS" in line or "FAIL" in line or "WARN" in line or "SKIP" in line for line in lines)
+    assert any(line.rstrip().endswith("s)") for line in lines)
+
+
+def test_an_empty_lake_is_refused_with_the_root_it_looked_in(tmp_path, capsys):
+    """`QR_ROOT` pointed one directory too high cost this project three runs.
+
+    The failure was a `ValueError: no symbols in the lake match that query`
+    three frames inside `load_panel`, which reads as a filter problem. It is
+    not one, and the message never named the directory it had looked in.
+    """
+    import argparse
+
+    from qr.cli import _load_panel
+    from qr.data.lake import Lake
+    from qr.config import Paths
+
+    lake = Lake(Paths(tmp_path).ensure())
+    with pytest.raises(SystemExit) as exit_info:
+        _load_panel(lake, "1d")
+    assert exit_info.value.code == 2
+    message = capsys.readouterr().err
+    assert str(tmp_path) in message
+    assert "QR_ROOT" in message
+    assert "qr data ingest" in message

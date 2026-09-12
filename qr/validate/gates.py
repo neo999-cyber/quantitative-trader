@@ -21,6 +21,7 @@ changed threshold is a visible change to a named default with a git blame.
 from __future__ import annotations
 
 import math
+import time
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Callable, Sequence
@@ -1121,6 +1122,7 @@ def run_gates(
     upto: int = 9,
     stop_on_fail: bool = True,
     skip: Sequence[int] = (),
+    progress: Callable[[str], None] | None = None,
 ) -> GateReport:
     """Run the gates in order, stopping at the first FAIL.
 
@@ -1128,6 +1130,13 @@ def run_gates(
     report on a strategy you already know fails — seeing *how far* it gets and
     what the later gates say is often more informative than the first failure.
     It is not the mode a decision should be made in.
+
+    `progress` is called with a line before each gate starts and another when it
+    finishes. That exists because gate 6 re-optimises a 25-variant subgrid over
+    100 permuted panels of 734 symbols, which is tens of minutes of complete
+    silence, and silence is indistinguishable from a hang — a real run was
+    killed on the suspicion. A gate that announces itself before it begins costs
+    nothing and answers the question.
     """
     results: list[GateResult] = []
     for gate in GATES:
@@ -1136,7 +1145,13 @@ def run_gates(
             break
         if number in skip:
             continue
+        label = " ".join(gate.__name__.split("_")[2:])
+        if progress is not None:
+            progress(f"  gate {number} {label}…")
+        started = time.perf_counter()
         result = gate(ctx)
+        if progress is not None:
+            progress(f"  gate {number} {result.name}: {result.verdict} ({time.perf_counter() - started:.0f}s)")
         results.append(result)
         if ctx.trial_log is not None:
             ctx.trial_log.gate(ctx.hypothesis_id, result.number, result.name, result.verdict, result.stats)

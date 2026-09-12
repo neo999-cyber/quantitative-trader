@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -45,6 +46,35 @@ FAMILIES = {
 
 def _lake(args) -> Lake:
     return Lake(paths(getattr(args, "root", None)))
+
+
+def _progress(line: str) -> None:
+    """Gate-by-gate progress to stderr, flushed, so a slow gate is visible."""
+    print(line, file=sys.stderr, flush=True)
+
+
+def _load_panel(lake: Lake, interval: str, start=None, end=None):
+    """Load a panel, or explain *why* there is nothing to load.
+
+    Pointing `QR_ROOT` at a directory that is not the lake cost this project
+    three runs, twice because the traceback came from three frames inside
+    `load_panel` and said "no symbols match that query" — which sounds like a
+    filter problem and is not one. An empty manifest is never a legitimate
+    state for a command that is about to backtest something, so it is worth one
+    cheap check and a message that names the root it actually looked in.
+    """
+    if not lake.symbols(interval):
+        env = os.environ.get("QR_ROOT")
+        where = f"QR_ROOT={env}" if env else "QR_ROOT is unset, so this is the <repo>/lake default"
+        print(
+            f"the lake at {lake.paths.root} holds no {interval} klines ({where}).\n"
+            "Either point QR_ROOT at the root that has one, or build this one with "
+            "`qr data ingest`.\n"
+            "`qr doctor` prints the root every command will use.",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
+    return lake.load_panel(interval=interval, start=start, end=end)
 
 
 def _mirror(args) -> LocalBucket:
@@ -211,7 +241,7 @@ def cmd_data_qa(args) -> int:
 
 
 def cmd_data_universe(args) -> int:
-    panel = _lake(args).load_panel(interval=args.interval, start=args.start, end=args.end)
+    panel = _load_panel(_lake(args), args.interval, args.start, args.end)
     spec = UniverseSpec(n=args.n, lookback=args.lookback, min_history=args.min_history)
     frame = membership(panel, spec)
     print(f"universe: {spec.describe()}\n")
@@ -351,7 +381,7 @@ def cmd_gates(args) -> int:
     from qr.validate.report import headline_verdict, write_report
 
     lake = _lake(args)
-    panel = lake.load_panel(interval=args.interval, start=args.start, end=args.end)
+    panel = _load_panel(lake, args.interval, args.start, args.end)
     spec = UniverseSpec(n=args.n, lookback=args.lookback, min_history=args.min_history)
     universe = membership(panel, spec)
     costs = _costs(args)
@@ -377,7 +407,7 @@ def cmd_gates(args) -> int:
     best = sweep.best()
     holdout_panel = None
     if args.holdout_start:
-        holdout_panel = lake.load_panel(interval=args.interval, start=args.holdout_start, end=args.holdout_end)
+        holdout_panel = _load_panel(lake, args.interval, args.holdout_start, args.holdout_end)
 
     context = GateContext(
         hypothesis_id=hypothesis_id,
@@ -394,7 +424,9 @@ def cmd_gates(args) -> int:
         permutations=args.permutations,
         vol_preserving_permutations=args.vol_permutations,
     )
-    report = run_gates(context, upto=args.upto, stop_on_fail=not args.all_gates)
+    report = run_gates(
+        context, upto=args.upto, stop_on_fail=not args.all_gates, progress=_progress
+    )
 
     print(table(report.to_frame()))
     verdict, reason = headline_verdict(report, log)
@@ -411,7 +443,7 @@ def cmd_families(args) -> int:
     from qr.validate.report import write_report
 
     lake = _lake(args)
-    panel = lake.load_panel(interval=args.interval, start=args.start, end=args.end)
+    panel = _load_panel(lake, args.interval, args.start, args.end)
     spec = UniverseSpec(n=args.n, lookback=args.lookback, min_history=args.min_history)
     universe = membership(panel, spec)
     costs = _costs(args)
@@ -419,7 +451,7 @@ def cmd_families(args) -> int:
 
     holdout_panel = holdout_universe = None
     if args.holdout_start:
-        holdout_panel = lake.load_panel(interval=args.interval, start=args.holdout_start, end=args.holdout_end)
+        holdout_panel = _load_panel(lake, args.interval, args.holdout_start, args.holdout_end)
         holdout_universe = membership(holdout_panel, spec)
 
     chosen = [BY_ID[h] for h in args.only] if args.only else TRIAL_FAMILIES
@@ -450,6 +482,7 @@ def cmd_families(args) -> int:
             vol_preserving_permutations=args.vol_permutations,
             upto=args.upto,
             stop_on_fail=not args.all_gates,
+            progress=_progress,
         )
         runs.append(run)
         md, _ = write_report(run.report, paths(args.root).reports, log, run.sweep.results[run.best_variant].stats())
@@ -485,7 +518,7 @@ def cmd_backtest(args) -> int:
     from qr.strategies import library
 
     lake = _lake(args)
-    panel = lake.load_panel(interval=args.interval, start=args.start, end=args.end)
+    panel = _load_panel(lake, args.interval, args.start, args.end)
     spec = UniverseSpec(n=args.n, lookback=args.lookback, min_history=args.min_history)
     universe = membership(panel, spec)
     strategy = getattr(library, FAMILIES[args.family])(**_parse_params(args.param))

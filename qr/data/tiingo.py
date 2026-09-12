@@ -174,7 +174,17 @@ class HttpTiingo:
                         allowed_methods=frozenset({"GET"}),
                     )
                     session.mount("https://", HTTPAdapter(max_retries=retry, pool_maxsize=16))
-                    session.headers.update({"Content-Type": "application/json"})
+                    # Tiingo documents both a `token` query parameter and this
+                    # header. The header is sent too because a redirect drops
+                    # the query string, and Tiingo redirects to its root on an
+                    # auth failure — which is what makes a bad token surface as
+                    # a bare 403 against a URL you never requested.
+                    session.headers.update(
+                        {
+                            "Content-Type": "application/json",
+                            "Authorization": f"Token {self.token}",
+                        }
+                    )
                     self._session = session
         return self._session
 
@@ -182,6 +192,18 @@ class HttpTiingo:
         params = {k: v for k, v in params.items() if v is not None}
         params["token"] = self.token
         response = self._client().get(f"{API_ROOT}/{path}", params=params, timeout=self.timeout)
+        if response.status_code in (401, 403):
+            raise PermissionError(
+                f"Tiingo refused the request ({response.status_code}). The token is present "
+                f"but not accepted. Three things cause this, in order of likelihood:\n"
+                f"  1. the email address on the account has not been confirmed — Tiingo "
+                f"issues a token immediately but serves no data until you click the link;\n"
+                f"  2. TIINGO_API_KEY holds a placeholder rather than the real token "
+                f"(currently {len(self.token or '')} characters);\n"
+                f"  3. the free tier's daily request limit is spent.\n"
+                f"Check with: curl -s -o /dev/null -w '%{{http_code}}' "
+                f"'https://api.tiingo.com/tiingo/daily/SPY/prices?token=$TIINGO_API_KEY'"
+            )
         response.raise_for_status()
         return response.json()
 

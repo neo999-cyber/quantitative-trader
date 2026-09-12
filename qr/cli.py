@@ -302,6 +302,11 @@ def cmd_etf_pull(args) -> int:
             try:
                 name, count = future.result()
                 rows.append({"symbol": name, "bars": count})
+            except PermissionError as exc:
+                # An auth failure is the same for every ticker, so printing it
+                # twelve times buries the one thing worth reading.
+                print(f"\n{exc}\n", file=sys.stderr)
+                return 2
             except Exception as exc:
                 rows.append({"symbol": ticker, "bars": 0, "error": str(exc)[:60]})
     print(table(pd.DataFrame(rows).sort_values("symbol")))

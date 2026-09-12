@@ -76,12 +76,99 @@ class Strategy(ABC):
             allowed = allowed & universe.reindex_like(allowed).fillna(False)
         return weights.where(allowed, 0.0).fillna(0.0)
 
+    def schedule(self, weights: pd.DataFrame, panel: Panel) -> pd.DataFrame:
+        """Apply this variant's `rebalance` parameter, if it has one.
+
+        A strategy with no `rebalance` parameter trades every bar, which is what
+        every crypto family does and what a proportional-fee venue can afford.
+        With one, the book is left to drift between rebalance dates — see
+        `hold_between`, and note that this is provably the identity when the
+        schedule marks every bar, so adding the call cannot change a crypto
+        result.
+        """
+        freq = self.params.get("rebalance")
+        if not freq:
+            return weights
+        marks = rebalance_mask(weights.index, freq)
+        return hold_between(weights, panel.returns(), marks)
+
     @staticmethod
     def normalise(weights: pd.DataFrame, gross: float = 1.0) -> pd.DataFrame:
         """Scale each bar's weights to a fixed gross exposure; all-zero bars stay flat."""
         total = weights.abs().sum(axis=1)
         scale = np.where(total > 0, gross / total.where(total > 0, 1.0), 0.0)
         return weights.mul(scale, axis=0).fillna(0.0)
+
+
+def rebalance_mask(index: pd.DatetimeIndex, freq: str | None) -> pd.Series:
+    """True on the bars a strategy is allowed to trade.
+
+    `freq` is a pandas offset alias — "MS" for the first bar of each month, "W"
+    for weekly — or None for "every bar", which is what the crypto families do
+    and what a venue charging proportionally can afford.
+    """
+    if freq is None:
+        return pd.Series(True, index=index)
+    marks = pd.Series(False, index=index)
+    if len(index) == 0:
+        return marks
+    # The first bar *at or after* each period boundary, which is a real trading
+    # day; the boundary itself is often a weekend or a holiday.
+    naive = pd.DatetimeIndex(index).tz_localize(None) if index.tz is not None else pd.DatetimeIndex(index)
+    period = pd.Series(naive, index=index).dt.to_period(_PERIOD[freq])
+    first_of_period = ~period.duplicated()
+    marks.loc[first_of_period.to_numpy()] = True
+    marks.iloc[0] = True
+    return marks
+
+
+_PERIOD = {"MS": "M", "M": "M", "W": "W", "QS": "Q", "Q": "Q", "YS": "Y", "D": "D"}
+
+
+def hold_between(
+    weights: pd.DataFrame, returns: pd.DataFrame, trades_on: pd.Series
+) -> pd.DataFrame:
+    """Trade only on `trades_on`; let the book drift in between.
+
+    This is what makes a monthly strategy monthly, and it is not the same thing
+    as holding the target weights constant. A book left alone does not stay at
+    its target: the winners grow and the losers shrink. Repeating the target
+    every bar would tell the engine to trade back to it **daily**, which at a
+    $0.35 per-order minimum and a $1,000 account is roughly 13% a year in
+    commissions charged for a strategy that was supposed to trade twelve times.
+
+    So between rebalances the target *is* the drifted book — no trade — and on
+    a rebalance bar it snaps back to the model's weights. Turnover then appears
+    exactly where a real account would generate it.
+
+    Computed per block rather than per bar: within a block each weight grows
+    with its own asset's cumulative return and the row is renormalised, which is
+    the closed form of compounding the drift day by day.
+    """
+    index = weights.index
+    out = pd.DataFrame(0.0, index=index, columns=weights.columns)
+    growth = (1.0 + returns.reindex_like(weights).fillna(0.0)).to_numpy()
+    target = weights.to_numpy(dtype=float)
+    marks = np.flatnonzero(trades_on.reindex(index).fillna(False).to_numpy())
+    if len(marks) == 0:
+        return out
+
+    values = out.to_numpy().copy()
+    bounds = list(marks) + [len(index)]
+    for start, stop in zip(bounds[:-1], bounds[1:]):
+        base = target[start]
+        values[start] = base
+        if stop - start <= 1 or not np.any(base):
+            continue
+        # Cumulative growth of each asset since the rebalance bar. Row `start`
+        # itself is the freshly set book, so compounding begins at `start + 1`.
+        cumulative = np.cumprod(growth[start + 1 : stop], axis=0)
+        grown = base * cumulative
+        totals = np.abs(grown).sum(axis=1, keepdims=True)
+        gross = np.abs(base).sum()
+        with np.errstate(divide="ignore", invalid="ignore"):
+            values[start + 1 : stop] = np.where(totals > 0, grown / totals * gross, 0.0)
+    return pd.DataFrame(values, index=index, columns=weights.columns)
 
 
 def _short(value: Any) -> str:

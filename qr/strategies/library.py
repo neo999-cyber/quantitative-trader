@@ -26,7 +26,8 @@ class BuyAndHold(Strategy):
 
     def target_weights(self, panel: Panel, universe: pd.DataFrame | None = None) -> pd.DataFrame:
         ones = pd.DataFrame(1.0, index=panel.index, columns=panel.symbols)
-        return self.normalise(self.mask_to_universe(ones, panel, universe), self.params["gross"])
+        weights = self.normalise(self.mask_to_universe(ones, panel, universe), self.params["gross"])
+        return self.schedule(weights, panel)
 
 
 class TSMOM(Strategy):
@@ -115,7 +116,7 @@ class RandomEntry(Strategy):
         # renormalises, which is what the real strategies do too.
         raw *= mask
         frame = pd.DataFrame(raw, index=panel.index, columns=panel.symbols)
-        return self.normalise(self.mask_to_universe(frame, panel, universe))
+        return self.schedule(self.normalise(self.mask_to_universe(frame, panel, universe)), panel)
 
 
 # --------------------------------------------------------------- cross-section
@@ -359,4 +360,4 @@ class RSIReversal(Strategy):
         # A position opened on a signal bar stays on for `hold` bars; overlapping
         # signals do not double the size, they just extend the holding.
         held = fired.rolling(hold, min_periods=1).max().fillna(0.0).astype(float)
-        return self.normalise(self.mask_to_universe(held, panel, universe))
+        return self.schedule(self.normalise(self.mask_to_universe(held, panel, universe)), panel)

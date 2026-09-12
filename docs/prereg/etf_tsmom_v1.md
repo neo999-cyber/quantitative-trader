@@ -35,8 +35,23 @@ ways: unlikely to be spurious, unlikely to be generous.
 costs: 0.6 to 1.0.
 
 The gap between those two numbers is the whole point of running this at $1,000
-and I am predicting it will be large. At 42 bps a leg, a monthly rebalance of
-twelve positions costs roughly 5% a year in commissions alone.
+and I am predicting it will be large.
+
+> **Correction, 12 September 2026, before any run.** This paragraph originally
+> said "at 42 bps a leg, a monthly rebalance of twelve positions costs roughly
+> 5% a year in commissions alone". That is wrong by about nine times and the
+> error was mine: it assumed each rebalance turns the whole book over, when a
+> book left to drift between rebalance dates only needs about 12% of itself
+> traded to get back to target. Measured on the implemented schedule at $1,000
+> of equity, a twelve-name equal-weight book costs **0.56% a year** monthly,
+> 1.05% weekly and 2.23% rebalanced every bar. A momentum family turns over
+> more than equal weight does, because its positions change rather than merely
+> drift, so the honest expectation is somewhere above 0.56% and well below 5%.
+> The prediction of a large gross-to-net gap is **downgraded** accordingly: I
+> now expect gate 2 to pass rather than to be the binding constraint, which
+> makes gate 3 the likely cause of death — the same place the crypto family
+> died. Corrected before any ETF backtest has been run, which is the only
+> moment a registered prediction can be corrected without it being a rescue.
 
 **Predicted beta to SPY: 0.2 to 0.5**, lower than a long-only equity sleeve
 because the bond and gold legs are genuinely different exposures. Predicted
@@ -96,7 +111,7 @@ basket has roughly half the volatility of a crypto basket and levering it to
 ## Prediction about the others
 
 I expect this family to be the **most likely of the four to pass**, for the
-diversification reason above, and the most likely to be killed by gate 2 rather
-than by gate 3. That is recorded so a failure at gate 3 is a surprise rather
+diversification reason above. Per the correction above I no longer expect gate
+2 to be what kills it; gate 3 is the likely cause of death. That is recorded so a failure at gate 3 is a surprise rather
 than retrospectively obvious — which is exactly the mistake I made on crypto,
 where I predicted a gate 8 death on beta and got a gate 3 death instead.

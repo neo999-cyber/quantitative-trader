@@ -281,3 +281,34 @@ class TestDataPull:
         )
         help_text = action.choices["data"]._subparsers._actions[1].choices["pull"].format_help()
         assert "ALPHABETICAL" in help_text
+
+
+def test_a_wrapped_connection_failure_reports_the_cause_not_the_wrapper():
+    """`requests` buries the reason four exceptions deep.
+
+    The ETF pull printed `HTTPSConnectionPool(...): Max retries exceeded` for all
+    twelve tickers, which is the same string whether the name did not resolve,
+    the handshake was refused, or a proxy dropped it. The pull table truncated it
+    at sixty characters, so even the wrapper's own tail was lost.
+    """
+    from qr.cli import _root_cause
+
+    try:
+        try:
+            try:
+                raise OSError(-2, "Name or service not known")
+            except OSError as inner:
+                raise ConnectionError("failed to establish a new connection") from inner
+        except ConnectionError as middle:
+            raise RuntimeError("Max retries exceeded with url: /tiingo/daily") from middle
+    except RuntimeError as outer:
+        cause = _root_cause(outer)
+
+    assert "Name or service not known" in cause
+    assert "Max retries" not in cause
+
+
+def test_root_cause_of_a_bare_exception_is_itself():
+    from qr.cli import _root_cause
+
+    assert _root_cause(ValueError("nothing underneath")) == "ValueError: nothing underneath"

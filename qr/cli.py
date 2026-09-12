@@ -261,6 +261,25 @@ def cmd_data_ingest(args) -> int:
     return 0 if written else 1
 
 
+def _root_cause(exc: BaseException) -> str:
+    """The innermost exception, which is the only one that says what went wrong.
+
+    `requests` wraps a connection failure four deep: ConnectionError over
+    MaxRetryError over NewConnectionError over the socket error that actually
+    happened. Only the last distinguishes "DNS does not resolve" from "the
+    handshake was refused" from "the proxy dropped it" — and the outer one, the
+    one that gets printed, says the same `Max retries exceeded` in all three
+    cases.
+    """
+    seen: list[BaseException] = []
+    current: BaseException | None = exc
+    while current is not None and current not in seen:
+        seen.append(current)
+        current = current.__cause__ or current.__context__
+    inner = seen[-1]
+    return f"{type(inner).__name__}: {inner}".strip()
+
+
 def _tiingo_mirror(args):
     from qr.data.tiingo import LocalTiingo
 
@@ -308,10 +327,23 @@ def cmd_etf_pull(args) -> int:
                 print(f"\n{exc}\n", file=sys.stderr)
                 return 2
             except Exception as exc:
-                rows.append({"symbol": ticker, "bars": 0, "error": str(exc)[:60]})
+                rows.append({"symbol": ticker, "bars": 0, "error": _root_cause(exc)[:70]})
     print(table(pd.DataFrame(rows).sort_values("symbol")))
     print(f"mirrored into {mirror.root}")
-    return 0 if any(r["bars"] for r in rows) else 1
+    if any(r["bars"] for r in rows):
+        return 0
+    causes = sorted({str(r.get("error", "")) for r in rows if not r["bars"]})
+    print(
+        "\nnothing was mirrored. The client already retries five times with backoff, so "
+        "these are failures that survived that:\n  "
+        + "\n  ".join(causes)
+        + "\n\nIf that names DNS or a refused connection, api.tiingo.com is not reachable "
+        "from this machine (VPN, captive wifi, a corporate proxy). Confirm with:\n"
+        "  curl -sS -o /dev/null -w '%{http_code}\\n' https://api.tiingo.com/api/test\n"
+        f"If curl works and this does not, retry serially: qr data etf-pull --workers 1",
+        file=sys.stderr,
+    )
+    return 1
 
 
 def cmd_etf_ingest(args) -> int:

@@ -24,7 +24,14 @@ from qr.data.panel import Panel
 from qr.execution.costs import CostModel
 from qr.research.sweep import Sweep, run_sweep
 from qr.strategies.base import Strategy
-from qr.strategies.library import BuyAndHold, CrossSectionalMomentum, RSIReversal, ShortTermReversal, TSMOM
+from qr.strategies.library import (
+    BuyAndHold,
+    CrossSectionalMomentum,
+    LongShortMomentum,
+    RSIReversal,
+    ShortTermReversal,
+    TSMOM,
+)
 from qr.validate.gates import GateContext, GateReport, GateThresholds, run_gates
 from qr.validate.trial_log import TrialLog
 
@@ -160,7 +167,32 @@ ETF_FAMILIES: list[FamilySpec] = [
     ),
 ]
 
-BY_ID = {spec.hypothesis_id: spec for spec in TRIAL_FAMILIES + ETF_FAMILIES}
+#: Phase two of the ETF work, and the first family in the project whose claim
+#: is not market exposure. Kept in its own list rather than appended to
+#: `ETF_FAMILIES` because it is a separate trial with a separate cost model —
+#: it shorts, so it carries a borrow fee and is priced at $10,000, an account
+#: that may legally hold a short book.
+LONG_SHORT_FAMILIES: list[FamilySpec] = [
+    FamilySpec(
+        hypothesis_id="ls_xsmom_v1",
+        strategy_class=LongShortMomentum,
+        grid={
+            "lookback": [60, 120, 180, 252],
+            "n_side": [2, 3, 4],
+            "skip": [21],
+            "rebalance_on": ["MS"],
+            "vol_target": [0.10],
+            "vol_lookback": [60],
+            "max_leverage": [1.0],
+        },
+        summary="dollar-neutral cross-sectional momentum, monthly",
+    ),
+]
+
+BY_ID = {
+    spec.hypothesis_id: spec
+    for spec in TRIAL_FAMILIES + ETF_FAMILIES + LONG_SHORT_FAMILIES
+}
 
 
 @dataclass

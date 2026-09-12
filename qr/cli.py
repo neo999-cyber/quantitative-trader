@@ -32,7 +32,13 @@ from qr.data.lake import Lake
 from qr.data.panel import Panel
 from qr.data.qa import check_klines, report_markdown, summarise
 from qr.data.universe import UniverseSpec, as_instruments, membership
-from qr.execution.costs import ETF_TRIAL_EQUITY, TRIAL_BNB_DISCOUNT, TRIAL_FEE_TIER, CostModel
+from qr.execution.costs import (
+    ETF_TRIAL_EQUITY,
+    LONG_SHORT_TRIAL_EQUITY,
+    TRIAL_BNB_DISCOUNT,
+    TRIAL_FEE_TIER,
+    CostModel,
+)
 from qr.report import table
 from qr.validate.trial_log import TrialLog, TrialLogCorrupt
 
@@ -90,7 +96,13 @@ def _progress(line: str) -> None:
     print(line, file=sys.stderr, flush=True)
 
 
-ASSET_PARTITION = {"crypto": ("binance", "spot"), "etf": ("tiingo", "etf")}
+ASSET_PARTITION = {
+    "crypto": ("binance", "spot"),
+    "etf": ("tiingo", "etf"),
+    # Same bars as `etf`; a different trial over them, with a short book, a
+    # borrow fee and an account large enough to be allowed one.
+    "etf-ls": ("tiingo", "etf"),
+}
 
 
 def _partition(args) -> tuple[str, str]:
@@ -669,10 +681,18 @@ def cmd_gates(args) -> int:
 
 def cmd_families(args) -> int:
     """Run the four registered trial families through the gates."""
-    from qr.research.families import BY_ID, ETF_FAMILIES, TRIAL_FAMILIES, run_family, summarise
+    from qr.research.families import (
+        BY_ID,
+        ETF_FAMILIES,
+        LONG_SHORT_FAMILIES,
+        TRIAL_FAMILIES,
+        run_family,
+        summarise,
+    )
     from qr.validate.report import write_report
 
-    etf = args.asset == "etf"
+    long_short = args.asset == "etf-ls"
+    etf = args.asset == "etf" or long_short
     source, market = _partition(args)
     lake = _lake(args)
     panel = _load_panel(lake, args.interval, args.start, args.end, source, market)
@@ -701,7 +721,12 @@ def cmd_families(args) -> int:
         universe = membership(panel, spec)
     if not args.no_restrict_universe:
         panel, universe = _restrict_to_universe(panel, universe)
-    costs = CostModel.etf_trial() if etf else _costs(args)
+    if long_short:
+        costs = CostModel.etf_long_short()
+    elif etf:
+        costs = CostModel.etf_trial()
+    else:
+        costs = _costs(args)
     log = TrialLog(paths(args.root).ensure().trial_log)
 
     holdout_panel = holdout_universe = None
@@ -717,7 +742,12 @@ def cmd_families(args) -> int:
                 holdout_panel, holdout_universe, "holdout: "
             )
 
-    default_families = ETF_FAMILIES if etf else TRIAL_FAMILIES
+    if long_short:
+        default_families = LONG_SHORT_FAMILIES
+    elif etf:
+        default_families = ETF_FAMILIES
+    else:
+        default_families = TRIAL_FAMILIES
     chosen = [BY_ID[h] for h in args.only] if args.only else default_families
     missing = [f.hypothesis_id for f in chosen if not log.records(kind="prereg", hypothesis_id=f.hypothesis_id)]
     if missing and not args.skip_prereg_check:
@@ -744,7 +774,7 @@ def cmd_families(args) -> int:
             holdout_universe=holdout_universe,
             permutations=args.permutations,
             vol_preserving_permutations=args.vol_permutations,
-            equity=args.equity if args.equity else (ETF_TRIAL_EQUITY if etf else None),
+            equity=args.equity or (LONG_SHORT_TRIAL_EQUITY if long_short else ETF_TRIAL_EQUITY if etf else None),
             calendar="xnys" if etf else "continuous",
             upto=args.upto,
             stop_on_fail=not args.all_gates,
@@ -1044,9 +1074,13 @@ def build_parser() -> argparse.ArgumentParser:
     fam.add_argument("--spread", type=float, default=2.0)
     fam.add_argument(
         "--asset",
-        choices=("crypto", "etf"),
+        choices=("crypto", "etf", "etf-ls"),
         default="crypto",
-        help="which trial: the Binance crypto families or the Tiingo ETF basket",
+        help=(
+            "which trial: the Binance crypto families, the long-only ETF basket, "
+            "or the long-short ETF family (shorts, so it carries a borrow fee and "
+            "is priced at $10,000 — a $1,000 account may not short at all)"
+        ),
     )
     fam.add_argument(
         "--equity",

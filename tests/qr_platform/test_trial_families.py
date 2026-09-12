@@ -56,9 +56,11 @@ def test_no_family_sweeps_more_than_five_parameters(spec: FamilySpec):
 
 def test_the_registry_is_addressable_by_hypothesis_id():
     """One registry across both trials, so `--only` addresses either by name."""
-    from qr.research.families import ETF_FAMILIES
+    from qr.research.families import ETF_FAMILIES, LONG_SHORT_FAMILIES
 
-    assert set(BY_ID) == {f.hypothesis_id for f in TRIAL_FAMILIES + ETF_FAMILIES}
+    every = TRIAL_FAMILIES + ETF_FAMILIES + LONG_SHORT_FAMILIES
+    assert set(BY_ID) == {f.hypothesis_id for f in every}
+    assert len(BY_ID) == len(every)  # no id collides across the three trials
     assert BY_ID["tsmom_v1"].strategy_class.family == "tsmom"
     assert BY_ID["etf_buyhold_v1"].control
 
@@ -179,3 +181,22 @@ def test_the_control_is_marked_as_one_in_the_summary(small_panel, tmp_path):
     log.prereg("rsi_reversal_v1", "doc")
     run = run_family(spec, small_panel, CostModel.trial(), trial_log=log, permutations=5, upto=3)
     assert summarise([run], log)["control"].iloc[0] == "yes"
+
+
+def test_the_long_short_family_is_registered_and_matches_its_document():
+    from qr.research.families import LONG_SHORT_FAMILIES
+
+    spec = LONG_SHORT_FAMILIES[0]
+    assert spec.hypothesis_id == "ls_xsmom_v1"
+    assert spec.prereg_path.exists()
+    assert spec.declared_variants() == spec.n_variants == 12
+    assert len(spec.swept_parameters) <= 5
+    assert not spec.control
+
+
+def test_the_long_short_prereg_states_what_would_falsify_it():
+    from qr.research.families import LONG_SHORT_FAMILIES
+
+    text = LONG_SHORT_FAMILIES[0].prereg_path.read_text(encoding="utf-8").lower()
+    for required in ("mechanism", "what would falsify", "cost model", "out-of-sample", "borrow"):
+        assert required in text

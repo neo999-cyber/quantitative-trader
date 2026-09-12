@@ -308,6 +308,102 @@ def relative_volume(volume: pd.DataFrame, window: int = 20) -> pd.DataFrame:
     return volume / baseline
 
 
+class LongShortMomentum(CrossSectionalMomentum):
+    """Long the strongest, short the weakest, dollar-neutral by construction.
+
+    The first family in this project whose claim is not market exposure. Both
+    crypto and ETF trials ended with gate 8 saying *"this is the market, not
+    the strategy"* — betas of 0.44 to 0.53 with alpha t-statistics under half —
+    and that was not a failure of those strategies so much as a property of
+    long-only investing in a market that rose. A book that is long and short in
+    equal dollars cannot collect beta by accident, so for the first time gate 8
+    is being asked a question it can answer with something other than
+    arithmetic.
+
+    The construction is the academic cross-sectional factor rather than half of
+    it: rank the basket on the same 12-1 momentum signal, hold the top
+    `n_side` long and the bottom `n_side` short, equal weight per name, gross
+    exposure 1.0 and net exposure 0.0. `CrossSectionalMomentum` documents why
+    it is long-only — *"the short leg of the academic factor is not available,
+    and half a factor is a different strategy"* — which is true of Binance spot
+    and not of a US margin account. This is the other half.
+
+    Three things follow that the long-only families never had to face.
+
+    A short leg **costs money to hold**, not only to trade: a borrow fee
+    accrues daily on short notional whether or not the book moves, so a
+    strategy that rebalances monthly still pays every day. `CostModel`
+    expresses that for the first time here.
+
+    A short leg **cannot be held in the account the trial models**. A US margin
+    account may not short below $2,000 of equity. The $1,000 the ETF trial was
+    priced against is not enough, which is why this family's cost model is
+    frozen at $10,000 and why a pass is a research result rather than a trade.
+
+    And dollar-neutral is **not** risk-neutral. Twelve funds spanning equities,
+    bonds, gold and commodities have wildly different volatilities; a dollar of
+    TLT against a dollar of EEM is a short volatility-mismatched bet, not a
+    hedge. The vol-targeting overlay scales the whole book and does not fix
+    this. It is left unfixed deliberately — beta-neutralising or
+    vol-weighting the legs is a second hypothesis, and bolting it on here would
+    make a failure impossible to attribute.
+    """
+
+    family = "ls_xsmom"
+
+    def __init__(
+        self,
+        lookback: int = 180,
+        skip: int = 21,
+        n_side: int = 3,
+        rebalance_on: str | None = "MS",
+        vol_target: float | None = 0.10,
+        vol_lookback: int = 60,
+        max_leverage: float = 1.0,
+    ) -> None:
+        Strategy.__init__(
+            self,
+            lookback=lookback,
+            skip=skip,
+            n_side=n_side,
+            rebalance_on=rebalance_on,
+            vol_target=vol_target,
+            vol_lookback=vol_lookback,
+            max_leverage=max_leverage,
+        )
+
+    def target_weights(self, panel: Panel, universe: pd.DataFrame | None = None) -> pd.DataFrame:
+        eligible = panel.tradable()
+        if universe is not None:
+            eligible = eligible & universe.reindex_like(eligible).fillna(False)
+        score = self.signal(panel).where(eligible & self.signal(panel).notna())
+
+        n_side = int(self.params["n_side"])
+        ranked = score.rank(axis=1, ascending=True, method="first")
+        live = score.notna().sum(axis=1)
+
+        # Below 2*n_side names there are not enough to fill both sides without
+        # a fund appearing on both, which would net to nothing while paying two
+        # commissions for the privilege. The book stands flat instead — and
+        # this is not hypothetical: HYG lists in April 2007, inside the sample.
+        enough = live >= 2 * n_side
+        short = (ranked <= n_side) & enough.to_numpy()[:, None]
+        long = ranked.gt(live.to_numpy()[:, None] - n_side) & enough.to_numpy()[:, None]
+
+        picked = long.astype(float) - short.astype(float)
+        weights = self.normalise(self.mask_to_universe(picked, panel, universe))
+        target = self.params["vol_target"]
+        if target:
+            # Before the schedule, never after: vol targeting rescales the whole
+            # book every bar, which silently defeats a monthly rebalance.
+            weights = VolTarget(
+                annual_target=target,
+                lookback=self.params["vol_lookback"],
+                max_leverage=self.params["max_leverage"],
+            ).scale(weights, panel)
+        return self.schedule(weights.fillna(0.0), panel)
+
+
 class RSIReversal(Strategy):
     """The existing Centaur setup, run as a systematic strategy. **The control.**
 

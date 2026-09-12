@@ -185,12 +185,18 @@ def run_backtest(
     if prices is None:
         prices = panel.close
     needs_equity = charge_impact or costs.per_share_usd > 0
+    # Gross short weight per bar. A borrow fee accrues on what is held, not on
+    # what is traded, so it is the one cost that a book standing perfectly
+    # still still pays.
+    short_exposure = held.clip(upper=0.0).abs().sum(axis=1)
     cost = costs.charge(
         turnover_matrix,
         equity=equity if needs_equity else None,
         adv_notional=adv,
         volatility=vol,
         prices=prices,
+        short_exposure=short_exposure,
+        periods_per_year=panel.periods_per_year,
     )
     net = (gross - cost).rename("net")
 

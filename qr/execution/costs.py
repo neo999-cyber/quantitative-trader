@@ -87,6 +87,11 @@ TRIAL_FEES_VERIFIED_ON = "2026-09-11"
 #: `CostModel.etf_trial` for why this single number decides what gate 2 means.
 ETF_TRIAL_EQUITY = 1_000.0
 
+#: The long-short trial prices against $10,000, not $1,000: a US margin account
+#: may not short below $2,000 of equity, so the account the ETF trial models
+#: cannot hold a short book at all.
+LONG_SHORT_TRIAL_EQUITY = 10_000.0
+
 TRIAL_HALF_SPREAD_BPS = 2.0
 
 
@@ -108,6 +113,12 @@ class CostModel:
     per_share_usd: float = 0.0
     min_commission_usd: float = 0.0
     max_commission_pct: float = 0.0
+    #: Annual stock-borrow fee charged on the *short* side, in basis points of
+    #: short notional. Zero for a long-only book and for crypto spot, where
+    #: there is nothing to borrow. A short leg costs money to hold even when it
+    #: never trades, which is a cost with no turnover behind it — the one kind
+    #: this model could not previously express.
+    borrow_bps_per_year: float = 0.0
     impact_coef: float = 1.0
     #: Charge impact only for what it costs *beyond* crossing the spread,
     #: which `linear_bps` already charges. See `impact_bps`. False restores the
@@ -158,6 +169,33 @@ class CostModel:
         inferred.
         """
         return replace(cls.ibkr_etf(), name=f"ibkr_us_etf_tiered_{int(equity)}usd")
+
+    @classmethod
+    def etf_long_short(
+        cls, equity: float = LONG_SHORT_TRIAL_EQUITY, borrow_bps_per_year: float = 50.0
+    ) -> "CostModel":
+        """The long-short ETF trial's frozen cost model.
+
+        `etf_trial()` plus a stock-borrow fee, and priced against **$10,000**
+        rather than $1,000 for a reason that is a constraint and not a
+        preference: a US margin account requires $2,000 of equity before it may
+        short at all, so the $1,000 the trial models cannot hold this book in
+        any size. Pricing it at the account that exists would be pricing a
+        trade that cannot be placed.
+
+        50 bps a year is a general-collateral rate for liquid US ETFs and is
+        **unverified**, like the commission schedule beside it. Two of this
+        basket — HYG and DBC — are periodically harder to borrow than that, and
+        a fee that moves is a cost this model treats as a constant. Where the
+        verdict turns on borrow rather than on commission, say so rather than
+        reporting the number.
+        """
+        model = cls.ibkr_etf()
+        return replace(
+            model,
+            borrow_bps_per_year=borrow_bps_per_year,
+            name=f"ibkr_etf_long_short_{int(equity)}",
+        )
 
     @classmethod
     def ibkr_etf(
@@ -326,6 +364,8 @@ class CostModel:
         adv_notional: pd.DataFrame | None = None,
         volatility: pd.DataFrame | None = None,
         prices: pd.DataFrame | None = None,
+        short_exposure: pd.Series | None = None,
+        periods_per_year: float = 365.0,
     ) -> pd.Series:
         """Return drag per bar, as a positive fraction of equity.
 
@@ -339,13 +379,14 @@ class CostModel:
         per-share schedule ignores `prices` entirely, so the crypto path is
         untouched.
         """
+        borrow = self.borrow_cost(short_exposure, periods_per_year)
         linear = turnover.sum(axis=1) * self.linear_bps * BPS
         if self.per_share_usd > 0 and prices is not None and equity is not None:
             spread = turnover.sum(axis=1) * self.multiplier * self.half_spread_bps * BPS
             fees = self.commission_bps(turnover, equity, prices)
             linear = (turnover * fees).sum(axis=1) * BPS + spread
         if adv_notional is None or volatility is None or equity is None:
-            return linear.rename("cost")
+            return (linear + borrow.reindex(linear.index).fillna(0.0)).rename("cost")
         eq = pd.Series(equity, index=turnover.index) if np.isscalar(equity) else equity.reindex(turnover.index)
         traded_notional = turnover.mul(eq, axis=0)
         adv = adv_notional.reindex_like(turnover)
@@ -353,7 +394,28 @@ class CostModel:
         imp_bps = self.impact_bps(traded_notional, adv, vol)
         impact = pd.DataFrame(imp_bps, index=turnover.index, columns=turnover.columns)
         impact = (turnover * impact).sum(axis=1) * BPS
-        return (linear + impact).rename("cost")
+        return (linear + impact + borrow.reindex(linear.index).fillna(0.0)).rename("cost")
+
+    def borrow_cost(
+        self, short_exposure: pd.Series | None, periods_per_year: float = 365.0
+    ) -> pd.Series:
+        """Per-bar drag from holding a short book, as a fraction of equity.
+
+        `short_exposure` is the gross short weight held on each bar — the sum
+        of the negative weights, unsigned. The fee accrues on the position
+        rather than on the trade, so a long-short book that never rebalances
+        still pays every day it is open: the first cost in this model with no
+        turnover behind it.
+
+        Short proceeds earning interest is deliberately **not** modelled. A
+        real short credit would offset part of this, so omitting it makes the
+        strategy look slightly worse than it is, which is the direction an
+        unverified cost assumption should err in.
+        """
+        if not self.borrow_bps_per_year or short_exposure is None or periods_per_year <= 0:
+            return pd.Series(dtype=float)
+        per_bar = self.borrow_bps_per_year * BPS / periods_per_year
+        return short_exposure.abs() * per_bar
 
     def describe(self) -> dict[str, float | str | bool]:
         return {

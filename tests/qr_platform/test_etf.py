@@ -447,3 +447,75 @@ def test_a_permuted_panel_keeps_the_traded_price_with_its_bar(tmp_path):
     original = (panel["close"] / panel["close_unadjusted"]).stack().dropna()
     # The same multiset of adjustment factors, in a different order.
     assert np.isclose(sorted(ratio)[len(ratio) // 2], sorted(original)[len(original) // 2])
+
+
+# --------------------------------------------------------- the long-short family
+
+
+def test_the_book_is_dollar_neutral_at_construction(tmp_path):
+    from qr.strategies.library import LongShortMomentum
+
+    panel = _basket_panel(tmp_path, n=900, dividend=0.0)
+    weights = LongShortMomentum(lookback=60, skip=5, n_side=1, rebalance_on=None,
+                                vol_target=None).target_weights(panel)
+    live = weights[weights.abs().sum(axis=1) > 0]
+    assert len(live) > 100
+    assert float(live.sum(axis=1).abs().max()) < 1e-12   # net zero
+    assert np.allclose(live.abs().sum(axis=1), 1.0)      # gross one
+
+
+def test_too_few_funds_stands_flat_rather_than_filling_both_sides(tmp_path):
+    """A fund ranked both best and worst nets to nothing and pays two
+    commissions for the privilege. HYG lists inside the sample, so this is a
+    real bar rather than a hypothetical."""
+    from qr.strategies.library import LongShortMomentum
+
+    panel = _basket_panel(tmp_path, n=900)  # three funds
+    weights = LongShortMomentum(lookback=60, skip=5, n_side=2, rebalance_on=None,
+                                vol_target=None).target_weights(panel)
+    assert float(weights.abs().sum(axis=1).max()) == 0.0  # 3 < 2*n_side, never trades
+    two = LongShortMomentum(lookback=60, skip=5, n_side=1, rebalance_on=None,
+                            vol_target=None).target_weights(panel)
+    assert float(two.abs().sum(axis=1).max()) > 0.0
+
+
+def test_a_short_book_pays_borrow_even_when_it_never_trades():
+    """The first cost in this model with no turnover behind it."""
+    index = pd.date_range("2024-01-02", periods=252, freq="D", tz="UTC")
+    still = pd.DataFrame(0.0, index=index, columns=["SPY"])  # no trades at all
+    model = CostModel.etf_long_short()
+    short = pd.Series(0.5, index=index)  # half the book short, held all year
+
+    with_short = model.charge(still, short_exposure=short, periods_per_year=252.0)
+    flat = model.charge(still, short_exposure=None, periods_per_year=252.0)
+
+    assert float(flat.sum()) == 0.0
+    # 50 bps a year on half the book, held for a year.
+    assert np.isclose(float(with_short.sum()), 0.5 * 50 * 1e-4, rtol=1e-6)
+
+
+def test_borrow_is_charged_on_the_short_leg_only(tmp_path):
+    """A long-only book under the same model pays nothing extra."""
+    from qr.research.runner import run_backtest
+    from qr.strategies.library import BuyAndHold, LongShortMomentum
+
+    panel = _basket_panel(tmp_path, n=900)
+    model = CostModel.etf_long_short()
+    long_only = run_backtest(panel, BuyAndHold(), model, equity=10_000.0)
+    neutral = run_backtest(
+        panel, LongShortMomentum(lookback=60, skip=5, n_side=1, rebalance_on="MS"), model,
+        equity=10_000.0,
+    )
+    assert float(neutral.held.clip(upper=0.0).abs().sum(axis=1).max()) > 0
+    assert float(long_only.held.clip(upper=0.0).abs().sum(axis=1).max()) == 0.0
+    assert float(neutral.costs.sum()) > 0
+
+
+def test_the_crypto_cost_path_is_untouched_by_the_borrow_field():
+    """Nothing is borrowable on Binance spot, and the default stays zero."""
+    assert CostModel.trial().borrow_bps_per_year == 0.0
+    index = pd.date_range("2024-01-02", periods=10, freq="D", tz="UTC")
+    turnover = pd.DataFrame(0.1, index=index, columns=["BTCUSDT"])
+    shorts = pd.Series(0.5, index=index)
+    model = CostModel.trial()
+    assert model.charge(turnover).equals(model.charge(turnover, short_exposure=shorts))

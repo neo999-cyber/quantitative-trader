@@ -57,6 +57,17 @@ log = logging.getLogger(__name__)
 
 API_ROOT = "https://api.tiingo.com/tiingo/daily"
 
+#: Tiingo's `/prices` endpoint returns **only the most recent bar** when no
+#: `startDate` is given — it is not a "give me everything" default, it is a
+#: quote. Asking for a ticker's whole history means naming a date before it
+#: existed, so the loader floors every request here rather than leaving the
+#: parameter unset. The first US ETF (SPY) listed in 1993; 1990 is comfortably
+#: before anything in any basket this platform will trade.
+#:
+#: This cost a pull: twelve tickers came back with one bar each, dated
+#: yesterday, and the ingest cheerfully wrote twelve one-row Parquet files.
+EARLIEST = "1990-01-01"
+
 #: Columns Tiingo returns from `/prices`. The adjusted four are what a
 #: total-return backtest reads; `divCash` and `splitFactor` are kept so the
 #: adjustment can be audited rather than trusted.
@@ -208,7 +219,7 @@ class HttpTiingo:
         return response.json()
 
     def prices(self, ticker: str, start: str | None = None, end: str | None = None) -> list[dict]:
-        out = self._get(f"{ticker}/prices", startDate=start, endDate=end, format="json")
+        out = self._get(f"{ticker}/prices", startDate=start or EARLIEST, endDate=end, format="json")
         return list(out) if isinstance(out, list) else []
 
     def meta(self, ticker: str) -> dict:

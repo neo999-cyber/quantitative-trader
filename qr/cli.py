@@ -342,6 +342,18 @@ def cmd_etf_ingest(args) -> int:
                 "adjusted": frame.attrs.get("adjusted", False),
             }
         )
+    # A history of one bar is not a history. Tiingo returns a single latest bar
+    # when a request omits `startDate`, and an ingest that accepts it writes a
+    # lake that looks complete and backtests to nothing.
+    stub = [r["symbol"] for r in written if r["bars"] < 100]
+    if stub:
+        print(
+            f"\nrefusing to write: {', '.join(stub)} have fewer than 100 bars. "
+            f"That is what a Tiingo pull with no start date returns — one quote, not a "
+            f"history. Re-run `qr data etf-pull` after `git pull`.",
+            file=sys.stderr,
+        )
+        return 2
     if written:
         lake.write_reference("etf_instruments", loader.instruments(tickers), source="tiingo")
     print(table(pd.DataFrame(written)))

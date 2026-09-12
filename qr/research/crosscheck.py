@@ -33,6 +33,12 @@ class Comparison:
     max_relative_error: float
     agrees: bool
     tolerance: float
+    #: The same difference measured against the curve's own peak equity. The
+    #: pointwise error divides by an equity that approaches zero for a ruinous
+    #: strategy; this one cannot, so a large pointwise error with a tiny
+    #: scale-relative one means the account is nearly empty, not that the two
+    #: engines disagree.
+    scale_relative_error: float = float("nan")
 
     def to_frame(self) -> pd.DataFrame:
         return pd.DataFrame({"weights": self.weight_equity, "shares": self.share_equity})
@@ -93,9 +99,27 @@ def compare(
     weights = result.equity
     both = pd.concat([weights, shares], axis=1).dropna()
     if both.empty:
-        return Comparison(weights, shares, np.nan, False, tolerance)
-    error = float(((both.iloc[:, 0] - both.iloc[:, 1]).abs() / both.iloc[:, 1].abs()).max())
-    return Comparison(weights, shares, error, error <= tolerance, tolerance)
+        return Comparison(weights, shares, np.nan, False, tolerance, float("nan"))
+    difference = (both.iloc[:, 0] - both.iloc[:, 1]).abs()
+    reference = both.iloc[:, 1].abs()
+    # Pointwise relative error stays the decision, because a ledger that
+    # disagrees by half at low equity is a bug and normalising by the curve's
+    # peak would hide it. But it divides by an equity that a ruinous strategy
+    # drives towards zero, so the scale-relative error is reported alongside:
+    # the two together distinguish "the engines disagree" from "the account is
+    # nearly empty and the ratio has nothing left to divide by".
+    with np.errstate(divide="ignore", invalid="ignore"):
+        pointwise = (difference / reference.where(reference > 0)).max()
+    error = float(pointwise) if np.isfinite(pointwise) else float("inf")
+    scale = float(reference.max())
+    return Comparison(
+        weights,
+        shares,
+        error,
+        error <= tolerance,
+        tolerance,
+        float(difference.max() / scale) if scale > 0 else float("nan"),
+    )
 
 
 def vectorbt_status() -> tuple[object | None, str]:

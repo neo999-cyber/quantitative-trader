@@ -745,6 +745,15 @@ def gate_8_robustness(ctx: GateContext) -> GateResult:
         median = retention.get("retention", float("nan"))
         if np.isfinite(median) and median < ctx.thresholds.min_neighbour_retention:
             problems.append(f"neighbours keep only {median:.0%} of the peak Sharpe (a spike, not a plateau)")
+        elif not np.isfinite(median) and retention.get("n_neighbours"):
+            # A `nan` here means the peak is too close to zero to divide by, so
+            # the plateau test could not run. Skipping it silently is how a
+            # missing check gets read as a passed one, which is the failure
+            # mode this whole pipeline exists to prevent.
+            warnings.append(
+                f"parameter plateau not measurable: peak Sharpe "
+                f"{retention.get('peak_sharpe', float('nan')):.2f} is within noise of zero"
+            )
 
     by_year = net.groupby(net.index.year).sum()
     profitable = float((by_year > 0).mean()) if len(by_year) else float("nan")
@@ -798,7 +807,12 @@ def gate_8_robustness(ctx: GateContext) -> GateResult:
         warnings.append(f"factor decomposition unavailable ({exc})")
 
     if problems:
-        return GateResult(8, "robustness and regime", FAIL, "; ".join(problems), stats)
+        # Warnings ride along with a FAIL rather than being dropped. A gate that
+        # failed for one reason was silently discarding everything else it had
+        # found, including "this check could not run at all" — and a check
+        # nobody is told about is indistinguishable from one that passed.
+        detail = "; ".join(problems + [f"(also: {w})" for w in warnings])
+        return GateResult(8, "robustness and regime", FAIL, detail, stats)
     if warnings:
         return GateResult(8, "robustness and regime", WARN, "; ".join(warnings), stats)
     return GateResult(

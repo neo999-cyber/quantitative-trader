@@ -199,11 +199,22 @@ def neighbours(sweep: Sweep, name: str, tolerance: float = 0.25) -> list[str]:
 
 
 def neighbourhood_retention(sweep: Sweep, name: str | None = None, tolerance: float = 0.25) -> dict:
-    """What share of the winner's Sharpe its parameter neighbours keep."""
+    """What share of the winner's Sharpe its parameter neighbours keep.
+
+    `retention` is `nan` when the peak Sharpe is too close to zero to divide
+    by — not merely when it is negative. A peak of 0.02 with a neighbour at
+    0.03 gives a retention of 150%, which gate 8 would read as a comfortable
+    plateau when what it actually shows is a flat field of noise. The floor is
+    one standard error of a Sharpe over the sample, the same scale the
+    lag-spike test and gate 2 use (`stats.sharpe_standard_error`).
+    """
+    from qr.validate.stats import sharpe_standard_error
+
     name = name or sweep.best()
     around = neighbours(sweep, name, tolerance)
     peak = float(sweep.stats.loc[name, "sharpe"])
-    if not around or not np.isfinite(peak) or peak <= 0:
+    floor = sharpe_standard_error(len(sweep.returns), sweep.periods_per_year)
+    if not around or not np.isfinite(peak) or peak <= 0 or (np.isfinite(floor) and peak < floor):
         return {"variant": name, "peak_sharpe": peak, "n_neighbours": len(around), "retention": float("nan")}
     ratios = sweep.stats.loc[around, "sharpe"].astype(float) / peak
     return {

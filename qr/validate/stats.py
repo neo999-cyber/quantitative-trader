@@ -253,6 +253,30 @@ def effective_trials(variant_returns: pd.DataFrame, floor: int = 1) -> tuple[int
     return int(max(floor, min(raw, round(effective)))), float(raw)
 
 
+def sharpe_standard_error(n_obs: int, periods_per_year: float = 365.0) -> float:
+    """One standard error of an annualised Sharpe ratio of zero over `n_obs` bars.
+
+    `sqrt(periods_per_year / n_obs)`, the small-Sharpe limit of the usual
+    standard error. It exists as a named function because three places in the
+    engine need the same thing and had each been getting it wrong in a
+    different way: **the scale below which a Sharpe is indistinguishable from
+    zero, and therefore cannot be divided by.**
+
+    Two bugs in the trial came from dividing by a quantity that passes through
+    zero — a walk-forward efficiency of 13.62 and a lag-spike ratio that
+    accused a clean strategy of a look-ahead. Both were found one at a time,
+    after they had produced a number somebody acted on. A guard written as
+    `if denominator <= 0` is not enough on its own: a denominator of 0.01 is
+    positive, passes that check, and still turns a ratio into a random number.
+
+    Use it as the floor a denominator must clear before a ratio built on it
+    means anything, and report "not measurable" below it rather than a value.
+    """
+    if n_obs <= 0 or periods_per_year <= 0:
+        return float("nan")
+    return float(math.sqrt(periods_per_year / n_obs))
+
+
 def min_backtest_length(n_trials: int, annual_sharpe: float = 1.0) -> float:
     """Years of data needed before the best of `n_trials` means anything.
 

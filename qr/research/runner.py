@@ -87,9 +87,29 @@ class BacktestResult:
 
 
 def _net_over_gross(net: pd.Series, gross: pd.Series, ppy: float) -> float:
-    """Gate 2's headline number: the share of gross return that survives costs."""
+    """Gate 2's headline number: the share of gross return that survives costs.
+
+    `nan` when there is no gross return to divide by, **including when it is
+    positive but within noise of zero**. `gross_ann > 0` on its own is not a
+    sufficient guard: a gross return of 0.1% a year is positive, passes it, and
+    makes this ratio a number with no information in it — which gate 2 would
+    then compare against a 60% threshold and could pass. A strategy that earns
+    nothing has nothing for costs to eat, and gate 2 reads `nan` as exactly
+    that.
+
+    The floor is one standard error of a Sharpe over this sample, which is the
+    same scale used by the lag-spike test in `leakage_probe` and by gate 8's
+    parameter plateau. See `stats.sharpe_standard_error`.
+    """
+    from qr.validate.stats import sharpe_standard_error
+
+    clean = gross.dropna()
     gross_ann = gross.mean() * ppy
     if not np.isfinite(gross_ann) or gross_ann <= 0:
+        return np.nan
+    sd = clean.std(ddof=1)
+    gross_sharpe = (clean.mean() / sd * math.sqrt(ppy)) if sd > 0 else np.inf
+    if gross_sharpe < sharpe_standard_error(len(clean), ppy):
         return np.nan
     return float((net.mean() * ppy) / gross_ann)
 

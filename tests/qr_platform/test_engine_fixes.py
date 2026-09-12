@@ -26,7 +26,7 @@ from qr.validate.gates import (
     gate_1_data_integrity,
 )
 from qr.validate.permutation import permute_panel
-from qr.validate.selftest import edge_world
+from qr.validate.selftest import edge_world, noise_world
 
 
 @pytest.fixture(scope="module")
@@ -566,3 +566,107 @@ def test_the_restriction_keeps_every_symbol_the_universe_ever_admits(costs):
     ever = {s for s in panel.symbols if bool(universe[s].any())}
     assert set(small.symbols) == ever
     assert small_universe.equals(universe[list(small.symbols)])
+
+
+# ---------------------------------- 7. the sweep: every other ratio in the engine
+
+
+def test_the_noise_floor_is_one_standard_error_of_a_sharpe():
+    from qr.validate.stats import sharpe_standard_error
+
+    assert sharpe_standard_error(365, 365.0) == pytest.approx(1.0)
+    assert sharpe_standard_error(2557, 365.0) == pytest.approx(0.378, abs=1e-3)
+    # More data, a tighter floor — the thing a fixed constant could not express.
+    assert sharpe_standard_error(10_000, 365.0) < sharpe_standard_error(1_000, 365.0)
+    assert np.isnan(sharpe_standard_error(0))
+
+
+def test_net_over_gross_refuses_a_gross_return_that_is_only_just_positive():
+    """`gross_ann > 0` passes for 0.1% a year, and the ratio then means nothing.
+
+    Gate 2 compares it against a 60% floor, so a strategy earning essentially
+    nothing could pass a gate about surviving costs.
+    """
+    from qr.research.runner import _net_over_gross
+
+    index = pd.date_range("2018-01-01", periods=2000, freq="D", tz="UTC")
+    rng = np.random.default_rng(0)
+    noise = pd.Series(rng.normal(0, 0.02, 2000), index=index)
+    # Positive mean, but a Sharpe far inside one standard error of zero.
+    barely = noise - noise.mean() + 1e-7
+    assert barely.mean() > 0
+    assert np.isnan(_net_over_gross(barely * 0.9, barely, 365.0))
+
+    # A real gross return still produces a real ratio.
+    real = noise - noise.mean() + 0.002
+    ratio = _net_over_gross(real * 0.8, real, 365.0)
+    assert np.isfinite(ratio) and ratio == pytest.approx(0.8, rel=1e-6)
+
+
+def test_gate_2_fails_rather_than_passes_when_the_ratio_is_not_measurable(panel, costs):
+    """The `nan` must not be read as a pass. Gate 2 already gets this right."""
+    from qr.strategies.base import Strategy
+    from qr.validate.gates import gate_2_cost_survival
+
+    class Flat(Strategy):
+        family = "flat"
+
+        def target_weights(self, panel, universe=None):
+            return pd.DataFrame(0.0, index=panel.index, columns=panel.symbols)
+
+    result = gate_2_cost_survival(context(panel, Flat(), costs))
+    assert result.verdict == FAIL
+    assert "nothing to survive" in result.detail
+
+
+def test_neighbourhood_retention_refuses_a_peak_within_noise_of_zero(costs):
+    """A peak Sharpe of 0.02 beside a neighbour at 0.03 is 150% "retention"."""
+    from qr.research.sweep import neighbourhood_retention, run_sweep
+
+    panel = edge_world(n_symbols=5, years=3, seed=6)
+    grid = TSMOM.grid(lookback=[20, 40, 60, 90], vol_target=[0.2])
+    sweep = run_sweep(panel, grid, costs)
+
+    # Force the peak to sit inside the noise floor and check it is refused.
+    flattened = sweep.stats.copy()
+    flattened["sharpe"] = [0.02, 0.03, 0.01, 0.015][: len(flattened)]
+    from dataclasses import replace as dc_replace
+
+    flat_sweep = dc_replace(sweep, stats=flattened)
+    out = neighbourhood_retention(flat_sweep, flat_sweep.names[0])
+    assert np.isnan(out["retention"]), out
+
+
+def test_gate_8_says_so_when_the_plateau_cannot_be_measured(costs):
+    """A check that could not run must not be silent — silence reads as a pass."""
+    from dataclasses import replace as dc_replace
+
+    from qr.research.sweep import run_sweep
+    from qr.validate.gates import gate_8_robustness
+
+    panel = edge_world(n_symbols=5, years=3, seed=6)
+    # Spaced inside the 25% neighbour tolerance, so neighbours exist to measure.
+    grid = TSMOM.grid(lookback=[40, 45, 50, 55], vol_target=[0.2])
+    sweep = run_sweep(panel, grid, costs)
+
+    flattened = sweep.stats.copy()
+    flattened["sharpe"] = np.linspace(0.02, 0.035, len(flattened))
+    flat_sweep = dc_replace(sweep, stats=flattened)
+    best = flat_sweep.names[0]
+
+    ctx = context(panel, next(s for s in grid if s.name == best), costs, sweep=flat_sweep)
+    result = gate_8_robustness(ctx)
+    assert not np.isfinite(result.stats.get("neighbourhood_retention", float("nan")))
+    assert "not measurable" in result.detail, result.detail
+
+
+def test_the_crosscheck_reports_a_scale_relative_error_too(panel, costs):
+    """The pointwise error divides by an equity a ruinous strategy drives to zero."""
+    from qr.research import crosscheck
+
+    result = run_backtest(panel, TSMOM(lookback=60), costs)
+    comparison = crosscheck.compare(panel, result, costs)
+    assert np.isfinite(comparison.scale_relative_error)
+    # On a healthy curve the two measures agree closely; they diverge only when
+    # the denominator of the pointwise one is collapsing.
+    assert comparison.scale_relative_error <= max(comparison.max_relative_error, 1e-9) * 10

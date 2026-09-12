@@ -1,9 +1,9 @@
-# Six engine defects the real runs exposed
+# Seven engine defects the real runs exposed, and the sweep for the rest
 
 *Written 12 September 2026, after the four-family run against real Binance data
 and before the confirmation re-run.*
 
-The runs against real data produced six numbers that meant something
+The runs against real data produced seven numbers that meant something
 other than what they said. None of them changed the verdict — every family
 failed gates 3, 4, 5 and 9 independently, and the holdout agreed — which is
 precisely why this was the moment to fix them. A threshold moved while a
@@ -266,9 +266,56 @@ do with the strategy. It is a change to a gate's null all the same, which is
 why it is a documented default with `--no-restrict-universe` to turn it off,
 rather than a silent optimisation.
 
+## 7. The sweep: every other ratio in the engine
+
+Two of the six defects above were the same defect — a ratio dividing by a
+quantity that passes through zero — found a day apart, each only after it had
+produced a number somebody acted on. That is a bad way to find the third one,
+so every division in `qr/` was read.
+
+**Nine were already correct.** `net_over_gross`, `neighbourhood_retention`,
+minimum track record length, minimum backtest length, the information ratio,
+weight drift, CSCV's logit, CPCV's median-over-in-sample and gate 9's holdout
+ratio all guard their denominator. Two of those deserve credit for getting it
+right in a way the broken pair did not: CSCV clips `omega` away from both ends
+before taking a logit, and `drift` replaces a zero portfolio return with `nan`
+rather than dividing by it.
+
+**But `denominator > 0` is not the guard it looks like.** A gross annual return
+of 0.1% is positive, clears the check, and still turns the ratio into a number
+with no information in it — which gate 2 then compares against a 60% threshold
+and can **pass**. The same is true of gate 8's parameter plateau: a peak Sharpe
+of 0.02 beside a neighbour at 0.03 is a "retention" of 150%, which reads as a
+comfortable plateau and is a flat field of noise. Neither bit during the trial,
+because both families had healthy gross returns and peak Sharpes near 0.75 —
+they were latent, not harmless.
+
+Both now require their denominator to clear **one standard error of a Sharpe
+over the sample**, `sqrt(periods_per_year / n_obs)`, which is now a named
+function (`stats.sharpe_standard_error`) rather than three copies of the same
+reasoning. It is the same floor the lag-spike test uses.
+
+**A `nan` must never read as a pass.** Gate 2 already had this right — it fails
+with "gross return is not positive; there is nothing to survive". Gate 8 did
+not: `if np.isfinite(median) and median < threshold` skips a non-measurable
+plateau in silence, and a check nobody is told about is indistinguishable from
+one that passed. It now says so. Relatedly, gate 8 was discarding *all* its
+warnings whenever it failed for some other reason, so a "could not measure
+this" could be hidden behind an unrelated failure; warnings now ride along with
+the FAIL.
+
+**One ratio is genuinely hard and was left strict.** The two-engine cross-check
+measures pointwise relative error against the share ledger's equity, which a
+ruinous strategy drives towards zero. Normalising by the curve's peak instead
+would remove the zero — and would also hide a ledger that disagrees by half at
+low equity, which is a real bug. So the pointwise measure still decides, and
+`scale_relative_error` is reported beside it: a large pointwise error with a
+tiny scale-relative one means the account is nearly empty, not that the engines
+disagree.
+
 ## What was checked afterwards
 
-`pytest -q` — 408 tests, including 31 new ones written against these six
+`pytest -q` — 414 tests, including 37 new ones written against these
 defects specifically. The regression tests are the useful part of this: each one
 reproduces the original defect with the fix switched off, which is how we know
 the fix is the fix and not a coincidence.

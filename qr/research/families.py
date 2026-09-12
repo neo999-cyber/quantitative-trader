@@ -205,6 +205,7 @@ def run_family(
     vol_preserving_permutations: int | None = None,
     progress=None,
     equity: float | None = None,
+    calendar: str = "continuous",
     upto: int = 9,
     stop_on_fail: bool = True,
 ) -> FamilyRun:
@@ -242,6 +243,7 @@ def run_family(
         permutations=permutations,
         vol_preserving_permutations=vol_preserving_permutations,
         equity=equity,
+        calendar=calendar,
     )
     return FamilyRun(spec, sweep, run_gates(context, upto=upto, stop_on_fail=stop_on_fail, progress=progress), best)
 

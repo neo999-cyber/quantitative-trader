@@ -428,8 +428,14 @@ def cmd_data_qa(args) -> int:
             file=sys.stderr,
         )
         return 2
+    calendar = "xnys" if market == "etf" else "continuous"
     reports = [
-        check_klines(lake.read_klines(s, args.interval, source=source, market=market), s, args.interval)
+        check_klines(
+            lake.read_klines(s, args.interval, source=source, market=market),
+            s,
+            args.interval,
+            calendar=calendar,
+        )
         for s in symbols
     ]
     text = report_markdown(
@@ -728,6 +734,7 @@ def cmd_families(args) -> int:
             permutations=args.permutations,
             vol_preserving_permutations=args.vol_permutations,
             equity=args.equity if args.equity else (ETF_TRIAL_EQUITY if etf else None),
+            calendar="xnys" if etf else "continuous",
             upto=args.upto,
             stop_on_fail=not args.all_gates,
             progress=_progress,

@@ -155,6 +155,11 @@ class GateContext:
     #: 0.42. A gate that re-runs a backtest must use the same account the sweep
     #: did or it is pricing a different strategy.
     equity: float | None = None
+    #: The market's calendar, for gate 1's gap check. "continuous" for crypto,
+    #: "xnys" for anything listed in New York — an exchange series measured
+    #: against a 365-day calendar reports one "gap" for every weekend it ever
+    #: had.
+    calendar: str = "continuous"
     seed: int = 0
 
     @property
@@ -270,7 +275,10 @@ def gate_1_data_integrity(ctx: GateContext) -> GateResult:
     frames = ctx.raw_frames if ctx.raw_frames is not None else _panel_frames(ctx)
     if frames:
         excluded = _excluded_bars(ctx)
-        raw = [check_klines(f, s, ctx.panel.interval) for s, f in sorted(frames.items())]
+        raw = [
+            check_klines(f, s, ctx.panel.interval, calendar=ctx.calendar)
+            for s, f in sorted(frames.items())
+        ]
         reports = [r.excluding(excluded.get(r.symbol, pd.DatetimeIndex([], tz="UTC"))) for r in raw]
         failed = {r.symbol for r in reports if r.verdict == FAIL}
         warned = {r.symbol for r in reports if r.verdict == WARN}

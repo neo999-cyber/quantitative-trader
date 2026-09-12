@@ -320,3 +320,63 @@ def test_the_asset_switch_picks_the_lake_partition(tmp_path):
     assert _partition(Namespace(asset="etf")) == ("tiingo", "etf")
     assert _partition(Namespace(asset="crypto")) == ("binance", "spot")
     assert _partition(Namespace()) == ("binance", "spot")
+
+
+# ------------------------------------------------------------------- QA checks
+
+
+def _etf_frame(**kwargs):
+    return to_frame(tiingo_rows(**kwargs))
+
+
+def test_an_adjusted_series_is_not_reported_as_column_misalignment():
+    """The check that called eleven of twelve real ETFs corrupt.
+
+    `quote_volume` is the notional that actually changed hands, so it is built
+    from the traded price; the OHLC columns are dividend-adjusted. Comparing
+    the implied VWAP against the adjusted range fails every bar before the last
+    distribution — and the only fund that passed was the one that pays none.
+    """
+    from qr.data.qa import check_klines
+
+    report = check_klines(_etf_frame(n=400, dividend=0.06), "HYG")
+    check = next(c for c in report.checks if c.name == "quote_volume_consistent")
+    assert check.verdict == "PASS", check.offenders[:3]
+
+
+def test_the_check_still_catches_a_genuinely_misaligned_column():
+    """The fix must not be a way of never failing."""
+    from qr.data.qa import check_klines
+
+    frame = _etf_frame(n=400, dividend=0.06)
+    frame["quote_volume"] = frame["quote_volume"] * 100.0  # price in cents
+    report = check_klines(frame, "HYG")
+    assert next(c for c in report.checks if c.name == "quote_volume_consistent").verdict == "FAIL"
+
+
+def test_the_session_calendar_knows_what_the_exchange_does():
+    from qr.data.qa import trading_sessions
+
+    sessions = trading_sessions("2024-01-01", "2024-12-31")
+    assert len(sessions) == 252  # the NYSE's 2024
+    for shut in ("2024-01-01", "2024-01-15", "2024-03-29", "2024-06-19", "2024-11-28"):
+        assert pd.Timestamp(shut, tz="UTC") not in sessions  # incl. Good Friday
+    for shut in ("2012-10-29", "2012-10-30", "2001-09-12"):
+        assert pd.Timestamp(shut, tz="UTC") not in trading_sessions("2001-01-01", "2013-01-01")
+
+
+def test_weekends_are_not_missing_bars_for_a_market_that_is_shut():
+    """Under the continuous calendar every ETF carries thousands of "gaps".
+
+    A check that fires on every instrument forever is one the reader learns to
+    skip, which is worse than not having it: it was the only WARN standing
+    between gate 1 and a clean ETF report.
+    """
+    from qr.data.qa import check_klines
+
+    frame = _etf_frame(n=1000)
+    sessions = check_klines(frame, "SPY", calendar="xnys")
+    continuous = check_klines(frame, "SPY", calendar="continuous")
+    gaps = {r.name: r for r in sessions.checks}["calendar_gaps"]
+    assert len(gaps.offenders) < 25  # holidays only; the fixture is bdays
+    assert len({r.name: r for r in continuous.checks}["calendar_gaps"].offenders) > 300

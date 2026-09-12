@@ -23,6 +23,66 @@ import pandas as pd
 
 from qr.report import table
 
+#: Exchange closures that no holiday rule produces: funerals, an attack, a
+#: storm. Each one is a day the NYSE was shut with the calendar saying
+#: otherwise, and without them every equity series in the lake carries a
+#: permanent "missing bar" that is not missing.
+NYSE_SPECIAL_CLOSURES = (
+    "1994-04-27",  # Nixon's funeral
+    "2001-09-11",  # the attacks; the market stayed shut for four sessions
+    "2001-09-12",
+    "2001-09-13",
+    "2001-09-14",
+    "2004-06-11",  # Reagan's funeral
+    "2007-01-02",  # Ford's funeral
+    "2012-10-29",  # Hurricane Sandy
+    "2012-10-30",
+    "2018-12-05",  # George H. W. Bush's funeral
+    "2025-01-09",  # Carter's funeral
+)
+
+#: Which calendar a market keeps. Crypto never closes, so a missing daily bar
+#: is a missing bar. An exchange is shut on weekends and about nine holidays a
+#: year, and measuring it against a continuous calendar produces thousands of
+#: "gaps" per symbol — a check that fires on every instrument forever teaches
+#: the reader to ignore it, which is worse than not having it.
+CALENDARS = ("continuous", "xnys")
+
+
+def _nyse_holidays(start, end) -> pd.DatetimeIndex:
+    from pandas.tseries.holiday import AbstractHolidayCalendar, GoodFriday, USFederalHolidayCalendar
+
+    class _NYSE(AbstractHolidayCalendar):
+        # Columbus Day and Veterans Day are federal holidays on which the stock
+        # exchange trades; Good Friday is the reverse.
+        rules = [
+            rule
+            for rule in USFederalHolidayCalendar.rules
+            if rule.name not in {"Columbus Day", "Veterans Day"}
+        ] + [GoodFriday]
+
+    holidays = _NYSE().holidays(start=start, end=end)
+    return pd.DatetimeIndex(holidays)
+
+
+def trading_sessions(start, end) -> pd.DatetimeIndex:
+    """The days the New York exchanges were open, inclusive, as UTC midnights.
+
+    Rule-derived rather than listed, except for the unforeseeable closures
+    above. Two rules disagree with the federal calendar before the dates their
+    pandas definitions start (MLK Day before 1998, Juneteenth in 2021) — both
+    err towards expecting a closure on a day that traded, which can only drop a
+    session from the expectation, never invent a missing one.
+    """
+    start = pd.Timestamp(start).tz_localize(None).normalize()
+    end = pd.Timestamp(end).tz_localize(None).normalize()
+    days = pd.bdate_range(start, end)
+    closed = _nyse_holidays(start, end).union(
+        pd.DatetimeIndex([pd.Timestamp(d) for d in NYSE_SPECIAL_CLOSURES])
+    )
+    return pd.DatetimeIndex(days.difference(closed)).tz_localize("UTC")
+
+
 INTERVAL_DELTA = {
     "1d": pd.Timedelta(days=1),
     "1h": pd.Timedelta(hours=1),
@@ -139,8 +199,15 @@ def check_klines(
     interval: str = "1d",
     max_abs_return: float = 0.8,
     quote_volume_tolerance: float = 0.05,
+    calendar: str = "continuous",
 ) -> QAReport:
-    """Run every check over one symbol's bars."""
+    """Run every check over one symbol's bars.
+
+    `calendar` says what "no bar today" means: nothing, for a market that never
+    closes, or a missing session for one that keeps exchange hours.
+    """
+    if calendar not in CALENDARS:
+        raise ValueError(f"unknown calendar {calendar!r}; expected one of {CALENDARS}")
     checks: list[CheckResult] = []
     empty = pd.DatetimeIndex([], tz="UTC")
 
@@ -176,13 +243,18 @@ def check_klines(
             deltas[deltas % step != pd.Timedelta(0)].index,
             f"bar spacing is not a multiple of {interval} (timestamp unit or cadence mix)",
         )
-        expected = pd.date_range(index[0], index[-1], freq=step, tz="UTC")
+        if calendar == "xnys" and interval == "1d":
+            expected = trading_sessions(index[0], index[-1])
+            detail = "exchange sessions with no bar — do not forward-fill these"
+        else:
+            expected = pd.date_range(index[0], index[-1], freq=step, tz="UTC")
+            detail = "bars missing inside the listing window — do not forward-fill these"
         missing = expected.difference(index)
         checks.append(
             CheckResult(
                 "calendar_gaps",
                 "PASS" if len(missing) == 0 else "WARN",
-                "bars missing inside the listing window — do not forward-fill these",
+                detail,
                 missing,
             )
         )
@@ -212,7 +284,18 @@ def check_klines(
     if "quote_volume" in frame and "volume" in frame:
         traded = frame["volume"] > 0
         vwap = frame["quote_volume"].where(traded) / frame["volume"].where(traded)
-        outside = traded & ((vwap < l * (1 - quote_volume_tolerance)) | (vwap > h * (1 + quote_volume_tolerance)))
+        # The two sides must be in the same price space. A dividend-adjusted
+        # frame carries an adjusted range and a `quote_volume` built from the
+        # price that actually changed hands, so comparing them directly fails
+        # every bar before the most recent distribution — which is what an
+        # adjusted ETF series looks like: eleven of twelve funds "corrupt", and
+        # the one that pays nothing clean. The factor puts the implied VWAP
+        # back into the frame's own space before the comparison.
+        low, high = l, h
+        if "close_unadjusted" in frame:
+            factor = (frame["close"] / frame["close_unadjusted"]).replace([np.inf, -np.inf], np.nan)
+            vwap = vwap * factor.where(factor > 0)
+        outside = traded & ((vwap < low * (1 - quote_volume_tolerance)) | (vwap > high * (1 + quote_volume_tolerance)))
         add(
             "quote_volume_consistent",
             outside,

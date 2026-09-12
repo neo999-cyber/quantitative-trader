@@ -1,40 +1,14 @@
-# The ETF verdict: all four families fail, and the control fails too
+# The ETF verdict: five families, none survive
 
-*Written 12 September 2026, after the ETF-basket trial against Tiingo data.*
+*Written 12 September 2026. **Rewritten the same day** after a defect in the
+engine was found to have inflated every cost figure in the first version —
+see "What the first version of this document got wrong" at the end, which is
+the most useful part of it.*
 
-The crypto trial ended on 12 September with four failures and the rule saying
-the next step was the ETF-basket trial, which costs nothing. This is that
-trial. **Nothing passed.** Three hypotheses and one control, twelve funds,
-sixteen years of dividend-adjusted bars, ten gates each.
-
-The control failing is the finding worth reading. It is not the same kind of
-failure as the other three, and separating the two is most of this document.
-
-> ## Correction, 12 September 2026 — the cost figures in this document are wrong
->
-> Every family below used a rebalance calendar, and the drift between
-> rebalances was computed by the strategy one bar out of phase with the engine
-> that consumes it. The engine holds the book from bar *t-1* and drifts it by
-> bar *t*'s return; the strategy could only drift its own *t-1* target by
-> *t-1*'s return. The two disagreed by one day's move on every bar in between,
-> and that disagreement was charged as a trade.
->
-> **A book scheduled to rebalance twelve times a year traded on all 365 of
-> them.** On a synthetic panel the inflation was 9x: 17.4% of equity a year
-> against a correct 1.9%.
->
-> So the cost column, `net_over_gross`, every net Sharpe, and gates 2 through 8
-> for all four families are computed from costs that are too high by an unknown
-> but large factor. **Finding 1 below — that the per-order floor is the binding
-> constraint — is exactly the claim this defect would manufacture**, and it is
-> withdrawn pending a re-run. Finding 2 (the control cannot clear gate 3) is
-> arithmetic about a Sharpe of 0.305 over sixteen years and survives; Finding 3
-> (SPA against buy-and-hold) is a comparison between two things costed the same
-> way, and its direction survives while its magnitude does not.
->
-> The fix is in `Strategy.trades_on` and `run_backtest`, with the engine's
-> closed form checked against an explicit loop that is the definition. The
-> re-run has not happened yet, and this notice stays until it has.
+Five pre-registered families against twelve funds and sixteen years: three
+long-only hypotheses, a long-only control, and one dollar-neutral long-short
+family added afterwards to test whether the gates were rejecting strategies or
+rejecting a category. **Nothing passed.**
 
 ## What was run
 
@@ -43,9 +17,9 @@ failure as the other three, and separating the two is most of this document.
 | Data | Tiingo daily, 12 ETFs, dividend- and split-adjusted, 5,183–8,462 bars each |
 | Universe | `etf_basket_12` — SPY, QQQ, IWM, EFA, EEM, TLT, IEF, LQD, HYG, GLD, DBC, VNQ |
 | In-sample | 2007-01-01 → 2022-12-31 |
-| Holdout | 2023-01-01 onward, not opened (`--upto 8`) |
-| Costs | IBKR Tiered: $0.0035/share, $0.35 per-order minimum, 1% cap, plus spread and impact |
-| Account | $1,000 — the sum actually available, not a round number chosen for the model |
+| Holdout | 2023-01-01 onward, opened once by the first run and not re-opened |
+| Costs | IBKR Tiered: $0.0035/share, $0.35 per-order minimum, 1% cap, plus spread; borrow at 50 bps/yr on the short family |
+| Account | $1,000, and $10,000 for the long-short family, which may not legally short below $2,000 |
 | Permutations | 100, re-optimised over the grid |
 | Manifest | `b9edf573597201e4d…` |
 | QA | 11 PASS, 1 WARN (one zero-volume bar in EFA, withheld by `tradable()`) |
@@ -54,161 +28,167 @@ failure as the other three, and separating the two is most of this document.
 
 | hypothesis | variants | verdict | stopped at | IS Sharpe | net/gross | round trips |
 |---|---|---|---|---|---|---|
-| `etf_tsmom_v1` | 30 | **FAIL** | gate 2 | 0.342 | 0.461 | 217 |
+| `etf_tsmom_v1` | 30 | **FAIL** | gate 5 | 0.678 | 0.733 | 214 |
 | `etf_xsmom_v1` | 12 | **FAIL** | gate 3 | 0.398 | 0.570 | 183 |
 | `etf_reversal_v1` | 12 | **FAIL** | gate 2 | 0.073 | 0.127 | 682 |
-| `etf_buyhold_v1` (control) | 1 | **FAIL** | gate 3 | 0.305 | 0.589 | 12 |
+| `etf_buyhold_v1` (control) | 1 | **FAIL** | gate 6 | 0.664 | 0.957 | 12 |
+| `ls_xsmom_v1` (long-short) | 12 | **FAIL** | gate 3 | 0.326 | 0.634 | 295 |
 
-## Finding 1: at $1,000, the broker's per-order minimum is the whole cost model
+## Finding 1: turnover decides affordability, not account size alone
 
-A per-share commission with a floor is not reducible to a rate, and at this
-account size the floor binds on **every order, at every price**:
+The first version of this document claimed the per-order minimum was "the whole
+cost model" at $1,000. With the costs computed correctly, the picture is
+sharper and different: the floor binds hard, but only on books that trade a lot.
 
-| account | notional per leg | cost per leg | in basis points |
+| family | round trips | net/gross | commission's share of the drag |
 |---|---|---|---|
-| $1,000 | $83 | $0.35 | **42.0** |
-| $10,000 | $833 | $0.35 | 4.2 |
-| $100,000 | $8,333 | $0.35 | 0.4 |
-| $1,000,000 | $83,333 | $2.92 | 0.3 |
+| `etf_reversal_v1` | 682 | 0.127 | 94% |
+| `ls_xsmom_v1` | 295 | 0.634 | — |
+| `etf_tsmom_v1` | 214 | 0.733 | — |
+| `etf_xsmom_v1` | 183 | 0.570 | 98% |
+| `etf_buyhold_v1` | 12 | 0.957 | — |
 
-A twelfth of a $1,000 book is $83. At $0.0035 a share that is a third of a
-cent of commission, so the $0.35 minimum applies — and it applies whether the
-fund trades at $30 or $600, because 100 shares is the break-even and $83 buys
-nowhere near that at any price in this basket. **Below roughly $360,000 of
-equity, an equal-weighted twelve-fund rebalance pays the floor on every leg.**
+A weekly reversal strategy at $1,000 keeps 13% of its gross return and the
+commission is essentially all of it. A monthly momentum book keeps 73% and
+passes gate 2 comfortably. The control keeps 96%. **The constraint is real and
+it is a constraint on turnover**, which is a design variable, rather than on
+the account, which is not.
 
-That single fact explains the cost column. `etf_reversal_v1` turns the book
-over 682 times and keeps 13% of its gross return. `etf_tsmom_v1` turns it over
-217 times and keeps 46%, failing gate 2's 50% floor. These are not statements
-about the strategies. They are statements about trading a $1,000 account
-through a broker that charges per order.
+That distinction only became visible because gate 2 can now name which cost it
+was — `CostModel.components` splits the drag into commission, spread, impact
+and borrow, and gate 2 reports the culprit when one of them dominates. A
+verdict of "costs eat 87% of gross return" is a dead end; the same sentence
+ending "94% of it the per-order commission" is a direction.
 
-### A prediction of mine, scored wrong twice
+## Finding 2: `etf_tsmom_v1` is the closest this project has come to a pass
 
-`docs/prereg/etf_tsmom_v1.md` originally said a monthly rebalance would cost
-"roughly 5% a year in commissions". Measurement said 0.56%, and I filed a dated
-correction before the run predicting that **gate 3, not gate 2, would be the
-cause of death**.
+It clears gates 0, 1, 2, 4 and 7, and only warns at 3:
 
-It died at gate 2. The correction was wrong in the opposite direction to the
-original — and worse than that, it contradicted the same document's own
-falsification section, which reads *"Gate 2: net/gross below 0.50. Given 42 bps
-a leg this is a live possibility."* The prereg had already named the right
-number and the right gate. The prediction paragraph I then wrote on top of it
-reasoned about commission as a percentage of notional, which is the one thing a
-per-order floor is not, and talked itself out of the answer that was sitting
-four lines above.
+| gate | verdict | |
+|---|---|---|
+| 2 cost survival | **PASS** | 73% of gross survives; Sharpe 0.43 at 2x costs |
+| 3 significance | WARN | HAC *t* = 2.90 against a 3.0 bar |
+| 4 deflation | **PASS** | DSR = 0.982 over 30 trials, haircut Sharpe 0.18 |
+| 5 selection | FAIL | PBO 0.58; SPA *p* = 0.510 vs buy-and-hold |
+| 6 permutation | FAIL | bar permutation *p* = 0.188 |
+| 7 cross-validated OOS | **PASS** | median path Sharpe 0.48 = 72% of in-sample, 9 of 9 positive |
+| 8 robustness | FAIL | alpha *t* = 1.87 against beta 0.47 |
 
-That is worth more than the two wrong predictions. A pre-registration is
-supposed to survive its author's later reasoning, and here it did: the
-falsification criteria were right when the commentary was not, which is exactly
-the asymmetry they exist to create.
+This is a much more informative failure than "costs ate it". The strategy is
+affordable, it survives deflation against its own 30-variant search, and it
+holds up across combinatorial purged CV paths. What kills it is that the
+variants are interchangeable (PBO 0.58 with **0% of selections losing out of
+sample** — arbitrary selection, not overfitting), that a re-optimised bar
+permutation reproduces its Sharpe 19% of the time, and that half of it is beta.
 
-## Finding 2: the control could not have passed, and that is a fact about the test
+Note also gate 4 and gate 5 disagreeing in an interesting way: the deflated
+Sharpe ratio says the best of the search is not what noise would give, while
+SPA says no variant beats holding the basket. Both can be true — the strategy
+is real and it is not better than the benchmark.
 
-`etf_buyhold_v1` — hold the twelve funds equally, rebalance monthly — scores an
-in-sample Sharpe of 0.305 over sixteen years and a HAC *t* of 1.30. Gate 3
-requires *t* ≥ 3.0.
+## Finding 3: still nothing beats buy-and-hold, but less emphatically
 
-For a strategy with a Sharpe of *S*, the *t*-statistic over *n* years is
-approximately *S*·√*n*. To reach 3.0 at a Sharpe of 0.305 takes **97 years** of
-data. There are 33 years of SPY and 16 in this sample. No long-only
-diversified basket can clear gate 3 on any history that exists.
+| family | SPA *p* vs buy-and-hold | was, with inflated costs |
+|---|---|---|
+| `etf_tsmom_v1` | 0.510 | 0.966 |
+| `etf_reversal_v1` | 0.509 | 0.509 |
+| `ls_xsmom_v1` | 0.875 | 0.956 |
+| `etf_xsmom_v1` | 0.942 | 0.942 |
 
-This is not a flaw to be patched by lowering the threshold. It is the battery
-correctly refusing to call market exposure an edge, and gate 8 says so in
-plainer terms: beta 0.98 to the equal-weighted benchmark. The control *is* the
-benchmark. What the trial asked was whether any of these four things is a
-tradable edge, and for the control the answer was never going to be yes —
-holding a diversified basket is a perfectly reasonable thing to do with money
-and is not an edge. The gates are calibrated for the former question.
+Every *p* is still above one half, so the direction of the crypto trial's
+cleanest finding survives across two asset classes and 479 variants. But
+`etf_tsmom_v1` moved from 0.966 to 0.510, which is the difference between
+"emphatically worse than the benchmark" and "indistinguishable from it". The
+strength of that finding was partly an artefact.
 
-Two consequences worth stating rather than leaving implicit:
+## Finding 4: the long-short family was neutral around nothing, exactly as predicted
 
-- **Gate 8 for the control is degenerate.** `alpha t = -17.86 against beta
-  0.98` is buy-and-hold regressed against itself; the large negative alpha is
-  its own trading costs measured against a costless benchmark. It is arithmetic,
-  not evidence, and gate 8 can never say anything else about that family.
-- **Gate 6 for a single variant is uninformative.** `bar permutation p = 1.000`
-  with no re-optimisation means the observed statistic sat at the bottom of its
-  own null — expected for a long-only holder in a world where returns have been
-  shuffled but the drift preserved.
+`ls_xsmom_v1` existed to answer one question — were the gates rejecting bad
+strategies, or rejecting long-only investing? Its pre-registration made three
+numeric predictions and a fourth about costs. All four landed:
 
-## Finding 3: the same cleanest finding as the crypto trial
-
-Gate 5 runs Hansen's SPA against buy-and-hold of the same universe:
-
-| family | SPA p |
+| predicted, before the run | realised |
 |---|---|
-| `etf_tsmom_v1` | 0.966 |
-| `etf_xsmom_v1` | 0.942 |
-| `etf_reversal_v1` | 0.509 |
+| beta to the basket, −0.15 to +0.15 | **+0.03** |
+| alpha *t*, 0.5 to 1.5 | **1.34** |
+| net Sharpe, 0.0 to 0.4 | **0.326** |
+| gate 2 less likely to fail than for the long-only families | **PASS**, 63% survives |
 
-No variant of any family beats simply holding the basket. The crypto trial said
-the same thing with p between 0.83 and 0.91 across 425 variants. Two asset
-classes, two data vendors, two cost models, 479 variants, one answer.
+The construction works and the answer is clean: **the gates were not rejecting
+a category.** A dollar-neutral book faces them on level terms and fails on its
+own merits, at gate 3, with a HAC *t* of 1.46. Gate 7 is the plainest reading —
+median path Sharpe 0.20, 8 of 9 paths positive, but too small to matter. The
+momentum spread in this basket carries a little information and not enough.
 
-Gate 8 adds the mechanism: betas of 0.44, 0.45 and 0.53 to the equal-weighted
-basket, with alpha *t*-statistics of 0.13, 0.44 and −1.62. The two momentum
-families are the market at roughly half exposure, which is what vol-targeting a
-long-only basket produces. Their lower drawdowns are not skill; they are less
-of the same thing.
+Gate 8 now says so correctly: *"the factors explain only 0% of it, so this is
+neutral around nothing rather than market exposure."* It used to say "this is
+the market, not the strategy" at a beta of 0.03 — the same sentence it printed
+at a beta of 0.98.
 
-## What this trial bought
+## What the first version of this document got wrong
 
-Five defects in the engine, all found by the ETF data and all of which would
-have silently distorted an equity result:
+Every family here used a rebalance calendar, and the drift between rebalances
+was computed by the strategy one bar out of phase with the engine consuming it.
+The engine holds the book from bar *t−1* and drifts it by bar *t*'s return; the
+strategy could only drift its own *t−1* target by *t−1*'s return. The
+disagreement was charged as a trade on every bar in between, so **a book
+scheduled to rebalance twelve times a year traded on all 365**.
 
-1. **The panel dropped the traded price.** `close_unadjusted` stopped at the
-   lake boundary, so share counts — and the commission charged on them — were
-   computed from the dividend-adjusted close, a third below the real price for
-   SPY in 2007.
-2. **Bars per year was hardcoded at 365.** An exchange keeps ~252 sessions;
-   annualising by 365 multiplies every Sharpe by 1.20, consistently enough that
-   no gate would catch it.
-3. **`quote_volume_consistent` compared two price spaces**, failing eleven of
-   twelve funds. The one that passed was the only one paying no distribution.
-4. **`calendar_gaps` counted weekends as missing bars** — 3,817 for SPY. A
-   check that fires on every instrument forever is one the reader learns to skip.
-5. **The lake partition was never passed through**, so `--asset etf` read 734
-   crypto pairs, found no SPY, and ran the gates over an empty book.
+The damage:
 
-Defect 1 is the one worth dwelling on, because fixing it changed no number in
-this table. The floor binds at $1,000 regardless of price, so the commission
-was right by accident. I said the cost figures were overstated and would move;
-they did not move at all. At $100,000 they would have.
+| | first version | corrected | |
+|---|---|---|---|
+| `etf_tsmom_v1` Sharpe | 0.342 | 0.678 | 1.98x |
+| `etf_buyhold_v1` Sharpe | 0.305 | 0.664 | 2.18x |
+| `ls_xsmom_v1` Sharpe | 0.152 | 0.326 | 2.14x |
+| `etf_tsmom_v1` stopped at | gate 2 | gate 5 | |
+| `etf_buyhold_v1` stopped at | gate 3 | gate 6 | |
+
+Three things are worth recording about how this was found and how badly the
+first document handled it.
+
+**It was not found by the gates.** Eleven defects in this platform have been
+found by its own runs; this one was found only because a sixth family was being
+designed *around* the cost structure, which meant counting orders per year and
+noticing the engine disagreed with the arithmetic. No gate tests the engine
+against a definition of what holding a book means. There is one now, written as
+an explicit loop that the closed form must match.
+
+**The first document's triage was itself wrong.** When the defect was found I
+withdrew Finding 1 and wrote that Finding 2 — the control cannot clear gate 3 —
+"is arithmetic about a Sharpe of 0.305 over sixteen years and survives". It did
+not survive. The Sharpe was 0.664, the *t* is 2.91 rather than 1.30, and the
+claim built on it (that *no* long-only diversified basket can clear gate 3 on
+any history that exists) is false. Arithmetic is only as good as the number
+going into it, and I checked the arithmetic rather than the number.
+
+**Three of my predictions were scored as wrong when the engine was at fault.**
+The `etf_tsmom_v1` pre-registration predicted gate 3, not gate 2, as the cause
+of death; I scored that wrong twice over and wrote a section about how the
+falsification criteria had been right where my commentary was not. With the
+costs computed correctly the family passes gate 2 and warns at gate 3. The
+original prediction was right. Likewise `ls_xsmom_v1`'s cost prediction, which
+I recorded as the one of four it got wrong.
+
+The lesson is not that the pre-registrations were vindicated. It is that a
+cost figure agreeing with the story I was telling was never once questioned,
+across three separate write-ups, while the predictions that disagreed with it
+were repeatedly marked wrong. Pre-registration protects against choosing a
+hypothesis after the fact. It does nothing about believing a measurement
+because it is convenient.
 
 ## The decision
 
-**Do not trade any of these four.** Nothing reached the holdout, which remains
-unopened for all four families.
+**Do not trade any of these five.** The holdout was opened once, by the first
+ETF run, and these corrected numbers are a re-score of the same in-sample
+period rather than new evidence — the 2023-onward record for these families is
+spent and cannot be used to rescue them.
 
-The rule from 11 September covered one branch — all crypto families fail, run
-the ETF trial — and that branch is now also exhausted. What it did not
-anticipate is that the control would fail too, which makes "run the next asset
-class" a weaker move than it looks: the battery has now twice concluded that
-the thing to beat is buy-and-hold, and twice been unable to certify buy-and-hold
-itself, because holding the market is not an edge and the gates test for edges.
-
-Three honest options, in the order I would take them:
-
-1. **Change the question, not the threshold.** Ask what beats the basket
-   *risk-adjusted after costs at $1,000*, and make buy-and-hold the benchmark
-   in the strategy definition rather than a family competing under the same
-   gates. This is a change to `docs/PLAN.md`, not to a number in
-   `GateThresholds`.
-2. **Raise the account before raising expectations.** Every cost figure here is
-   a function of $1,000. At $100,000 the floor stops binding and the cost column
-   changes by two orders of magnitude. The trial cannot distinguish "no edge"
-   from "no edge at this account size" for the two momentum families, and it
-   should say so rather than pretend otherwise.
-3. **Test a family whose claim is not market exposure.** Everything run so far
-   has been long-only, and long-only in a rising market is beta. A
-   market-neutral or cross-sectional-with-shorts family would at least be
-   asking gate 8 a question it can answer.
-
-What the trial bought, again, is a no that cost nothing. Two asset classes have
-now been searched, 479 variants deep, and the platform has declined every one
-of them while finding eleven defects in itself. An engine that had said yes to
-`etf_tsmom_v1` — Sharpe 0.342, half of it beta, 54% of the gross eaten by a
-$0.35 minimum — would have been worth less than nothing.
+`etf_tsmom_v1` is worth one more thought before it is closed out. A Sharpe of
+0.678 that survives cost, deflation and purged cross-validation, and dies on
+selection arbitrariness and beta, is the profile of a real but unremarkable
+trend-following premium — which is what the literature says multi-asset time
+series momentum is. It is not an edge over holding the basket. Whether it is
+worth trading anyway, for the drawdown profile rather than the return, is a
+portfolio-construction question this battery is not designed to answer and
+should not be bent into answering.

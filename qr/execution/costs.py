@@ -379,22 +379,59 @@ class CostModel:
         per-share schedule ignores `prices` entirely, so the crypto path is
         untouched.
         """
-        borrow = self.borrow_cost(short_exposure, periods_per_year)
-        linear = turnover.sum(axis=1) * self.linear_bps * BPS
+        return self.components(
+            turnover, equity, adv_notional, volatility, prices, short_exposure, periods_per_year
+        ).sum(axis=1).rename("cost")
+
+    def components(
+        self,
+        turnover: pd.DataFrame,
+        equity: pd.Series | float | None = None,
+        adv_notional: pd.DataFrame | None = None,
+        volatility: pd.DataFrame | None = None,
+        prices: pd.DataFrame | None = None,
+        short_exposure: pd.Series | None = None,
+        periods_per_year: float = 365.0,
+    ) -> pd.DataFrame:
+        """The same drag, split into the four things it is made of.
+
+        `charge` is this, summed. Gate 2 can say "costs eat 62% of gross return"
+        and nothing more, which stopped being a sufficient answer the moment
+        there was more than one kind of cost: a per-order commission floor, a
+        spread and a borrow fee fail for different reasons and have different
+        remedies — a bigger account, a more liquid instrument, and a cheaper
+        short respectively. Naming the dominant one turns a verdict into a
+        direction.
+        """
+        index = turnover.index
+        zero = pd.Series(0.0, index=index)
+        traded = turnover.sum(axis=1)
         if self.per_share_usd > 0 and prices is not None and equity is not None:
-            spread = turnover.sum(axis=1) * self.multiplier * self.half_spread_bps * BPS
-            fees = self.commission_bps(turnover, equity, prices)
-            linear = (turnover * fees).sum(axis=1) * BPS + spread
-        if adv_notional is None or volatility is None or equity is None:
-            return (linear + borrow.reindex(linear.index).fillna(0.0)).rename("cost")
-        eq = pd.Series(equity, index=turnover.index) if np.isscalar(equity) else equity.reindex(turnover.index)
-        traded_notional = turnover.mul(eq, axis=0)
-        adv = adv_notional.reindex_like(turnover)
-        vol = volatility.reindex_like(turnover)
-        imp_bps = self.impact_bps(traded_notional, adv, vol)
-        impact = pd.DataFrame(imp_bps, index=turnover.index, columns=turnover.columns)
-        impact = (turnover * impact).sum(axis=1) * BPS
-        return (linear + impact + borrow.reindex(linear.index).fillna(0.0)).rename("cost")
+            spread = traded * self.multiplier * self.half_spread_bps * BPS
+            commission = (turnover * self.commission_bps(turnover, equity, prices)).sum(axis=1) * BPS
+        else:
+            # A proportional venue: `linear_bps` is the fee and the half-spread
+            # together, and they are separable here only because both are rates.
+            fee_bps = self.multiplier * self.fee_bps
+            spread_bps = 0.0 if self.use_maker else self.multiplier * self.half_spread_bps
+            commission = traded * fee_bps * BPS
+            spread = traded * spread_bps * BPS
+
+        impact = zero.copy()
+        if adv_notional is not None and volatility is not None and equity is not None:
+            eq = pd.Series(equity, index=index) if np.isscalar(equity) else equity.reindex(index)
+            traded_notional = turnover.mul(eq, axis=0)
+            imp_bps = self.impact_bps(
+                traded_notional, adv_notional.reindex_like(turnover), volatility.reindex_like(turnover)
+            )
+            frame = pd.DataFrame(imp_bps, index=index, columns=turnover.columns)
+            impact = (turnover * frame).sum(axis=1) * BPS
+
+        borrow = self.borrow_cost(short_exposure, periods_per_year).reindex(index).fillna(0.0)
+        return pd.DataFrame(
+            {"commission": commission, "spread": spread, "impact": impact, "borrow": borrow},
+            index=index,
+        )
 
     def borrow_cost(
         self, short_exposure: pd.Series | None, periods_per_year: float = 365.0

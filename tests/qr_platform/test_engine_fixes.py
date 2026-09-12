@@ -670,3 +670,55 @@ def test_the_crosscheck_reports_a_scale_relative_error_too(panel, costs):
     # On a healthy curve the two measures agree closely; they diverge only when
     # the denominator of the pointwise one is collapsing.
     assert comparison.scale_relative_error <= max(comparison.max_relative_error, 1e-9) * 10
+
+
+# --------------------------------------- gate 8 told two failures apart at last
+
+
+def _decomposition_reading(net, panel):
+    """The sentence gate 8 would print for this return series."""
+    from qr.validate.factors import decompose, factor_table
+    from qr.validate.gates import GateThresholds
+
+    d = decompose(net, factor_table(panel), panel.periods_per_year)
+    thresholds = GateThresholds()
+    explained = d.r_squared
+    return (
+        "market"
+        if np.isfinite(explained) and explained >= thresholds.min_factor_r2
+        else "neutral"
+    ), d
+
+
+def test_a_book_with_no_market_exposure_is_not_called_the_market():
+    """`ls_xsmom_v1` failed gate 8 with beta -0.06 and was told it was the market.
+
+    A dollar-neutral book cannot be market exposure, and the same sentence had
+    just been printed against a beta of 0.98. A verdict that fires either way
+    says nothing — which went unnoticed for as long as every family tested was
+    long-only.
+    """
+    from qr.validate.selftest import noise_world
+
+    panel = noise_world(n_symbols=6, years=6, seed=11)
+    market = panel.returns().mean(axis=1)
+
+    rng = np.random.default_rng(0)
+    unrelated = pd.Series(
+        rng.normal(0.0, float(market.std()), len(market)), index=market.index, name="net"
+    )
+    reading, d = _decomposition_reading(unrelated, panel)
+    assert reading == "neutral"
+    assert abs(d.betas.get(d.dominant_factor, 0.0)) < 0.25
+
+    beta_book = (market * 0.95).rename("net")
+    reading, d = _decomposition_reading(beta_book, panel)
+    assert reading == "market"
+    assert d.r_squared > 0.25
+
+
+def test_the_two_readings_are_decided_by_what_the_factors_explain():
+    """R-squared, not a beta threshold: the question is how much is accounted for."""
+    from qr.validate.gates import GateThresholds
+
+    assert GateThresholds().min_factor_r2 == 0.25

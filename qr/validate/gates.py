@@ -99,6 +99,10 @@ class GateThresholds:
     min_share_positive: float = 0.90
     min_wfe: float = 0.50
     # gate 8
+    #: How much of the net return the factor set must explain before a low
+    #: alpha can be called market exposure. Below this the factors account for
+    #: nothing and the honest reading is that there is no return to explain.
+    min_factor_r2: float = 0.25
     min_neighbour_retention: float = 0.70
     max_free_params: int = 5
     min_round_trips: int = 50
@@ -367,6 +371,41 @@ def gate_1_data_integrity(ctx: GateContext) -> GateResult:
     return GateResult(1, "data integrity", verdict, "; ".join(detail_parts) or "clean", stats)
 
 
+def _cost_attribution(result) -> dict[str, float]:
+    """Each cost's share of the total drag over the whole run."""
+    parts = getattr(result, "cost_parts", None)
+    if parts is None or parts.empty:
+        return {}
+    totals = parts.sum()
+    grand = float(totals.sum())
+    if not np.isfinite(grand) or grand <= 0:
+        return {}
+    return {name: float(value) / grand for name, value in totals.items()}
+
+
+def _dominant_cost(attribution: dict[str, float]) -> str:
+    """Which of the four it mostly was, when one of them clearly dominates.
+
+    A verdict of "costs eat 62% of gross return" is a dead end; the same
+    sentence with "almost all of it the per-order commission" is a direction,
+    and it is a different direction from "almost all of it borrow". Silent
+    unless one component is most of the bill, because naming a 40/35/25 split
+    would be picking a winner out of noise.
+    """
+    if not attribution:
+        return ""
+    name, share = max(attribution.items(), key=lambda kv: kv[1])
+    if share < 0.6:
+        return ""
+    wording = {
+        "commission": "the per-order commission",
+        "spread": "the spread",
+        "impact": "market impact",
+        "borrow": "the borrow fee on the short leg",
+    }.get(name, name)
+    return f" — {share:.0%} of it {wording}"
+
+
 def gate_2_cost_survival(ctx: GateContext) -> GateResult:
     """Does the edge survive its own costs, and twice them?"""
     result = ctx.result
@@ -380,8 +419,10 @@ def gate_2_cost_survival(ctx: GateContext) -> GateResult:
     )
     stressed_sharpe = stressed.sharpe()
     capacity = _capacity(ctx)
+    attribution = _cost_attribution(result)
     stats = {
         **capacity,
+        **{f"cost_share_{k}": v for k, v in attribution.items()},
         "gross_sharpe": result.sharpe(gross=True),
         "net_sharpe": result.sharpe(),
         "net_over_gross": ratio,
@@ -392,12 +433,21 @@ def gate_2_cost_survival(ctx: GateContext) -> GateResult:
     }
     if not np.isfinite(ratio):
         return GateResult(2, "cost survival", FAIL, "gross return is not positive; there is nothing to survive", stats)
+    blame = _dominant_cost(attribution)
     if ratio < ctx.thresholds.fail_net_over_gross:
-        return GateResult(2, "cost survival", FAIL, f"costs eat {1 - ratio:.0%} of gross return", stats)
+        return GateResult(
+            2, "cost survival", FAIL, f"costs eat {1 - ratio:.0%} of gross return{blame}", stats
+        )
     if stressed_sharpe <= 0:
         return GateResult(2, "cost survival", FAIL, f"negative at {ctx.thresholds.cost_stress:g}x costs", stats)
     if ratio < ctx.thresholds.min_net_over_gross:
-        return GateResult(2, "cost survival", WARN, f"only {ratio:.0%} of gross return survives costs", stats)
+        return GateResult(
+            2,
+            "cost survival",
+            WARN,
+            f"only {ratio:.0%} of gross return survives costs{blame}",
+            stats,
+        )
     detail = f"{ratio:.0%} of gross survives; Sharpe {stressed_sharpe:.2f} at {ctx.thresholds.cost_stress:g}x costs"
     ceiling = capacity.get("capacity_usd")
     if ceiling and np.isfinite(ceiling):
@@ -823,10 +873,29 @@ def gate_8_robustness(ctx: GateContext) -> GateResult:
         decomposition = decompose(net, factor_table(ctx.panel), ctx.periods_per_year)
         stats.update(decomposition.summary())
         if decomposition.verdict() == FAIL:
+            # Two different failures wear the same alpha t-statistic, and until
+            # the first dollar-neutral family ran they were never told apart:
+            # "this is the market, not the strategy" was printed against a beta
+            # of 0.98 and against a beta of -0.06 alike. The second is a false
+            # statement — a book with no market exposure cannot be the market —
+            # and a sentence that fires either way carries no information.
+            #
+            # R-squared decides it rather than a beta threshold, because the
+            # question is how much of the return the factors account for, and
+            # that is what R-squared measures. Below a quarter, they do not
+            # account for it: there is no alpha, and no beta to blame either.
+            beta = decomposition.betas.get(decomposition.dominant_factor, float("nan"))
+            explained = decomposition.r_squared
+            if np.isfinite(explained) and explained >= ctx.thresholds.min_factor_r2:
+                reading = "this is the market, not the strategy"
+            else:
+                reading = (
+                    f"the factors explain only {max(explained, 0.0):.0%} of it, so this is "
+                    f"neutral around nothing rather than market exposure"
+                )
             problems.append(
                 f"alpha t = {decomposition.alpha_tstat:.2f} against "
-                f"beta {decomposition.betas.get(decomposition.dominant_factor, float('nan')):.2f} "
-                f"to {decomposition.dominant_factor}: this is the market, not the strategy"
+                f"beta {beta:.2f} to {decomposition.dominant_factor}: {reading}"
             )
         elif decomposition.verdict() == WARN:
             warnings.append(f"alpha t = {decomposition.alpha_tstat:.2f}")

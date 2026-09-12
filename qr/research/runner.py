@@ -40,6 +40,11 @@ class BacktestResult:
     weights: pd.DataFrame
     held: pd.DataFrame
     periods_per_year: float
+    #: The same drag split into commission / spread / impact / borrow, summing
+    #: to `costs`. A gate that can only say "costs ate 62%" cannot say what to
+    #: do about it; these four have four different remedies — a bigger account,
+    #: a more liquid instrument, a smaller order and a cheaper short.
+    cost_parts: pd.DataFrame | None = None
     meta: dict[str, Any] = field(default_factory=dict)
 
     # -- curves ------------------------------------------------------------
@@ -189,7 +194,7 @@ def run_backtest(
     # what is traded, so it is the one cost that a book standing perfectly
     # still still pays.
     short_exposure = held.clip(upper=0.0).abs().sum(axis=1)
-    cost = costs.charge(
+    parts = costs.components(
         turnover_matrix,
         equity=equity if needs_equity else None,
         adv_notional=adv,
@@ -198,6 +203,7 @@ def run_backtest(
         short_exposure=short_exposure,
         periods_per_year=panel.periods_per_year,
     )
+    cost = parts.sum(axis=1).rename("cost")
     net = (gross - cost).rename("net")
 
     return BacktestResult(
@@ -205,6 +211,7 @@ def run_backtest(
         gross=gross,
         net=net,
         costs=cost,
+        cost_parts=parts,
         turnover=turnover,
         weights=targets,
         held=held,

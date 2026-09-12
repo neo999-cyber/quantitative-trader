@@ -353,6 +353,29 @@ def test_qa_runs_even_when_no_caller_passes_raw_frames(panel, costs):
 
 
 def test_a_broken_symbol_the_strategy_holds_fails_the_gate(panel, costs):
+    """A defect on a bar the panel *did* serve still blocks.
+
+    The corruption has to be one `Panel.tradable()` does not catch, or the
+    strategy never saw the bar and gate 1 has nothing to object to — see
+    `test_engine_fixes.py` and `docs/07_ENGINE_FIXES.md` §1. A
+    `taker_buy_base` above the bar's own volume means the columns are
+    misaligned, which tradability does not look at and which poisons every bar
+    of the symbol rather than one.
+    """
+    from qr.data.panel import Panel
+
+    fields = {k: v.copy() for k, v in panel.fields.items()}
+    fields["taker_buy_base"] = fields["volume"] * 2.0
+    broken = Panel(fields, panel.interval)
+
+    result = gate_1_data_integrity(context(broken, TSMOM(lookback=60), costs))
+    assert result.verdict == FAIL
+    assert "which this strategy holds" in result.detail
+    assert result.stats["qa_failures_traded"] >= 1
+
+
+def test_an_impossible_bar_the_panel_withheld_does_not_fail_the_gate(panel, costs):
+    """The defect that stopped all four trial families at gate 1."""
     from qr.data.panel import Panel
 
     fields = {k: v.copy() for k, v in panel.fields.items()}
@@ -360,9 +383,9 @@ def test_a_broken_symbol_the_strategy_holds_fails_the_gate(panel, costs):
     broken = Panel(fields, panel.interval)
 
     result = gate_1_data_integrity(context(broken, TSMOM(lookback=60), costs))
-    assert result.verdict == FAIL
-    assert "which this strategy holds" in result.detail
-    assert result.stats["qa_failures_traded"] >= 1
+    assert result.verdict != FAIL
+    assert result.stats["qa_failures_on_raw_bars"] >= 1
+    assert result.stats["qa_failures_traded"] == 0
 
 
 def test_a_broken_symbol_the_strategy_never_holds_does_not_block(panel, costs):

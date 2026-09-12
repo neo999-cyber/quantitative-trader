@@ -140,6 +140,7 @@ def run_family(
     holdout_universe: pd.DataFrame | None = None,
     thresholds: GateThresholds | None = None,
     permutations: int = 200,
+    vol_preserving_permutations: int | None = None,
     upto: int = 9,
     stop_on_fail: bool = True,
 ) -> FamilyRun:
@@ -174,6 +175,7 @@ def run_family(
         holdout_universe=holdout_universe,
         thresholds=thresholds or GateThresholds(),
         permutations=permutations,
+        vol_preserving_permutations=vol_preserving_permutations,
     )
     return FamilyRun(spec, sweep, run_gates(context, upto=upto, stop_on_fail=stop_on_fail), best)
 

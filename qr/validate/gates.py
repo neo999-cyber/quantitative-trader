@@ -139,6 +139,10 @@ class GateContext:
     spa_reps: int = 1000
     #: How many variants gate 6 re-optimises over on each permuted dataset.
     reoptimise_variants: int = 25
+    #: Permutations for gate 6's second, volatility-preserving null. `None`
+    #: means "the same as `permutations`"; 0 skips it, which halves gate 6's
+    #: cost at the price of the diagnostic.
+    vol_preserving_permutations: int | None = None
     seed: int = 0
 
     @property
@@ -239,9 +243,19 @@ def gate_1_data_integrity(ctx: GateContext) -> GateResult:
     # failing a top-30 book because a delisted microcap it never touched had a
     # negative volume in 2022 would make gate 1 noise; noise gets ignored.
     # The universe-wide audit is `qr data qa`, which is a separate job.
+    #
+    # It is also scored only over the bars the strategy was allowed to read.
+    # `Panel.tradable()` already withholds bars whose values cannot be true, so
+    # failing the strategy for those is the platform objecting to data it had
+    # itself refused to serve. The first real four-family run stopped all four
+    # here for exactly that reason, on AUDUSDT and BTTUSDT, over six bars
+    # nothing had traded. The raw count survives as `qa_failures_on_raw_bars`:
+    # the corruption does not vanish, it stops being the strategy's fault.
     frames = ctx.raw_frames if ctx.raw_frames is not None else _panel_frames(ctx)
     if frames:
-        reports = [check_klines(f, s, ctx.panel.interval) for s, f in sorted(frames.items())]
+        excluded = _excluded_bars(ctx)
+        raw = [check_klines(f, s, ctx.panel.interval) for s, f in sorted(frames.items())]
+        reports = [r.excluding(excluded.get(r.symbol, pd.DatetimeIndex([], tz="UTC"))) for r in raw]
         failed = {r.symbol for r in reports if r.verdict == FAIL}
         warned = {r.symbol for r in reports if r.verdict == WARN}
         traded = _traded_symbols(ctx)
@@ -251,6 +265,8 @@ def gate_1_data_integrity(ctx: GateContext) -> GateResult:
         stats["qa_warnings"] = len(warned)
         stats["qa_failures_traded"] = len(blocking)
         stats["qa_failed_symbols"] = sorted(failed)[:20]
+        stats["qa_failures_on_raw_bars"] = len({r.symbol for r in raw if r.verdict == FAIL})
+        stats["qa_bars_excluded"] = int(sum(len(v) for v in excluded.values()))
 
         if blocking:
             return GateResult(
@@ -554,6 +570,27 @@ def gate_6_permutation(ctx: GateContext) -> GateResult:
     **stronger** than no re-optimisation, so the p-value it produces is
     optimistic relative to a complete Masters test and conservative relative to
     the naive one.
+
+    **Two nulls, one verdict.** Masters' permutation destroys volatility
+    clustering along with the time ordering, and a vol-targeted strategy earns
+    a Sharpe premium from clustering with no directional skill whatever. The
+    observed statistic contains that premium; the null has been stripped of it.
+    So for these families gate 6's number is "no timing edge" and "vol
+    targeting behaves differently without clustering" added together. A second
+    null keeps each bar's volatility in place and permutes only the
+    standardised residual, which separates them.
+
+    On six synthetic worlds with clustering and no timing edge the two nulls
+    disagree by about 0.2 in p, **in neither direction consistently** — three
+    seeds each way. That is not a bias to correct for; it is a sensitivity
+    wider than the gap between this gate's own pass band (0.05) and fail band
+    (0.10), which is worth knowing about a verdict.
+
+    The **plain Masters null remains the binding one**, deliberately. It is
+    what the pre-registrations name, and swapping a decision rule for a kinder
+    one after seeing the answer is the exact move pre-registration exists to
+    stop, however good the reasoning. The second null is reported as evidence
+    and is there to be pre-registered by whatever runs next.
     """
     from qr.strategies.library import RandomEntry
 
@@ -590,6 +627,7 @@ def gate_6_permutation(ctx: GateContext) -> GateResult:
     stats["reoptimised_over"] = float(len(grid))
     stats["grid_size"] = float(len(ctx.sweep)) if ctx.sweep is not None else 1.0
 
+    # Binding verdict: the pre-registered nulls only.
     verdicts = {
         r.verdict(ctx.thresholds.max_permutation_p, ctx.thresholds.fail_permutation_p)
         for r in suite.results
@@ -604,6 +642,25 @@ def gate_6_permutation(ctx: GateContext) -> GateResult:
         f"bar permutation p = {permutation.p_value:.3f} ({permutation.percentile:.0f}th percentile, "
         f"{reopt}); random entry p = {random_entry.p_value:.3f}"
     )
+
+    n_vol = ctx.permutations if ctx.vol_preserving_permutations is None else ctx.vol_preserving_permutations
+    if n_vol:
+        vol_null = bar_permutation_test(
+            ctx.panel,
+            best_over_grid,
+            observed,
+            n_permutations=n_vol,
+            seed=ctx.seed + 100_000,
+            preserve_volatility=True,
+        )
+        stats.update({f"{vol_null.name}_{k}": v for k, v in vol_null.summary().items()})
+        stats["vol_preserved_verdict"] = vol_null.verdict(
+            ctx.thresholds.max_permutation_p, ctx.thresholds.fail_permutation_p
+        )
+        detail += (
+            f"; volatility-preserving null p = {vol_null.p_value:.3f} "
+            f"({vol_null.percentile:.0f}th percentile, reported, not binding)"
+        )
     return GateResult(6, "permutation", verdict, detail, stats)
 
 
@@ -616,7 +673,13 @@ def gate_7_cross_validation(ctx: GateContext) -> GateResult:
     )
     walk = walk_forward_efficiency(matrix, ctx.periods_per_year, n_windows=6, purge=purge)
     wfe = walk.attrs.get("wfe", float("nan"))
-    stats = {**result.summary(), "walk_forward_efficiency": wfe, "purge_bars": float(purge)}
+    stats = {
+        **result.summary(),
+        "walk_forward_efficiency": wfe,
+        "walk_forward_efficiency_pooled": walk.attrs.get("wfe_pooled", float("nan")),
+        "walk_forward_windows": float(walk.attrs.get("wfe_windows", 0)),
+        "purge_bars": float(purge),
+    }
 
     verdict = result.verdict(ctx.thresholds.min_path_ratio, ctx.thresholds.min_share_positive)
     if verdict == PASS and np.isfinite(wfe) and wfe < ctx.thresholds.min_wfe:
@@ -808,6 +871,23 @@ def _panel_frames(ctx: GateContext) -> dict[str, pd.DataFrame]:
     return frames
 
 
+def _excluded_bars(ctx: GateContext) -> dict[str, pd.DatetimeIndex]:
+    """Per symbol, the bars the panel refused to make tradable.
+
+    Only bars the symbol actually has: a NaN pad outside a pair's listing
+    window is untradable too, but it is not a bar and `_panel_frames` has
+    already trimmed it away.
+    """
+    tradable = ctx.panel.tradable()
+    present = ctx.panel.close.notna()
+    blocked = present & ~tradable
+    return {
+        str(symbol): pd.DatetimeIndex(blocked.index[blocked[symbol].to_numpy()])
+        for symbol in blocked.columns
+        if bool(blocked[symbol].any())
+    }
+
+
 def _capacity(ctx: GateContext, give_up_fraction: float = 0.10) -> dict[str, float]:
     """Roughly how much money this strategy can take before impact bites.
 
@@ -816,10 +896,25 @@ def _capacity(ctx: GateContext, give_up_fraction: float = 0.10) -> dict[str, flo
     This walks the equity up until impact has eaten `give_up_fraction` of gross
     return and reports where that happens.
 
-    It is an order-of-magnitude figure, not a limit: it uses median quote
-    volume as ADV and assumes the whole order goes at once. At the sizes this
-    account trades the answer will usually be "far more than you have", and the
-    number matters mainly as a check that it is not "less".
+    **Read the number as one significant figure and as a statement about the
+    cost model, not about Binance.** It inherits `impact_coef`, which is 1.0
+    because that is the round number the literature clusters around, not
+    because anything here was calibrated against fills — this account has never
+    sent an order. Two strategies' capacities are comparable to each other, and
+    the direction of the ordering is informative; the absolute level carries
+    the coefficient's uncertainty, which is at least a factor of two either way.
+
+    The first trial run made the case for saying so out loud: it reported
+    $10,000 for a top-30 book against pairs trading nine figures a day, because
+    the √-law was being extrapolated a thousandfold below the participations it
+    is fitted over and was charging basis points of "impact" for orders smaller
+    than the spread. `CostModel.net_impact_against_spread` fixes that
+    double-count. It does not fix the coefficient, so the answer is reported
+    with the band that halving and doubling it produces — which is the honest
+    width — and with `capacity_extrapolated`, which says whether the book is
+    even operating inside the range the √-law was fitted over. At this
+    account's size it will not be, and the right reading of the whole figure is
+    then "impact is not the binding constraint", not a dollar amount.
     """
     from qr.research.runner import volume_adv
 
@@ -829,20 +924,63 @@ def _capacity(ctx: GateContext, give_up_fraction: float = 0.10) -> dict[str, flo
         return {}
     turnover = (ctx.result.held - ctx.result.held.shift(1)).abs().fillna(0.0)
     volatility = ctx.panel.returns().rolling(30, min_periods=5).std()
+    adv_aligned = adv.reindex_like(turnover)
+    vol_aligned = volatility.reindex_like(turnover)
+
+    def annual_drag(equity: float) -> float:
+        impact = ctx.costs.impact_bps(turnover * equity, adv_aligned, vol_aligned)
+        drag = (turnover * pd.DataFrame(impact, index=turnover.index, columns=turnover.columns)).sum(axis=1)
+        return float(drag.mean() * ctx.periods_per_year * 1e-4)
 
     budget = give_up_fraction * gross_annual
+    ladder = (1e3, 1e4, 3e4, 1e5, 3e5, 1e6, 3e6, 1e7, 3e7, 1e8, 3e8, 1e9)
     # 0.0 means "below the smallest size probed", which is a real answer for a
     # strategy trading illiquid names. Returning NaN there reads as "unknown"
     # and would let a capacity problem pass as a missing measurement.
-    previous = 0.0
-    for equity in (1e3, 1e4, 3e4, 1e5, 3e5, 1e6, 3e6, 1e7, 3e7, 1e8):
-        impact = ctx.costs.impact_bps(turnover * equity, adv.reindex_like(turnover), volatility.reindex_like(turnover))
-        drag = (turnover * pd.DataFrame(impact, index=turnover.index, columns=turnover.columns)).sum(axis=1)
-        annual_drag = float(drag.mean() * ctx.periods_per_year * 1e-4)
-        if annual_drag > budget:
-            return {"capacity_usd": previous, "gross_annual_return": gross_annual}
-        previous = equity
-    return {"capacity_usd": previous, "gross_annual_return": gross_annual}
+    capacity = 0.0
+    drags: dict[str, float] = {}
+    for equity in ladder:
+        drag = annual_drag(equity)
+        drags[f"impact_drag_at_{equity:.0e}"] = drag
+        if drag > budget:
+            break
+        capacity = equity
+
+    # The same walk under a coefficient twice and half the assumed one. The
+    # band is wide on purpose: it is the width of what is actually known.
+    def capacity_at(coef: float) -> float:
+        model = replace(ctx.costs, impact_coef=coef)
+        found = 0.0
+        for equity in ladder:
+            impact = model.impact_bps(turnover * equity, adv_aligned, vol_aligned)
+            frame = pd.DataFrame(impact, index=turnover.index, columns=turnover.columns)
+            if float((turnover * frame).sum(axis=1).mean() * ctx.periods_per_year * 1e-4) > budget:
+                break
+            found = equity
+        return found
+
+    # The median participation the book runs at the capacity figure, which is
+    # the one number that says whether the impact model is being used inside
+    # its calibration range or extrapolated below it.
+    traded = turnover * max(capacity, ladder[0])
+    with np.errstate(divide="ignore", invalid="ignore"):
+        participation = (traded / adv_aligned).where(turnover > 0)
+    values = participation.to_numpy(dtype=float).ravel()
+    values = values[np.isfinite(values) & (values > 0)]
+    median_participation = float(np.median(values)) if len(values) else float("nan")
+    return {
+        "capacity_usd": capacity,
+        "capacity_usd_pessimistic": capacity_at(ctx.costs.impact_coef * 2.0),
+        "capacity_usd_optimistic": capacity_at(ctx.costs.impact_coef * 0.5),
+        "gross_annual_return": gross_annual,
+        "impact_budget_annual": budget,
+        "impact_coef": float(ctx.costs.impact_coef),
+        "median_participation_at_capacity": median_participation,
+        # True means the book never reaches the participations the square-root
+        # law was fitted over, so the capacity figure is an extrapolation.
+        "capacity_extrapolated": bool(np.isfinite(median_participation) and median_participation < 1e-3),
+        **drags,
+    }
 
 
 def _shuffled_ticker(ctx: GateContext, n_permutations: int = 100):

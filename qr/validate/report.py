@@ -216,6 +216,12 @@ def _headline_table(report: GateReport, tear_sheet: dict[str, float] | None) -> 
         ("Median CPCV path Sharpe (gate 7)", by_gate.get(7, {}).get("median_path_sharpe")),
         ("Probability of backtest overfitting (gate 5)", by_gate.get(5, {}).get("pbo")),
         ("Bar-permutation p (gate 6)", by_gate.get(6, {}).get("bar_permutation_p_value")),
+        # Reported, not binding: the plain null is what the pre-registrations
+        # name. See `docs/07_ENGINE_FIXES.md` §3.
+        (
+            "…with volatility preserved (reported, not binding)",
+            by_gate.get(6, {}).get("bar_permutation_vol_preserved_p_value"),
+        ),
         ("HAC t-statistic (gate 3)", by_gate.get(3, {}).get("hac_tstat")),
         ("Probabilistic Sharpe (gate 3)", by_gate.get(3, {}).get("psr")),
         ("Net / gross return (gate 2)", by_gate.get(2, {}).get("net_over_gross")),

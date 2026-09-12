@@ -216,6 +216,22 @@ def walk_forward_efficiency(
     would actually have been run. Walk-forward efficiency is the out-of-sample
     annualised return as a fraction of the in-sample one; below about 50% the
     parameters are fitted to the training window rather than to the market.
+
+    It is reported as the **median of the per-window ratios**, not as the ratio
+    of the pooled means, because the pooled form has a denominator that can
+    pass through zero. The trial's first real run produced a WFE of 13.62 for
+    the reversal family, which reads as a strategy that does thirteen times
+    better out of sample than in — nonsense, and caused by in-sample returns
+    that very nearly cancelled across windows. A near-zero denominator turns a
+    ratio into a random number of arbitrary magnitude and sign; taking the
+    median over windows, each with its own denominator, cannot do that unless
+    most windows are degenerate. The pooled figure is still reported as
+    `wfe_pooled` so the two can be compared.
+
+    Windows whose in-sample return is not positive are dropped from the median
+    rather than counted as zero: "how much of the edge survived" is not a
+    question about a window that had no edge to begin with, and `wfe_windows`
+    records how many were left.
     """
     frame = variant_returns.dropna(axis=1, how="all")
     values = np.nan_to_num(frame.to_numpy(dtype=float), nan=0.0)
@@ -245,7 +261,16 @@ def walk_forward_efficiency(
     out = pd.DataFrame(rows)
     if out.empty:
         out.attrs["wfe"] = float("nan")
+        out.attrs["wfe_pooled"] = float("nan")
+        out.attrs["wfe_windows"] = 0
         return out
+    usable = out[out["is_ann_return"] > 0]
+    ratios = (usable["oos_ann_return"] / usable["is_ann_return"]) if not usable.empty else pd.Series(dtype=float)
+    out["wfe_window"] = np.where(
+        out["is_ann_return"] > 0, out["oos_ann_return"] / out["is_ann_return"], np.nan
+    )
     is_total, oos_total = out["is_ann_return"].mean(), out["oos_ann_return"].mean()
-    out.attrs["wfe"] = float(oos_total / is_total) if is_total > 0 else float("nan")
+    out.attrs["wfe"] = float(ratios.median()) if len(ratios) else float("nan")
+    out.attrs["wfe_pooled"] = float(oos_total / is_total) if is_total > 0 else float("nan")
+    out.attrs["wfe_windows"] = int(len(ratios))
     return out

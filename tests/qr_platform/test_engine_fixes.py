@@ -1,0 +1,407 @@
+"""The four engine defects the first real four-family run exposed.
+
+None of them changed that run's verdict — all four families failed gates 3, 4,
+5 and 9 independently — but each of them made a number in the report mean
+something other than what it said, and a platform whose whole claim is that it
+reports honestly cannot carry those.
+"""
+from dataclasses import replace
+
+import numpy as np
+import pandas as pd
+import pytest
+
+from qr.data.panel import Panel
+from qr.data.qa import check_klines
+from qr.execution.costs import CostModel
+from qr.research.runner import run_backtest
+from qr.strategies.library import TSMOM
+from qr.validate.cpcv import walk_forward_efficiency
+from qr.validate.gates import (
+    FAIL,
+    PASS,
+    GateContext,
+    _capacity,
+    _excluded_bars,
+    gate_1_data_integrity,
+)
+from qr.validate.permutation import permute_panel
+from qr.validate.selftest import edge_world
+
+
+@pytest.fixture(scope="module")
+def panel():
+    return edge_world(n_symbols=6, years=4, seed=2)
+
+
+@pytest.fixture()
+def costs():
+    return CostModel.trial()
+
+
+def context(panel, strategy, costs, **kwargs):
+    return GateContext(
+        hypothesis_id="h",
+        panel=panel,
+        strategy=strategy,
+        costs=costs,
+        result=run_backtest(panel, strategy, costs),
+        permutations=kwargs.pop("permutations", 5),
+        **kwargs,
+    )
+
+
+def corrupt(panel: Panel, symbol: str, when) -> Panel:
+    """Reproduce the AUDUSDT defect: one bar whose high sits below its close."""
+    fields = {k: v.copy() for k, v in panel.fields.items()}
+    fields["high"].loc[when, symbol] = fields["close"].loc[when, symbol] * 0.98
+    return Panel(fields, panel.interval)
+
+
+# ------------------------------------------------------- 1. gate 1 vs tradability
+
+
+def test_qa_check_can_be_rescored_over_the_bars_that_were_allowed_through():
+    index = pd.date_range("2020-01-01", periods=200, freq="D", tz="UTC")
+    price = pd.Series(np.linspace(100, 120, 200), index=index)
+    frame = pd.DataFrame(
+        {
+            "open": price,
+            "high": price * 1.01,
+            "low": price * 0.99,
+            "close": price,
+            "volume": 1_000.0,
+            "quote_volume": price * 1_000.0,
+        }
+    )
+    frame.loc[index[50], "high"] = frame.loc[index[50], "close"] * 0.98
+
+    report = check_klines(frame, "X", "1d")
+    assert report.verdict == FAIL
+
+    kept = report.excluding(pd.DatetimeIndex([index[50]]))
+    assert kept.verdict == PASS
+    # The check is not silently deleted: it says how many it stopped counting.
+    high = next(c for c in kept.checks if c.name == "high_is_highest")
+    assert "already excluded" in high.detail
+
+
+def test_rescoring_does_not_hide_a_gap_in_the_listing_window():
+    index = pd.date_range("2020-01-01", periods=60, freq="D", tz="UTC").delete(30)
+    price = pd.Series(np.linspace(100, 110, len(index)), index=index)
+    frame = pd.DataFrame(
+        {"open": price, "high": price * 1.01, "low": price * 0.99, "close": price,
+         "volume": 1_000.0, "quote_volume": price * 1_000.0}
+    )
+    report = check_klines(frame, "X", "1d").excluding(index)
+    gaps = next(c for c in report.checks if c.name == "calendar_gaps")
+    # The missing bar is not in the frame at all, so it cannot be in the
+    # excluded set, and the warning survives being rescored.
+    assert gaps.count == 1
+
+
+def test_an_index_level_failure_survives_rescoring():
+    """`timezone_utc` fails with no offenders. Emptiness must not excuse it."""
+    index = pd.date_range("2020-01-01", periods=40, freq="D")
+    price = pd.Series(np.linspace(100, 110, 40), index=index)
+    frame = pd.DataFrame(
+        {"open": price, "high": price * 1.01, "low": price * 0.99, "close": price}
+    )
+    report = check_klines(frame, "X", "1d").excluding(index)
+    assert report.verdict == FAIL
+
+
+def test_gate_1_no_longer_fails_a_strategy_for_bars_it_was_never_served(panel, costs):
+    """The defect that stopped all four trial families at gate 1."""
+    when = panel.index[400]
+    broken = corrupt(panel, panel.symbols[0], when)
+
+    # The panel itself already refuses to make that bar tradable...
+    assert when in _excluded_bars(context(broken, TSMOM(lookback=60), costs))[panel.symbols[0]]
+    # ...and the raw bars really do fail QA, so this is not a weakened check.
+    raw = check_klines(
+        pd.DataFrame({f: broken[f][panel.symbols[0]] for f in broken.fields}).dropna(subset=["close"]),
+        panel.symbols[0],
+        "1d",
+    )
+    assert raw.verdict == FAIL
+
+    result = gate_1_data_integrity(context(broken, TSMOM(lookback=60), costs))
+    assert result.verdict != FAIL
+    assert result.stats["qa_failures_on_raw_bars"] >= 1
+    assert result.stats["qa_failures_traded"] == 0
+
+
+def test_gate_1_still_fails_on_a_defect_the_panel_did_let_through(panel, costs):
+    """Only *excluded* bars are forgiven. A tradable bad bar still blocks."""
+    symbol = panel.symbols[0]
+    fields = {k: v.copy() for k, v in panel.fields.items()}
+    # taker_buy_base above volume is a column-misalignment failure that
+    # `Panel.tradable()` does not look at, so nothing withholds these bars.
+    fields["taker_buy_base"] = fields["volume"] * 2.0
+    broken = Panel(fields, panel.interval)
+    result = gate_1_data_integrity(context(broken, TSMOM(lookback=60), costs))
+    assert result.verdict == FAIL
+    assert result.stats["qa_failures_traded"] >= 1
+
+
+# ------------------------------------------------------------- 2. impact and capacity
+
+
+def raw_law() -> CostModel:
+    """The unmodified square-root law, which double-counts the spread."""
+    return replace(CostModel.trial(), net_impact_against_spread=False)
+
+
+def impact(model: CostModel, participation: float, sigma: float = 0.03, adv: float = 1e8) -> float:
+    return float(model.impact_bps(np.array([participation * adv]), np.array([adv]), np.array([sigma]))[0])
+
+
+def test_a_tiny_order_is_charged_no_impact_at_all():
+    """The $10,000-capacity defect, as a unit test.
+
+    A $500 order against $100m of daily volume is half a millionth of the
+    book. The unmodified law charged about 2 bps for it — more than the
+    half-spread it is supposed to sit on top of.
+    """
+    assert impact(raw_law(), 5e-6) > 0.5
+    assert impact(CostModel.trial(), 5e-6) == 0.0
+
+
+def test_netting_converges_to_the_square_root_law_where_the_law_is_large():
+    model, raw = CostModel.trial(), raw_law()
+    assert impact(model, 0.10) == pytest.approx(impact(raw, 0.10) - model.half_spread_bps, rel=1e-9)
+    assert impact(model, 0.10) / impact(raw, 0.10) > 0.95
+
+
+def test_impact_is_continuous_and_monotone_where_it_switches_on():
+    model = CostModel.trial()
+    charged = [impact(model, p) for p in (1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1)]
+    assert all(b >= a for a, b in zip(charged, charged[1:]))
+    # No jump at the crossover: it leaves zero continuously.
+    crossover = (model.half_spread_bps * 1e-4 / model.impact_coef / 0.03) ** 2
+    assert impact(model, crossover * 1.001) < 0.05
+
+
+def test_netting_only_ever_lowers_the_charge():
+    """No gate can be made easier to pass by this, at any size."""
+    model, raw = CostModel.trial(), raw_law()
+    for p in (1e-7, 1e-5, 1e-3, 1e-2, 1.0):
+        assert impact(model, p) <= impact(raw, p) + 1e-12
+
+
+def test_a_maker_order_keeps_the_full_law():
+    """Netting exists because the taker path already paid the spread."""
+    maker = replace(CostModel.trial(), use_maker=True)
+    assert impact(maker, 5e-6) == pytest.approx(impact(raw_law(), 5e-6), rel=1e-9)
+
+
+def test_the_cost_stress_multiplier_still_scales_impact():
+    model = CostModel.trial()
+    assert impact(model.stressed(2.0), 0.05) == pytest.approx(2 * impact(model, 0.05), rel=1e-9)
+
+
+def test_capacity_reports_its_band_and_says_when_it_is_extrapolated(panel, costs):
+    stats = _capacity(context(panel, TSMOM(lookback=60), costs))
+    assert stats["impact_coef"] == costs.impact_coef
+    assert stats["capacity_usd_pessimistic"] <= stats["capacity_usd"] <= stats["capacity_usd_optimistic"]
+    assert isinstance(stats["capacity_extrapolated"], bool)
+    assert any(k.startswith("impact_drag_at_") for k in stats)
+
+
+def test_removing_the_double_count_raises_capacity(costs):
+    """The regression test for the number the user called out."""
+    base = edge_world(n_symbols=8, years=4, seed=3)
+    quote = base["quote_volume"]
+    deep = Panel({**base.fields, "quote_volume": quote / quote.mean().mean() * 1e8}, base.interval)
+    strategy = TSMOM(lookback=60)
+    fixed = _capacity(context(deep, strategy, costs))
+    before = _capacity(context(deep, strategy, raw_law()))
+    assert fixed["capacity_usd"] >= before["capacity_usd"]
+    # The ladder steps in factors of three, so it can round the improvement
+    # away. The drag it is derived from cannot, and that is the measurement.
+    for rung in ("impact_drag_at_1e+03", "impact_drag_at_1e+04", "impact_drag_at_1e+05"):
+        assert fixed[rung] < before[rung]
+    assert fixed["impact_drag_at_1e+03"] == 0.0
+
+
+# --------------------------------------------------------- 3. walk-forward efficiency
+
+
+def _wfe_frame(is_returns, oos_returns, n_windows=6, n_obs=1200):
+    """A two-variant frame whose walk-forward windows have chosen returns."""
+    index = pd.date_range("2018-01-01", periods=n_obs, freq="D", tz="UTC")
+    edges = np.linspace(0, n_obs, n_windows + 1).astype(int)
+    values = np.zeros(n_obs)
+    for w, (is_r, oos_r) in enumerate(zip(is_returns, oos_returns), start=1):
+        values[edges[w] : edges[w + 1]] = oos_r
+        if w == 1:
+            values[: edges[1]] = is_r
+    return pd.DataFrame({"v": values}, index=index)
+
+
+def test_walk_forward_efficiency_does_not_explode_on_a_cancelling_denominator():
+    """The reversal family reported WFE 13.62. This is why.
+
+    Anchored training windows whose returns very nearly cancel leave the
+    pooled ratio dividing by almost nothing, and a ratio with a denominator
+    passing through zero is a random number of arbitrary magnitude. The median
+    of the per-window ratios cannot do that, because each window brings its own
+    denominator and the median ignores the one that blew up.
+    """
+    n_obs, n_windows = 1800, 6
+    index = pd.date_range("2018-01-01", periods=n_obs, freq="D", tz="UTC")
+    edges = np.linspace(0, n_obs, n_windows + 1).astype(int)
+    values = np.full(n_obs, 0.001)
+    # Window 3 trains on everything before it; make that training mean tiny
+    # while every window's own out-of-sample return stays healthy.
+    values[edges[1] : edges[3]] = -0.001 * (edges[1] / (edges[3] - edges[1]))
+    frame = pd.DataFrame({"v": values}, index=index)
+
+    walk = walk_forward_efficiency(frame, 365.0, n_windows=n_windows)
+    assert walk.attrs["wfe_windows"] >= 3
+    assert np.isfinite(walk.attrs["wfe"])
+    # The pooled figure is the one that can run away; the median must not.
+    assert abs(walk.attrs["wfe"]) < 5
+    assert "wfe_window" in walk.columns
+
+
+def test_walk_forward_efficiency_is_one_when_nothing_degrades():
+    index = pd.date_range("2018-01-01", periods=1200, freq="D", tz="UTC")
+    frame = pd.DataFrame({"v": np.full(1200, 0.001)}, index=index)
+    walk = walk_forward_efficiency(frame, 365.0)
+    assert walk.attrs["wfe"] == pytest.approx(1.0, rel=1e-6)
+    assert walk.attrs["wfe_pooled"] == pytest.approx(1.0, rel=1e-6)
+
+
+def test_windows_with_no_in_sample_edge_are_dropped_not_counted_as_zero():
+    index = pd.date_range("2018-01-01", periods=1200, freq="D", tz="UTC")
+    frame = pd.DataFrame({"v": np.full(1200, -0.001)}, index=index)
+    walk = walk_forward_efficiency(frame, 365.0)
+    assert walk.attrs["wfe_windows"] == 0
+    assert np.isnan(walk.attrs["wfe"])
+
+
+# ------------------------------------------------ 4. the volatility-preserving null
+
+
+def clustered_panel(n_symbols: int = 5, n: int = 1500, seed: int = 0) -> Panel:
+    """A panel with genuine GARCH-style volatility clustering.
+
+    `edge_world` has constant volatility, so it cannot tell the two nulls
+    apart: there is no clustering there to preserve or destroy. The confound
+    gate 6 hit is a property of real markets, so the test needs a fixture that
+    has it.
+    """
+    rng = np.random.default_rng(seed)
+    index = pd.date_range("2019-01-01", periods=n, freq="D", tz="UTC")
+    symbols = [f"C{i}USDT" for i in range(n_symbols)]
+    market = np.zeros(n)
+    sigma2 = np.full(n, 0.02**2)
+    for t in range(1, n):
+        sigma2[t] = 1e-5 + 0.12 * market[t - 1] ** 2 + 0.86 * sigma2[t - 1]
+        market[t] = rng.normal(0.0005, np.sqrt(sigma2[t]))
+    close = {}
+    for s_i, symbol in enumerate(symbols):
+        idio = rng.normal(0, 0.01, n) * np.sqrt(sigma2 / sigma2.mean())
+        close[symbol] = 100.0 * np.exp(np.cumsum(0.8 * market + idio))
+    close = pd.DataFrame(close, index=index)
+    fields = {
+        "open": close.shift(1).bfill(),
+        "high": close * 1.01,
+        "low": close * 0.99,
+        "close": close,
+        "volume": pd.DataFrame(1e4, index=index, columns=symbols),
+        "quote_volume": close * 1e4,
+    }
+    fields["high"] = np.maximum(fields["high"], fields["open"])
+    fields["low"] = np.minimum(fields["low"], fields["open"])
+    return Panel(fields, "1d")
+
+
+def _vol_path(panel: Panel) -> pd.Series:
+    return panel.returns().abs().mean(axis=1).rolling(20).mean().dropna()
+
+
+def test_the_fixture_really_does_cluster():
+    path = _vol_path(clustered_panel())
+    assert path.autocorr(lag=5) > 0.7
+
+
+def test_plain_permutation_destroys_volatility_clustering():
+    panel = clustered_panel(seed=7)
+    real, null = _vol_path(panel), _vol_path(permute_panel(panel, seed=1))
+    assert pd.concat([real, null], axis=1).dropna().corr().iloc[0, 1] < 0.3
+
+
+def test_the_vol_preserving_null_keeps_the_volatility_path():
+    panel = clustered_panel(seed=7)
+    real, null = _vol_path(panel), _vol_path(permute_panel(panel, seed=1, preserve_volatility=True))
+    assert pd.concat([real, null], axis=1).dropna().corr().iloc[0, 1] > 0.8
+
+
+def test_the_vol_preserving_null_still_destroys_the_time_ordering():
+    """It must give up the ordering of direction, which is the whole point."""
+    panel = clustered_panel(seed=7)
+    trended = Panel(
+        {**panel.fields, "close": panel.close},
+        panel.interval,
+    )
+    shuffled = permute_panel(trended, seed=1, preserve_volatility=True)
+
+    def signed_autocorr(p: Panel) -> float:
+        r = p.returns()
+        return float(np.nanmean([np.sign(r[s]).autocorr(lag=1) for s in p.symbols]))
+
+    assert abs(signed_autocorr(shuffled)) < 0.06
+
+
+def test_the_vol_preserving_null_keeps_listing_windows_and_prices_positive():
+    panel = clustered_panel(seed=11)
+    shuffled = permute_panel(panel, seed=2, preserve_volatility=True)
+    assert shuffled.close.notna().equals(panel.close.notna())
+    assert bool((shuffled.close.dropna(how="all") > 0).all().all())
+
+
+def test_the_two_nulls_give_materially_different_answers(costs):
+    """The claim `docs/07_ENGINE_FIXES.md` §3 makes, and the only one it makes.
+
+    Not that one null is harder — measured over six seeds it went three each
+    way. Only that the choice matters, which is what justifies reporting both.
+    """
+    panel = clustered_panel(n_symbols=4, n=700, seed=5)
+    strategy = TSMOM(lookback=40)
+    medians = {}
+    for flag in (False, True):
+        medians[flag] = np.median(
+            [
+                run_backtest(
+                    permute_panel(panel, seed=i, preserve_volatility=flag), strategy, costs
+                ).sharpe(gross=True)
+                for i in range(12)
+            ]
+        )
+    spread = abs(medians[True] - medians[False])
+    assert spread > 0.05, medians
+
+
+def test_the_two_nulls_are_reported_separately_by_gate_6(costs):
+    from qr.validate.gates import gate_6_permutation
+
+    panel = clustered_panel(n_symbols=4, n=500, seed=3)
+    result = gate_6_permutation(
+        context(panel, TSMOM(lookback=30), costs, permutations=4, vol_preserving_permutations=4)
+    )
+    assert "bar_permutation_p_value" in result.stats
+    assert "bar_permutation_vol_preserved_p_value" in result.stats
+    assert "not binding" in result.detail
+
+
+def test_the_second_null_can_be_switched_off(costs):
+    from qr.validate.gates import gate_6_permutation
+
+    panel = clustered_panel(n_symbols=4, n=500, seed=3)
+    result = gate_6_permutation(
+        context(panel, TSMOM(lookback=30), costs, permutations=4, vol_preserving_permutations=0)
+    )
+    assert "bar_permutation_vol_preserved_p_value" not in result.stats

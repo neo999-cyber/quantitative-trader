@@ -38,11 +38,22 @@ def test_stressing_doubles_every_component():
 
 
 def test_impact_follows_the_square_root_of_participation():
-    model = CostModel(impact_coef=1.0)
+    """The law itself, with the spread-netting switched off."""
+    model = CostModel(impact_coef=1.0, net_impact_against_spread=False)
     small = model.impact_bps(np.array([[1_000.0]]), np.array([[1_000_000.0]]), np.array([[0.04]]))
     big = model.impact_bps(np.array([[4_000.0]]), np.array([[1_000_000.0]]), np.array([[0.04]]))
     assert big[0, 0] == pytest.approx(2 * small[0, 0])
     assert small[0, 0] == pytest.approx(0.04 * np.sqrt(1e-3) / BPS)
+
+
+def test_impact_is_charged_net_of_the_spread_the_linear_term_already_took():
+    """`docs/07_ENGINE_FIXES.md` §2: charging both double-counts."""
+    model = CostModel(impact_coef=1.0)
+    raw = CostModel(impact_coef=1.0, net_impact_against_spread=False)
+    args = (np.array([[1_000.0]]), np.array([[1_000_000.0]]), np.array([[0.04]]))
+    assert model.impact_bps(*args)[0, 0] == pytest.approx(
+        raw.impact_bps(*args)[0, 0] - model.half_spread_bps
+    )
 
 
 def test_impact_is_zero_where_there_is_no_volume():
@@ -58,8 +69,9 @@ def test_impact_adds_to_the_linear_charge():
     vol = pd.DataFrame({"BTCUSDT": [0.04]})
     linear = model.charge(turnover).iloc[0]
     with_impact = model.charge(turnover, equity=1e6, adv_notional=adv, volatility=vol).iloc[0]
+    impact_bps = 0.04 * np.sqrt(5e5 / 1e8) / BPS - model.half_spread_bps
     assert with_impact > linear
-    assert with_impact == pytest.approx(linear + 0.5 * 0.04 * np.sqrt(5e5 / 1e8))
+    assert with_impact == pytest.approx(linear + 0.5 * impact_bps * BPS)
 
 
 def test_the_trial_model_is_vip0_with_the_bnb_discount():

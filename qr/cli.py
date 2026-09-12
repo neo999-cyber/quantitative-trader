@@ -392,6 +392,7 @@ def cmd_gates(args) -> int:
         holdout_panel=holdout_panel,
         holdout_universe=membership(holdout_panel, spec) if holdout_panel is not None else None,
         permutations=args.permutations,
+        vol_preserving_permutations=args.vol_permutations,
     )
     report = run_gates(context, upto=args.upto, stop_on_fail=not args.all_gates)
 
@@ -446,6 +447,7 @@ def cmd_families(args) -> int:
             holdout_panel=holdout_panel,
             holdout_universe=holdout_universe,
             permutations=args.permutations,
+            vol_preserving_permutations=args.vol_permutations,
             upto=args.upto,
             stop_on_fail=not args.all_gates,
         )
@@ -682,6 +684,13 @@ def build_parser() -> argparse.ArgumentParser:
     gt.add_argument("--bnb", action=argparse.BooleanOptionalAction, default=TRIAL_BNB_DISCOUNT)
     gt.add_argument("--spread", type=float, default=2.0)
     gt.add_argument("--permutations", type=int, default=200)
+    gt.add_argument(
+        "--vol-permutations",
+        dest="vol_permutations",
+        type=int,
+        default=None,
+        help="permutations for gate 6's volatility-preserving null (0 skips it; default: same as --permutations)",
+    )
     gt.add_argument("--upto", type=int, default=9, help="highest gate to run")
     gt.add_argument("--all-gates", action="store_true", dest="all_gates", help="do not stop at the first FAIL")
     gt.set_defaults(func=cmd_gates)
@@ -698,6 +707,13 @@ def build_parser() -> argparse.ArgumentParser:
     fam.add_argument("--bnb", action=argparse.BooleanOptionalAction, default=TRIAL_BNB_DISCOUNT)
     fam.add_argument("--spread", type=float, default=2.0)
     fam.add_argument("--permutations", type=int, default=200)
+    fam.add_argument(
+        "--vol-permutations",
+        dest="vol_permutations",
+        type=int,
+        default=None,
+        help="permutations for gate 6's volatility-preserving null (0 skips it; default: same as --permutations)",
+    )
     fam.add_argument("--upto", type=int, default=9)
     fam.add_argument("--all-gates", action="store_true", dest="all_gates")
     fam.add_argument(

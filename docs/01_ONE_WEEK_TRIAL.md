@@ -60,5 +60,32 @@ Realistic: first honest verdict ~1 week after go, 10 days with one fix cycle. Th
 - **Day 4–5 done (11 Sept 2026).** All four families built, pre-registered and run through all nine gates by one command (`qr families`); 327 tests. Details: `docs/04_FOUR_FAMILIES.md`. The run was a **dry run on synthetic data** and says nothing about crypto — but it works end to end, and `tsmom_v1` passing gates 0–7 and then dying at the holdout with Sharpe −1.05 is a fair demonstration of why gate 9 exists. **Waiting on you:** run `qr data pull` on the laptop (the sandbox cannot reach Binance), then `qr families` against the real lake.
 - **Day 6–7 done (11 Sept 2026).** Audited the engine against `PLAN.md` §4 line by line rather than tuning it against synthetic reports. Three configured thresholds were read by nothing; Hansen SPA, the shuffled-ticker placebo, per-regime Sharpe and a capacity estimate were specified and missing; gate 6 was not re-optimising (which took its p-value on searched-over noise from 0.06 to 0.78) and gate 8 was dropping the best five *bars* rather than the best five *trades*. The self-test then caught two calibration errors of mine in the fixes. Details: `docs/05_GATE_AUDIT.md`.
 
+- **The real run, 12 September 2026. All four families FAIL.** 734 Binance
+  pairs pulled and QA'd on the laptop, top-30 point-in-time universe,
+  2018–2024 in sample, 2025 onward as an untouched holdout. Not one of 425
+  variants beats buy-and-hold of the same basket (SPA p = 0.83–0.91); HAC
+  t-statistics of 1.08–1.93 against a 2.5 floor; deflated Sharpes of
+  0.50–0.78 against 0.95; holdout Sharpes of −0.55, −0.82 and −0.39 for the
+  three real families. The best variant of 200 on real crypto scored 0.749,
+  worse than the best of 200 the same search finds on **pure synthetic
+  noise** (1.058). Full verdict and the scoring of the four pre-registered
+  predictions — five of which were wrong, all about the *mechanism* of
+  failure rather than the verdict — in `docs/06_TRIAL_VERDICT.md`.
+- **Four engine defects fixed afterwards (12 September 2026).** The run
+  exposed four numbers that meant something other than what they said: gate 1
+  failing all four families for bars the panel had already withheld from them,
+  a capacity estimate double-charging the spread, gate 6's null unfair to a
+  vol-targeted strategy, and a walk-forward efficiency dividing by a number
+  passing through zero. All four fixed, 24 regression tests, 401 total.
+  Details and what was deliberately *not* changed: `docs/07_ENGINE_FIXES.md`.
+  None of them touches the verdict, which is the reason it was safe to fix
+  them now.
+
+## Decision, 12 September 2026
+
+**Do not spend the $1,000.** The rule agreed on 11 September applies as
+written: all four failed, so the next step is the **ETF-basket trial**, which
+costs nothing. The platform did the job it was built for — it said no.
+
 ## Before "go" (still thinking)
 - Review GitHub repos the user will share; each gets a one-by-one assessment in `docs/research/06_repo_reviews.md`: adopt / borrow / reference / skip, and where it changes `PLAN.md`.

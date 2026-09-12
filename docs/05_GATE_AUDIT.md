@@ -68,3 +68,9 @@ A related honest result: even in a world where two of twelve symbols carry a gen
 ## Still the same gap
 
 None of this has met a real price. `qr data pull` on the laptop remains the blocker (`docs/02_DATA_LAYER.md`), and until then the four Hypothesis Reports describe a random-number generator.
+
+## What the real price found (12 September 2026)
+
+That gap is now closed, and closing it found four more defects that synthetic data could not have surfaced — one of them in gate 1, which this audit had just rewired, and one in the capacity estimate this audit had just added. Both looked correct against fixtures and were wrong against 734 real pairs. See `docs/07_ENGINE_FIXES.md`; the verdict they were found under is `docs/06_TRIAL_VERDICT.md`.
+
+The lesson is the same one twice: an audit against a specification catches what the specification says, and a run against real data catches what the world says. They are not substitutes.

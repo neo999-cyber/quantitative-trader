@@ -87,7 +87,13 @@ class PermutationResult:
 # --------------------------------------------------------------- permuting data
 
 
-def permute_panel(panel: Panel, seed: int = 0, same_permutation: bool = True) -> Panel:
+def permute_panel(
+    panel: Panel,
+    seed: int = 0,
+    same_permutation: bool = True,
+    preserve_volatility: bool = False,
+    vol_window: int = 30,
+) -> Panel:
     """A panel with its time ordering destroyed and everything else preserved.
 
     The bar-to-bar close returns are permuted and the close series rebuilt from
@@ -106,6 +112,48 @@ def permute_panel(panel: Panel, seed: int = 0, same_permutation: bool = True) ->
     their correlation is preserved only approximately. Pairs sharing a window —
     which is most of a top-30 universe over a chosen sample — are exact. Where
     that matters, restrict the panel to a common window before permuting.
+
+    `preserve_volatility` answers a confound the trial's first run exposed.
+    Permuting raw returns destroys serial dependence in the *direction* of
+    returns — the thing a trend or reversal strategy claims — but it also
+    destroys volatility clustering, and a **vol-targeted** strategy is a
+    different animal in a world without it: scaling down in high-volatility
+    periods raises a Sharpe ratio with no directional skill at all, and that
+    premium needs clustering to exist. The observed statistic contains it and
+    the null has been stripped of it, so the comparison is between unlike
+    things and the number that comes out is two effects added together.
+
+    Measured on six synthetic worlds with GARCH clustering and no planted
+    timing edge (`docs/07_ENGINE_FIXES.md` §3), swapping the nulls moves the
+    p-value by about 0.2, in a direction that is **not** systematic — it rose
+    in three of the six and fell in the other three. So this is not a bias with
+    a known sign to be corrected for. It is a sensitivity, of a size that
+    straddles gate 6's own pass/fail boundary, to a modelling choice that forms
+    no part of what the strategy claims. Which is why gate 6 reports both and
+    lets the plain null keep the verdict.
+
+    With the flag set, each symbol's returns are decomposed as
+
+        r_t = mu + sigma_t . z_t
+
+    with `sigma_t` a centred rolling standard deviation and `z` the
+    standardised residual. Only `z` is permuted; `mu` and the whole `sigma_t`
+    path stay where they were. So the null keeps the real volatility path, bar
+    for bar — every cluster, every crisis — and keeps the unconditional mean in
+    expectation, while still destroying any information in the ordering of
+    direction. A vol-targeted strategy behaves in this null exactly as it does
+    in reality, and whatever is left of its edge is the timing.
+
+    Three honest caveats. The mean is preserved *in expectation* rather than
+    exactly, because the plain permutation's exact preservation comes from
+    reusing the same multiset of returns, and a leverage effect (big moves are
+    disproportionately down moves) means a given draw can land either side. The
+    intrabar shape still travels with its source bar rather than being rescaled
+    to the destination's volatility, which matters for a strategy that reads
+    highs and lows and not for one that reads closes. And each permuted return
+    is clipped to the symbol's own observed range, because a large residual
+    landing on a high-volatility bar can otherwise fall below -100% and make
+    the rebuilt price negative.
     """
     rng = np.random.default_rng(seed)
     close = panel.close
@@ -124,6 +172,14 @@ def permute_panel(panel: Panel, seed: int = 0, same_permutation: bool = True) ->
     permuted_returns = pd.DataFrame(index=close.index, columns=close.columns, dtype=float)
     permuted_ratios = {k: pd.DataFrame(index=close.index, columns=close.columns, dtype=float) for k in ratios}
 
+    if preserve_volatility:
+        sigma_frame = (
+            returns.rolling(vol_window, min_periods=max(2, vol_window // 6), center=True)
+            .std()
+            .bfill()
+            .ffill()
+        )
+
     for symbol in close.columns:
         col = returns[symbol].to_numpy()[1:]
         # Permute only within the bars this symbol actually traded, so its
@@ -136,7 +192,24 @@ def permute_panel(panel: Panel, seed: int = 0, same_permutation: bool = True) ->
         col_order = source[np.isin(source, live)]
 
         shuffled = np.full(n - 1, np.nan)
-        shuffled[live] = col[col_order]
+        if preserve_volatility and len(live):
+            sigma = sigma_frame[symbol].to_numpy()[1:]
+            fallback = np.nanstd(col[live]) if len(live) > 1 else 0.0
+            sigma = np.where(np.isfinite(sigma) & (sigma > 0), sigma, fallback)
+            mu = float(np.nanmean(col[live]))
+            z = np.full(n - 1, np.nan)
+            with np.errstate(divide="ignore", invalid="ignore"):
+                z[live] = np.where(sigma[live] > 0, (col[live] - mu) / sigma[live], 0.0)
+            # The bar keeps its own sigma and gives up only its residual.
+            rebuilt = mu + sigma[live] * np.nan_to_num(z[col_order], nan=0.0)
+            # A large residual landing on a high-volatility bar can exceed any
+            # return the asset ever had, and one below -100% makes the rebuilt
+            # price negative, which is not a market. Clipping to the symbol's
+            # own observed range keeps every permuted return inside something
+            # that actually happened, and needs no threshold of its own.
+            shuffled[live] = np.clip(rebuilt, np.min(col[live]), np.max(col[live]))
+        else:
+            shuffled[live] = col[col_order]
         permuted_returns[symbol] = np.concatenate([[np.nan], shuffled])
 
         for name, frame in ratios.items():
@@ -205,20 +278,35 @@ def bar_permutation_test(
     n_permutations: int = 1000,
     seed: int = 0,
     same_permutation: bool = True,
+    preserve_volatility: bool = False,
+    name: str | None = None,
 ) -> PermutationResult:
     """Masters' test. `evaluate` should re-run the **whole grid** and return its best.
 
     Passing a single fixed variant tests only that variant; passing the search
     tests the search, which is the version that prices the 200 configurations
     someone tried before settling on this one.
+
+    `preserve_volatility` selects the null that keeps the volatility path and
+    permutes only the standardised residual — see `permute_panel`. It is the
+    fairer null for a vol-targeted strategy and a strictly harder one to reason
+    about, so gate 6 runs both and reports both.
     """
     null = np.array(
         [
-            evaluate(permute_panel(panel, seed=seed + i, same_permutation=same_permutation))
+            evaluate(
+                permute_panel(
+                    panel,
+                    seed=seed + i,
+                    same_permutation=same_permutation,
+                    preserve_volatility=preserve_volatility,
+                )
+            )
             for i in range(n_permutations)
         ]
     )
-    return PermutationResult("bar_permutation", observed, null, n_permutations)
+    default = "bar_permutation_vol_preserved" if preserve_volatility else "bar_permutation"
+    return PermutationResult(name or default, observed, null, n_permutations)
 
 
 def random_entry_test(

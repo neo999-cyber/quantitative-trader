@@ -97,6 +97,10 @@ class CostModel:
     fee_bps: float = 10.0
     half_spread_bps: float = 2.0
     impact_coef: float = 1.0
+    #: Charge impact only for what it costs *beyond* crossing the spread,
+    #: which `linear_bps` already charges. See `impact_bps`. False restores the
+    #: unmodified square-root law, which double-counts.
+    net_impact_against_spread: bool = True
     use_maker: bool = False
     multiplier: float = 1.0
     name: str = "binance_spot_vip0_taker"
@@ -158,6 +162,33 @@ class CostModel:
         `volatility` is a per-bar return standard deviation (a fraction, not
         bps). Bars with no ADV get no impact charge and no free lunch either:
         they should have been filtered out by the liquidity screen upstream.
+
+        **The half-spread is netted off**, because `linear_bps` has already
+        charged it and the √-law's small-order regime *is* the spread. Without
+        that, the law is extrapolated to participations a thousandfold below
+        anything it was fitted over, where its concavity makes the marginal
+        cost of the first dollar traded unbounded: at p = 1e-5 it still asks
+        σ·0.003, about 2 bps on a 5%/day coin, for an order a thousand times
+        smaller than the top of book. A $500 market order in BTCUSDT does not
+        move the price; it pays the spread, and it pays it once. Charging both
+        is what made the trial's first capacity estimate read $10,000 for a
+        book trading pairs that turn over nine figures a day.
+
+        So:
+
+            impact(p) = max(0, coef · σ · √p − half_spread)
+
+        Zero for any order small enough to sit inside the quoted spread,
+        continuous and monotone through the point where it stops being zero,
+        and asymptotically the √-law itself once the term that matters is
+        large. It introduces no new parameter — `half_spread_bps` is already
+        named, sourced and used — and it can only ever lower the charge, so no
+        gate is made easier to pass than the unmodified model would have it.
+
+        What it does **not** fix is `impact_coef`, which is 1.0 because that is
+        the round number the literature clusters around and not because
+        anything here was fitted to a fill. Everything this function returns
+        scales with it, and so does every capacity figure downstream.
         """
         traded = np.asarray(turnover_notional, dtype=float)
         adv = np.asarray(adv_notional, dtype=float)
@@ -166,7 +197,11 @@ class CostModel:
             participation = np.where(adv > 0, traded / adv, 0.0)
         participation = np.nan_to_num(participation, nan=0.0, posinf=0.0)
         sigma = np.nan_to_num(sigma, nan=0.0, posinf=0.0)
-        return self.multiplier * self.impact_coef * sigma * np.sqrt(participation) / BPS
+
+        law = self.impact_coef * sigma * np.sqrt(np.maximum(participation, 0.0)) / BPS
+        if self.net_impact_against_spread and not self.use_maker:
+            law = np.maximum(law - self.half_spread_bps, 0.0)
+        return self.multiplier * law
 
     def charge(
         self,
@@ -200,6 +235,7 @@ class CostModel:
             "fee_bps": self.fee_bps,
             "half_spread_bps": self.half_spread_bps,
             "impact_coef": self.impact_coef,
+            "net_impact_against_spread": self.net_impact_against_spread,
             "use_maker": self.use_maker,
             "multiplier": self.multiplier,
             "linear_bps_per_side": self.linear_bps,

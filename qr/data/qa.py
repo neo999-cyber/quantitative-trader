@@ -43,6 +43,26 @@ class CheckResult:
     def count(self) -> int:
         return len(self.offenders)
 
+    def excluding(self, bars: pd.Index) -> "CheckResult":
+        """The same check with `bars` taken out of its offenders.
+
+        A check that had offenders and has none left passes: every bar it
+        objected to has already been kept away from the strategy. A check that
+        never had offenders is returned untouched, which matters because the
+        index-level checks (`timezone_utc`, `non_empty`) fail with an empty
+        offender list and must not be talked out of it by this.
+        """
+        if self.count == 0:
+            return self
+        remaining = self.offenders.difference(pd.Index(bars))
+        if len(remaining) == len(self.offenders):
+            return self
+        verdict = "PASS" if len(remaining) == 0 else self.verdict
+        detail = self.detail
+        if len(remaining) < self.count:
+            detail = f"{detail} ({self.count - len(remaining)} on bars already excluded)"
+        return CheckResult(self.name, verdict, detail, remaining)
+
 
 @dataclass
 class QAReport:
@@ -61,6 +81,31 @@ class QAReport:
     @property
     def failures(self) -> list[CheckResult]:
         return [c for c in self.checks if c.verdict == "FAIL"]
+
+    def excluding(self, bars: pd.Index) -> "QAReport":
+        """This report re-scored over the bars a strategy could actually consume.
+
+        `Panel.tradable()` already drops bars whose values cannot be true — the
+        negative-volume BTTUSDT prints, the AUDUSDT bar whose high sits below
+        its own close — so a strategy is never allowed to read them. Gate 1 was
+        nonetheless failing symbols for exactly those bars, which is the
+        platform blaming a strategy for data it had already withheld from it.
+
+        Passing the excluded timestamps here removes them from every check's
+        offender list. Note what it does *not* remove: `calendar_gaps` reports
+        timestamps that are absent from the frame altogether, so they are not
+        in the excluded set and the warning survives — which is right, because
+        a hole in a listing window is a fact about the data whether or not
+        anyone traded through it.
+        """
+        return QAReport(
+            self.symbol,
+            self.interval,
+            self.rows,
+            self.start,
+            self.end,
+            [c.excluding(bars) for c in self.checks],
+        )
 
     def to_frame(self) -> pd.DataFrame:
         return pd.DataFrame(

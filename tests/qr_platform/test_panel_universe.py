@@ -164,3 +164,114 @@ def test_clean_bars_are_unaffected_by_the_sanity_checks(panel):
     mask = panel.tradable()
     assert mask.sum().sum() > 0
     assert mask.equals(panel.close.notna() & (panel.get("quote_volume").fillna(0.0) > 0.0))
+
+
+# ------------------------- what a volume ranking admits that it should not
+
+
+@pytest.fixture()
+def mixed_market():
+    """Real coins alongside the instruments a volume ranking wrongly promotes.
+
+    Every non-crypto pair here is given the *largest* quote volume, because
+    that is the real situation: on Binance the stablecoin pairs out-trade the
+    coins, being conversion rails rather than speculations.
+    """
+    index = pd.date_range("2021-01-01", periods=700, freq="D", tz="UTC")
+    rng = np.random.default_rng(0)
+
+    def build(daily_vol, price, quote_volume):
+        close = price * np.exp(np.cumsum(rng.normal(0.0, daily_vol, len(index))))
+        return pd.DataFrame(
+            {
+                "open": close, "high": close * 1.01, "low": close * 0.99, "close": close,
+                "volume": quote_volume / close, "quote_volume": quote_volume, "trades": 1e4,
+            },
+            index=index,
+        )
+
+    return Panel.from_frames({
+        "BTCUSDT": build(0.0125, 40_000, 5e8),   # ~24% annualised: a quiet Bitcoin
+        "ETHUSDT": build(0.040, 2_500, 4e8),
+        "SOLUSDT": build(0.050, 100, 3e8),
+        "USDCUSDT": build(0.00005, 1.0, 9e9),    # a peg, with the biggest volume
+        "EURUSDT": build(0.0045, 1.1, 8e9),      # fiat, ~9% annualised
+        "BTCUPUSDT": build(0.090, 10, 7e9),      # a leveraged token
+        "PAXGUSDT": build(0.009, 2_000, 6e9),    # tokenised gold, ~17% annualised
+    })
+
+
+@pytest.fixture()
+def mixed_membership(mixed_market):
+    return membership(mixed_market, UniverseSpec(n=5, lookback=30, min_history=120))
+
+
+def test_stablecoins_never_enter_the_universe(mixed_membership):
+    """A crypto strategy holding USDC is holding cash, not taking a position."""
+    assert not mixed_membership["USDCUSDT"].any()
+
+
+def test_fiat_pairs_never_enter_the_universe(mixed_membership):
+    assert not mixed_membership["EURUSDT"].any()
+
+
+def test_leveraged_tokens_never_enter_the_universe(mixed_membership):
+    """Daily-rebalanced derivatives with decay, not spot assets."""
+    assert not mixed_membership["BTCUPUSDT"].any()
+
+
+def test_tokenised_commodities_are_excluded_by_name_not_by_volatility(mixed_market, mixed_membership):
+    """Gold runs ~17% annualised, comfortably above the floor — hence the list."""
+    realised = mixed_market.returns()["PAXGUSDT"].std() * np.sqrt(365)
+    assert realised > UniverseSpec().min_annual_vol
+    assert not mixed_membership["PAXGUSDT"].any()
+
+
+def test_a_quiet_bitcoin_is_still_admitted(mixed_market, mixed_membership):
+    """The floor must not exclude a real asset in a calm stretch.
+
+    Bitcoin's quietest 90-day windows run 25-30% annualised, so a floor set
+    just above fiat would be one lull away from emptying the universe.
+    """
+    realised = mixed_market.returns()["BTCUSDT"].std() * np.sqrt(365)
+    assert realised < 0.30
+    assert mixed_membership["BTCUSDT"].any()
+
+
+def test_the_real_coins_are_the_whole_universe(mixed_membership):
+    held = {s for s in mixed_membership.columns if mixed_membership[s].any()}
+    assert held == {"BTCUSDT", "ETHUSDT", "SOLUSDT"}
+
+
+def test_the_volatility_filter_reads_only_past_bars(mixed_market):
+    """A coin that depegs tomorrow must still be excluded today."""
+    from qr.data.universe import rank_asof
+
+    spec = UniverseSpec(n=5, lookback=30, min_history=120)
+    asof = mixed_market.index[400]
+    volatility = (
+        mixed_market.returns().rolling(spec.vol_lookback, min_periods=30).std() * np.sqrt(365)
+    )
+    spiked = volatility.copy()
+    spiked.loc[asof:, "USDCUSDT"] = 5.0  # enormous volatility, from `asof` onward
+    chosen = rank_asof(mixed_market.get("quote_volume"), asof, spec, None, spiked)
+    assert "USDCUSDT" not in chosen
+
+
+def test_the_exclusions_are_recorded_in_the_spec_description():
+    described = UniverseSpec().describe()
+    assert described["min_annual_vol"] == 0.15
+    assert described["vol_lookback_bars"] == 90
+    assert "PAXGUSDT" in described["exclude_symbols"]
+    assert described["exclude_leveraged"] is True
+
+
+def test_turning_the_filters_off_restores_the_naive_ranking(mixed_market):
+    """The defect is reproducible, which is how we know the fix is the fix."""
+    naive = membership(
+        mixed_market,
+        UniverseSpec(n=5, lookback=30, min_history=120, min_annual_vol=0.0,
+                     exclude_leveraged=False, exclude_symbols=frozenset()),
+    )
+    assert naive["USDCUSDT"].any()
+    assert naive["PAXGUSDT"].any()

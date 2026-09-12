@@ -22,11 +22,13 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field, replace
+from pathlib import Path
 from typing import Any, Callable, Sequence
 
 import numpy as np
 import pandas as pd
 
+from qr.config import REPO_ROOT
 from qr.data.panel import Panel
 from qr.data.qa import check_klines
 from qr.execution.costs import CostModel
@@ -44,7 +46,7 @@ from qr.validate.permutation import (
     shuffled_ticker_test,
 )
 from qr.validate.spa import buy_and_hold_benchmark, superior_predictive_ability
-from qr.validate.trial_log import TrialLog
+from qr.validate.trial_log import TrialLog, content_hash
 
 PASS, WARN, FAIL, SKIP = "PASS", "WARN", "FAIL", "SKIP"
 
@@ -168,8 +170,15 @@ def gate_0_preregistration(ctx: GateContext) -> GateResult:
             FAIL,
             f"no pre-registration for {ctx.hypothesis_id!r}: this run is exploratory, not a test",
         )
-    first_run = next(iter(ctx.trial_log.records(kind="run", hypothesis_id=ctx.hypothesis_id)), None)
-    stats = {"doc_sha256": records[0].payload.get("doc_sha256"), "registered_at": records[0].ts}
+    runs = ctx.trial_log.records(kind="run", hypothesis_id=ctx.hypothesis_id)
+    first_run = next(iter(runs), None)
+    latest = records[-1]
+    stats = {
+        "doc_sha256": latest.payload.get("doc_sha256"),
+        "registered_at": records[0].ts,
+        "registrations": len(records),
+        "source": latest.payload.get("source"),
+    }
     if first_run is not None and first_run.seq < records[0].seq:
         return GateResult(
             0,
@@ -178,6 +187,43 @@ def gate_0_preregistration(ctx: GateContext) -> GateResult:
             "the first run predates the pre-registration: the hypothesis was written after seeing results",
             stats,
         )
+
+    # A document re-registered *after* a run is an amendment made with results
+    # in hand. Amending before anything has been run is legitimate — a defect
+    # in the universe found during setup has to be fixable — so the test is
+    # ordering, not count.
+    if first_run is not None and any(r.seq > first_run.seq for r in records):
+        return GateResult(
+            0,
+            "pre-registration",
+            FAIL,
+            "the hypothesis was re-registered after a run: an amendment made with results in hand",
+            stats,
+        )
+
+    # The hash is only worth stamping if it is checked. A document edited after
+    # registration still satisfies "a pre-registration exists" and no longer
+    # describes what was predicted.
+    source = latest.payload.get("source")
+    if source and source != "inline":
+        path = Path(source)
+        if not path.is_absolute():
+            path = REPO_ROOT / path
+        if not path.exists():
+            stats["doc_missing"] = str(path)
+            return GateResult(
+                0, "pre-registration", WARN, f"registered document {source} is no longer on disk", stats
+            )
+        if content_hash(path.read_text(encoding="utf-8")) != latest.payload.get("doc_sha256"):
+            return GateResult(
+                0,
+                "pre-registration",
+                FAIL,
+                f"{source} has been edited since it was registered: its hash no longer matches",
+                stats,
+            )
+        stats["doc_verified"] = True
+
     return GateResult(0, "pre-registration", PASS, f"registered {records[0].ts[:19]}", stats)
 
 

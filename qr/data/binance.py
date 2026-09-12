@@ -26,6 +26,7 @@ import hashlib
 import io
 import logging
 import re
+import threading
 import zipfile
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
@@ -147,16 +148,46 @@ class LocalBucket:
 
 @dataclass
 class HttpBucket:
-    """The live bucket. Only reachable from a machine with internet access."""
+    """The live bucket. Only reachable from a machine with internet access.
+
+    Built for concurrent use, because a full pull is tens of thousands of
+    small requests and the bottleneck is round trips, not bytes. The session
+    carries a connection pool sized to the caller's worker count and retries
+    transient failures — a multi-hour download that dies on one 503 an hour in
+    is worse than one that never started.
+    """
 
     session: object | None = None
     timeout: int = 60
+    pool_size: int = 32
+    retries: int = 3
+
+    def __post_init__(self) -> None:
+        self._lock = threading.Lock()
 
     def _session(self):
+        # Double-checked locking: threads racing here would otherwise each
+        # build a session and discard the pool the others were about to use.
         if self.session is None:
-            import requests
+            with self._lock:
+                if self.session is None:
+                    import requests
+                    from requests.adapters import HTTPAdapter
+                    from urllib3.util.retry import Retry
 
-            self.session = requests.Session()
+                    session = requests.Session()
+                    adapter = HTTPAdapter(
+                        pool_connections=self.pool_size,
+                        pool_maxsize=self.pool_size,
+                        max_retries=Retry(
+                            total=self.retries,
+                            backoff_factor=0.5,
+                            status_forcelist=(429, 500, 502, 503, 504),
+                            allowed_methods=frozenset({"GET", "HEAD"}),
+                        ),
+                    )
+                    session.mount("https://", adapter)
+                    self.session = session
         return self.session
 
     def _list(self, prefix: str) -> tuple[list[str], list[str]]:

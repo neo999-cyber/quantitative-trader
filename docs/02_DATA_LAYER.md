@@ -42,9 +42,12 @@ export QR_BINANCE_MIRROR=~/qr/mirror/binance
 
 qr doctor                                   # paths and versions
 
-# ~15 min, a few GB. Daily bars for every pair the bucket has ever carried.
+# See the scale first: counts files, downloads nothing.
+qr data pull --interval 1d --dry-run
+
+# USDT pairs only, 16 concurrent. ~20-40 min depending on your line.
 qr data pull --interval 1d
-qr data pull --interval 1h --since 2021-01  # optional, much larger
+qr data pull --interval 1h --since 2021-01   # optional, far larger
 
 qr data ingest --interval 1d                # mirror -> Parquet lake
 qr data qa --interval 1d --out qa_1d.md     # the QA report

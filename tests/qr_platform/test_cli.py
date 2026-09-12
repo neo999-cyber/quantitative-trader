@@ -210,3 +210,74 @@ def test_the_trial_log_records_the_cost_model_that_was_used(env, tmp_path, capsy
     record = TrialLog(paths(tmp_path / "lake").trial_log).records(kind="run")[0]
     assert record.payload["costs"]["fees_verified_on"] == "2026-09-11"
     assert record.payload["costs"]["linear_bps_per_side"] == 9.5
+
+
+class TestDataPull:
+    """`qr data pull` against a LocalBucket standing in for the live one.
+
+    Worth testing offline: the pull is the one command that cannot be tried in
+    the sandbox, and it is also the one that costs an hour of someone's evening
+    when it is wrong.
+    """
+
+    @pytest.fixture()
+    def offline(self, monkeypatch, mirror):
+        """Make `qr data pull` read the fixture mirror instead of the internet."""
+        import qr.cli as cli
+
+        monkeypatch.setattr(cli, "HttpBucket", lambda **kwargs: mirror)
+        return mirror
+
+    def pull(self, env, offline, tmp_path, *args):
+        target = ["--mirror", str(tmp_path / "pulled")]
+        return main(env[:2] + target + ["data", "pull", *args])
+
+    def test_a_dry_run_counts_without_fetching(self, env, offline, tmp_path, capsys):
+        assert self.pull(env, offline, tmp_path, "--dry-run") == 0
+        out = capsys.readouterr()
+        assert "dry run: would fetch" in out.out
+        assert not (tmp_path / "pulled").exists()
+
+    def test_the_quote_filter_keeps_only_matching_pairs(self, env, offline, tmp_path, capsys):
+        self.pull(env, offline, tmp_path, "--dry-run", "--quote", "NOPE")
+        assert "no symbols matched" in capsys.readouterr().err
+
+        self.pull(env, offline, tmp_path, "--dry-run", "--quote", "USDT")
+        assert "0 files" not in capsys.readouterr().err
+
+    def test_checksums_can_be_skipped_and_halve_the_request_count(self, env, offline, tmp_path, capsys):
+        self.pull(env, offline, tmp_path, "--dry-run")
+        with_sums = int(capsys.readouterr().err.split(" files")[0].split("\n")[-1].replace(",", ""))
+        self.pull(env, offline, tmp_path, "--dry-run", "--no-checksums")
+        without = int(capsys.readouterr().err.split(" files")[0].split("\n")[-1].replace(",", ""))
+        assert without * 2 == with_sums
+
+    def test_a_pull_writes_the_bucket_layout_and_is_resumable(self, env, offline, tmp_path, capsys):
+        assert self.pull(env, offline, tmp_path, "--workers", "4") == 0
+        first = capsys.readouterr().out
+        assert "pulled" in first and "0 failed" in first
+
+        written = list((tmp_path / "pulled").rglob("*.zip"))
+        assert written
+        assert "data/spot/monthly/klines" in str(written[0])
+
+        # Re-running skips everything already present rather than refetching.
+        assert self.pull(env, offline, tmp_path, "--workers", "4") == 0
+        assert "pulled 0 files" in capsys.readouterr().out
+
+    def test_a_pulled_mirror_ingests(self, env, offline, tmp_path, capsys):
+        self.pull(env, offline, tmp_path, "--workers", "4")
+        capsys.readouterr()
+        code = main(env[:2] + ["--mirror", str(tmp_path / "pulled"), "data", "ingest"])
+        assert code == 0
+        assert "manifest hash:" in capsys.readouterr().out
+
+    def test_limit_is_documented_as_alphabetical(self):
+        """It is not a volume ranking, and the help must not imply otherwise."""
+        from qr.cli import build_parser
+
+        action = next(
+            a for a in build_parser()._subparsers._actions if getattr(a, "dest", "") == "command"
+        )
+        help_text = action.choices["data"]._subparsers._actions[1].choices["pull"].format_help()
+        assert "ALPHABETICAL" in help_text

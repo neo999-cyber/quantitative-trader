@@ -96,32 +96,82 @@ def _trial_state(path: Path) -> str:
 
 
 def cmd_data_pull(args) -> int:
-    """Download bucket files into the local mirror. Laptop only."""
-    remote = BinanceBucket(HttpBucket(), market=args.market)
+    """Download bucket files into the local mirror. Laptop only.
+
+    A full spot pull is tens of thousands of small files, so the bottleneck is
+    round trips rather than bytes and the work runs across a thread pool. Both
+    phases are parallel: enumerating each symbol's months is itself one request
+    per symbol, and there are thousands of symbols.
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    remote = BinanceBucket(HttpBucket(pool_size=max(8, args.workers * 2)), market=args.market)
     mirror = _mirror(args)
+
     symbols = args.symbols or remote.symbols(args.interval)
-    if args.top:
-        symbols = symbols[: args.top]
-    pulled = skipped = 0
-    for symbol in symbols:
-        for period in remote.periods(symbol, args.interval):
-            if args.since and period < args.since:
+    if args.quote:
+        # Most of the bucket is pairs quoted in BTC, ETH, BNB, EUR, TRY and a
+        # dozen retired stablecoins. The trial models USDT pairs, and pulling
+        # the rest multiplies a long download for data no gate will ever read.
+        wanted = tuple(q.upper() for q in args.quote)
+        symbols = [s for s in symbols if any(s.endswith(q) and len(s) > len(q) for q in wanted)]
+    if args.limit:
+        symbols = symbols[: args.limit]
+    if not symbols:
+        print("no symbols matched", file=sys.stderr)
+        return 1
+
+    print(f"enumerating {len(symbols)} symbols…", file=sys.stderr)
+    targets: list[str] = []
+    with ThreadPoolExecutor(max_workers=args.workers) as pool:
+        futures = {
+            pool.submit(remote.periods, symbol, args.interval): symbol for symbol in symbols
+        }
+        for done in as_completed(futures):
+            symbol = futures[done]
+            try:
+                periods = done.result()
+            except Exception as exc:
+                print(f"  ! {symbol}: {exc}", file=sys.stderr)
                 continue
-            for key in (kline_key(symbol, args.interval, period, "monthly", args.market),):
-                for suffix in ("", ".CHECKSUM"):
-                    target = key + suffix
-                    if mirror.exists(target) and not args.force:
-                        skipped += 1
-                        continue
-                    try:
-                        mirror.write(target, remote.source.read(target))
-                        pulled += 1
-                    except Exception as exc:  # a missing CHECKSUM is not fatal
-                        if not suffix:
-                            print(f"  ! {target}: {exc}", file=sys.stderr)
-        print(f"  {symbol}: mirrored", file=sys.stderr)
-    print(f"pulled {pulled} files, skipped {skipped} already present, into {mirror.root}")
-    return 0
+            for period in periods:
+                if args.since and period < args.since:
+                    continue
+                key = kline_key(symbol, args.interval, period, "monthly", args.market)
+                targets.append(key)
+                if args.checksums:
+                    targets.append(key + ".CHECKSUM")
+
+    todo = [k for k in targets if args.force or not mirror.exists(k)]
+    skipped = len(targets) - len(todo)
+    print(
+        f"{len(targets):,} files ({skipped:,} already mirrored, {len(todo):,} to fetch)"
+        + ("  [checksums included]" if args.checksums else "  [checksums skipped]"),
+        file=sys.stderr,
+    )
+    if args.dry_run:
+        print(f"dry run: would fetch {len(todo):,} files into {mirror.root}")
+        return 0
+
+    pulled = failed = 0
+    with ThreadPoolExecutor(max_workers=args.workers) as pool:
+        futures = {pool.submit(remote.source.read, key): key for key in todo}
+        for i, done in enumerate(as_completed(futures), start=1):
+            key = futures[done]
+            try:
+                mirror.write(key, done.result())
+                pulled += 1
+            except Exception as exc:
+                # A missing .CHECKSUM is normal for some older months; a
+                # missing data file is not, and is worth seeing.
+                if not key.endswith(".CHECKSUM"):
+                    failed += 1
+                    print(f"  ! {key}: {exc}", file=sys.stderr)
+            if i % 500 == 0 or i == len(todo):
+                print(f"  {i:,}/{len(todo):,} ({pulled:,} written)", file=sys.stderr)
+
+    print(f"pulled {pulled:,} files, skipped {skipped:,}, {failed:,} failed, into {mirror.root}")
+    return 1 if failed else 0
 
 
 def cmd_data_ingest(args) -> int:
@@ -511,8 +561,27 @@ def build_parser() -> argparse.ArgumentParser:
     pull.add_argument("--symbols", nargs="*")
     pull.add_argument("--interval", default="1d")
     pull.add_argument("--market", default="spot")
-    pull.add_argument("--top", type=int, help="only the first N symbols of the listing")
+    pull.add_argument(
+        "--quote",
+        nargs="*",
+        default=["USDT"],
+        help="only pairs quoted in these assets (default USDT); pass none for everything",
+    )
+    pull.add_argument(
+        "--limit",
+        type=int,
+        help="only the first N symbols of the listing — ALPHABETICAL, not by volume, "
+        "so this is for smoke-testing the pull, never for building a universe",
+    )
     pull.add_argument("--since", help="skip periods before YYYY-MM")
+    pull.add_argument("--workers", type=int, default=16, help="concurrent downloads")
+    pull.add_argument(
+        "--checksums",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="also fetch the published SHA-256 files (doubles the request count)",
+    )
+    pull.add_argument("--dry-run", action="store_true", dest="dry_run", help="count files, fetch nothing")
     pull.add_argument("--force", action="store_true")
     pull.set_defaults(func=cmd_data_pull)
 

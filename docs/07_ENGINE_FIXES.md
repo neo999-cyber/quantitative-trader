@@ -57,6 +57,14 @@ about 2 bps on a 5%/day coin — for an order a thousand times smaller than the
 top of book. That is not impact. That is the spread, and `linear_bps` had
 already charged it.
 
+**How much of the symptom this explains, measured afterwards: about one ladder
+rung.** The confirmation run moved `tsmom_v1` from $10,000 to $30,000 and moved
+`xsmom_v1` and `reversal_v1` not at all. The double-count was real and removing
+it is right, but the level is governed by `impact_coef`, not by this. The
+sentence that used to stand here said the double-count *was* what made the
+figure read $10,000; that was an attribution made from the shape of the bug
+rather than from a measurement, and the measurement did not support it.
+
 **Fix.** Net the half-spread off the law:
 
 ```

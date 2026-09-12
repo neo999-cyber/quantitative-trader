@@ -81,6 +81,15 @@ Realistic: first honest verdict ~1 week after go, 10 days with one fix cycle. Th
   None of them touches the verdict, which is the reason it was safe to fix
   them now.
 
+- **Confirmation run done (12 September 2026).** Re-run after the fixes: all
+  four families FAIL again, all four now stopping at **gate 3** rather than
+  gate 1, with every number the verdict rests on unchanged. Four of five
+  predictions written before the run were right; the capacity one was wrong and
+  corrected a claim in `docs/07_ENGINE_FIXES.md`. Gate 9 could not be re-run —
+  the first run had already opened the holdout, which is the gate working
+  correctly and an oversight in how the re-run was specified. Details:
+  `docs/06_TRIAL_VERDICT.md`.
+
 ## Decision, 12 September 2026
 
 **Do not spend the $1,000.** The rule agreed on 11 September applies as

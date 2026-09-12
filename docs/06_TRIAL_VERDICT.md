@@ -144,44 +144,68 @@ That is also the reason to fix them anyway. A platform whose entire claim is
 that it reports honestly cannot carry four numbers that mean something other
 than what they say, and the time to fix them is when nothing is riding on them.
 
-## Confirmation run
+## Confirmation run — done, 12 September 2026
 
-**Status: pending.** The fixes are in and the engine's synthetic self-test still
-holds — searched-over noise is still rejected at gates 4 and 5, the planted edge
-still survives all nine — but the confirmation against real data has to run on
-the laptop, since the sandbox cannot reach Binance.
+Re-run against the same lake after the four engine fixes, same window, same
+100 permutations. **All four families FAIL again, and all four now stop at gate
+3 rather than gate 1.**
 
-First record the engine change in the trial log, so the log shows the fixes
-landing *between* the two runs rather than alongside the second one:
+| hypothesis | verdict | stopped_at | gate 1 | gate 7 WFE | capacity |
+|---|---|---|---|---|---|
+| `tsmom_v1` | FAIL | 3 | WARN | 1.18 | $30,000 |
+| `xsmom_v1` | FAIL | 3 | WARN | 0.65 | $1,000,000 |
+| `reversal_v1` | FAIL | 3 | WARN | −0.64 | $100,000 |
+| `rsi_reversal_v1` | FAIL | 3 | WARN | 0.47 | $30,000 |
 
-```
-for h in tsmom_v1 xsmom_v1 reversal_v1 rsi_reversal_v1; do
-  qr trial note $h "engine fixes 1-4 (docs/07_ENGINE_FIXES.md) applied after the first run; re-running"
-done
-```
+Every number the verdict rests on is **unchanged**: HAC t of 1.93, 1.46, 1.08,
+1.89; DSR of 0.78, 0.50, 0.51, 0.60; SPA p of 0.890, 0.898, 0.910, 0.830. The
+fixes moved what they were supposed to move and nothing else, which is the
+result a confirmation run is for.
 
-Then the run itself:
+### Scoring the predictions written before it ran
 
-```
-qr families --start 2018-01-01 --end 2024-12-31 \
-            --holdout-start 2025-01-01 --permutations 100 --all-gates
-```
+| prediction | outcome | |
+|---|---|---|
+| all four still FAIL | all FAIL | ✅ |
+| the stop moves from gate 1 to gate 3 | 3 for all four | ✅ |
+| gate 1 passes or warns | WARN for all four | ✅ |
+| `reversal_v1` WFE inside [−2, 2] | −0.64 | ✅ |
+| capacity up **an order of magnitude**, every family | 3x for two families, unchanged for two | ❌ |
 
-Gate 6 now runs a second null, so expect it to take roughly twice as long as
-the first run. `--vol-permutations 0` skips it.
+**The capacity prediction was wrong and it corrects something I wrote.**
+`docs/07_ENGINE_FIXES.md` claimed the spread double-count "is what made the
+first capacity estimate read $10,000". Removing it moved `tsmom_v1` from
+$10,000 to $30,000 and moved `xsmom_v1` and `reversal_v1` not at all. So the
+double-count was real, the fix is correct, and it accounted for roughly one
+ladder rung rather than the bulk of the figure. What governs the level is
+`impact_coef = 1.0` against crypto's daily volatility — the uncalibrated number
+the reported band exists to express. I fixed a real defect and then overstated
+how much of the symptom it explained, which is its own kind of error: the fix
+was measured, the attribution was not.
 
-The prediction, recorded here before it runs, so that it can be wrong:
+### Gate 9 could not be re-run, by design
 
-- All four families still **FAIL**.
-- The gate they stop at moves from 1 to **3** for all four.
-- Gate 1 passes for all four, possibly with a QA warning on held symbols.
-- Capacity rises by at least an order of magnitude for every family, and every
-  one of them reports `capacity_extrapolated = true`.
-- `reversal_v1`'s WFE lands somewhere in [−2, 2].
-- Gate 6's two nulls differ by less than 0.2 in p for each of the four
-  families, in a direction I am explicitly **not** predicting — six synthetic
-  seeds split three-three. Neither null moves `tsmom_v1` off the 0th
-  percentile, and neither takes any family below 0.05.
+All four report *"the holdout was already opened on 2026-09-12T06:01; it is not
+a holdout any more."* That is gate 9 doing its job — a holdout opened twice is
+not a holdout — and it means this run's gate 9 is **bookkeeping, not evidence**.
+
+The oversight is mine: I recommended the re-run with `--all-gates` knowing gate
+9 consumes the holdout on first contact, and did not say so. The first run's
+holdout Sharpes of **−0.55, −0.82 and −0.39** remain the only legitimate
+reading of that period, and nothing in the four fixes touches how they were
+computed. But a future family gets exactly one shot, and a confirmation re-run
+must in general be capped with `--upto 8`.
+
+### One finding the fixes uncovered
+
+`rsi_reversal_v1` gate 1 now warns that its Sharpe **peaks at the reported lag,
+5.88x its neighbours**. That was invisible in the first run because gate 1
+returned on the QA failure before reaching the lag probe — so fixing gate 1 did
+not only unblock four families, it surfaced something the old gate had been
+hiding. A spike that size on a strategy pre-registered as having no edge is the
+signature of a look-ahead inside `RSIReversal`, and it is open: it needs
+answering in the trial log or in the code, not shrugging at. It does not change
+the control's verdict, which failed gates 3 through 8 on its own merits.
 
 ## The decision
 

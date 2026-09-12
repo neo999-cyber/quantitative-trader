@@ -265,3 +265,58 @@ def test_the_stress_multiplier_scales_the_commission():
 def test_the_ibkr_schedule_starts_unverified():
     """Same discipline as the Binance tier: a human checks it before a trial."""
     assert CostModel.ibkr_etf().describe()["fees_verified_on"] == "unverified"
+
+
+# ------------------------------------------------------------------ the calendar
+
+
+def _etf_panel(tmp_path, n=1200):
+    mirror = LocalTiingo(tmp_path)
+    for ticker in ("SPY", "TLT"):
+        mirror.write(ticker, tiingo_rows(n=n, seed=hash(ticker) % 100))
+    loader = TiingoDaily(mirror)
+    return Panel.from_frames(
+        {t: loader.load(t) for t in ("SPY", "TLT")},
+        fields=("open", "high", "low", "close", "volume", "quote_volume"),
+    )
+
+
+def test_an_etf_panel_annualises_by_sessions_not_calendar_days(tmp_path):
+    """A stock exchange is shut about a hundred days a year.
+
+    The lookup said 365 bars a year for any daily panel, which is right for
+    crypto and wrong for everything else: annualising ~252 sessions by 365
+    multiplies the Sharpe by sqrt(365/252) = 1.20. Nothing downstream would
+    catch it, because every figure in the report would be inflated by the same
+    consistent factor — gate 3's threshold included.
+    """
+    panel = _etf_panel(tmp_path)
+    assert 230 < panel.periods_per_year < 275
+
+
+def test_a_daily_crypto_panel_still_reads_exactly_365(tmp_path):
+    """Measurement must not introduce drift where the assumption was right."""
+    from qr.validate.selftest import noise_world
+
+    assert noise_world(n_symbols=3, years=4, seed=1).periods_per_year == 365.0
+
+
+def test_a_panel_too_short_to_measure_falls_back_to_the_nominal_figure(tmp_path):
+    """Two months of bars cannot tell a holiday calendar from a quiet week."""
+    panel = _etf_panel(tmp_path, n=40)
+    assert panel.periods_per_year == 365.0
+
+
+def test_the_asset_switch_picks_the_lake_partition(tmp_path):
+    """The crypto and ETF bars share a root; only source/market separate them.
+
+    An `--asset etf` run that forgot to say so read 734 Binance pairs, found no
+    SPY, and ran the gates over an empty book.
+    """
+    from argparse import Namespace
+
+    from qr.cli import _partition
+
+    assert _partition(Namespace(asset="etf")) == ("tiingo", "etf")
+    assert _partition(Namespace(asset="crypto")) == ("binance", "spot")
+    assert _partition(Namespace()) == ("binance", "spot")

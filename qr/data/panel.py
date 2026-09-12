@@ -143,7 +143,28 @@ class Panel:
             mask &= (low <= body_low * (1 + 1e-9)) | low.isna()
         return mask
 
-    #: Bars per year, for annualising. Crypto trades every day of the year.
+    #: Bars per year, for annualising.
+    #:
+    #: Crypto trades every day of the year; an equity or ETF panel holds only
+    #: exchange sessions, about 252 of them. Annualising a stock series by 365
+    #: multiplies its Sharpe by sqrt(365/252) = 1.20 — a 20% overstatement that
+    #: no gate would catch, because every number downstream is consistent with
+    #: it. So the figure is measured off the index rather than assumed, and the
+    #: nominal value below is kept only as the answer for a panel too short to
+    #: measure, and as the value returned when measurement agrees with it (so a
+    #: crypto panel reads exactly 365, not 364.8).
+    NOMINAL_PERIODS = {"1d": 365.0, "1h": 365.0 * 24, "4h": 365.0 * 6, "1w": 52.0}
+
     @property
     def periods_per_year(self) -> float:
-        return {"1d": 365.0, "1h": 365.0 * 24, "4h": 365.0 * 6, "1w": 52.0}[self.interval]
+        nominal = self.NOMINAL_PERIODS[self.interval]
+        index = self.index
+        if len(index) < 60:
+            return nominal
+        span = (index[-1] - index[0]).total_seconds()
+        if span <= 0:
+            return nominal
+        measured = (len(index) - 1) * (365.25 * 24 * 3600) / span
+        if abs(measured - nominal) <= 0.05 * nominal:
+            return nominal
+        return float(measured)

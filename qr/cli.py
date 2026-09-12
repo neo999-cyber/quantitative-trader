@@ -90,7 +90,21 @@ def _progress(line: str) -> None:
     print(line, file=sys.stderr, flush=True)
 
 
-def _load_panel(lake: Lake, interval: str, start=None, end=None):
+ASSET_PARTITION = {"crypto": ("binance", "spot"), "etf": ("tiingo", "etf")}
+
+
+def _partition(args) -> tuple[str, str]:
+    """Which corner of the lake a command reads.
+
+    The lake is partitioned by source and market, so the crypto klines and the
+    dividend-adjusted ETF bars sit side by side under one root and one manifest.
+    A command that forgets to say which it wants silently gets the Binance
+    default — which is how an ETF run came to search 734 crypto pairs for SPY.
+    """
+    return ASSET_PARTITION[getattr(args, "asset", "crypto") or "crypto"]
+
+
+def _load_panel(lake: Lake, interval: str, start=None, end=None, source="binance", market="spot"):
     """Load a panel, or explain *why* there is nothing to load.
 
     Pointing `QR_ROOT` at a directory that is not the lake cost this project
@@ -100,18 +114,20 @@ def _load_panel(lake: Lake, interval: str, start=None, end=None):
     state for a command that is about to backtest something, so it is worth one
     cheap check and a message that names the root it actually looked in.
     """
-    if not lake.symbols(interval):
+    if not lake.symbols(interval, source, market):
         env = os.environ.get("QR_ROOT")
         where = f"QR_ROOT={env}" if env else "QR_ROOT is unset, so this is the <repo>/lake default"
+        build = "qr data etf-ingest" if market == "etf" else "qr data ingest"
         print(
-            f"the lake at {lake.paths.root} holds no {interval} klines ({where}).\n"
-            "Either point QR_ROOT at the root that has one, or build this one with "
-            "`qr data ingest`.\n"
+            f"the lake at {lake.paths.root} holds no {interval} {source}/{market} klines "
+            f"({where}).\n"
+            f"Either point QR_ROOT at the root that has one, or build this one with "
+            f"`{build}`.\n"
             "`qr doctor` prints the root every command will use.",
             file=sys.stderr,
         )
         raise SystemExit(2)
-    return lake.load_panel(interval=interval, start=start, end=end)
+    return lake.load_panel(interval=interval, start=start, end=end, source=source, market=market)
 
 
 def _mirror(args) -> LocalBucket:
@@ -403,9 +419,22 @@ def cmd_etf_ingest(args) -> int:
 
 def cmd_data_qa(args) -> int:
     lake = _lake(args)
-    symbols = args.symbols or lake.symbols(args.interval)
-    reports = [check_klines(lake.read_klines(s, args.interval), s, args.interval) for s in symbols]
-    text = report_markdown(reports, f"Data QA — {args.interval}, {len(reports)} symbols")
+    source, market = _partition(args)
+    symbols = args.symbols or lake.symbols(args.interval, source, market)
+    if not symbols:
+        print(
+            f"no {source}/{market} {args.interval} klines in the lake at {lake.paths.root}. "
+            f"`qr data qa --asset etf` reads the Tiingo bars; the default reads Binance.",
+            file=sys.stderr,
+        )
+        return 2
+    reports = [
+        check_klines(lake.read_klines(s, args.interval, source=source, market=market), s, args.interval)
+        for s in symbols
+    ]
+    text = report_markdown(
+        reports, f"Data QA — {source}/{market} {args.interval}, {len(reports)} symbols"
+    )
     if args.out:
         Path(args.out).write_text(text, encoding="utf-8")
         print(f"wrote {args.out}")
@@ -627,8 +656,9 @@ def cmd_families(args) -> int:
     from qr.validate.report import write_report
 
     etf = args.asset == "etf"
+    source, market = _partition(args)
     lake = _lake(args)
-    panel = _load_panel(lake, args.interval, args.start, args.end)
+    panel = _load_panel(lake, args.interval, args.start, args.end, source, market)
     if etf:
         # A named basket, not a ranking: twelve funds that all still trade have
         # no membership decision to make through time. `spec.name` still travels
@@ -659,7 +689,9 @@ def cmd_families(args) -> int:
 
     holdout_panel = holdout_universe = None
     if args.holdout_start:
-        holdout_panel = _load_panel(lake, args.interval, args.holdout_start, args.holdout_end)
+        holdout_panel = _load_panel(
+            lake, args.interval, args.holdout_start, args.holdout_end, source, market
+        )
         holdout_universe = (
             fixed_basket(holdout_panel, ETF_BASKET) if etf else membership(holdout_panel, spec)
         )
@@ -871,6 +903,12 @@ def build_parser() -> argparse.ArgumentParser:
     qa.add_argument("--symbols", nargs="*")
     qa.add_argument("--interval", default="1d")
     qa.add_argument("--out")
+    qa.add_argument(
+        "--asset",
+        choices=("crypto", "etf"),
+        default="crypto",
+        help="which corner of the lake to check: Binance klines or the Tiingo ETF bars",
+    )
     qa.set_defaults(func=cmd_data_qa)
 
     uni = data.add_parser("universe", help="the point-in-time universe")

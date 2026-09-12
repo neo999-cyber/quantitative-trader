@@ -10,6 +10,32 @@ sixteen years of dividend-adjusted bars, ten gates each.
 The control failing is the finding worth reading. It is not the same kind of
 failure as the other three, and separating the two is most of this document.
 
+> ## Correction, 12 September 2026 — the cost figures in this document are wrong
+>
+> Every family below used a rebalance calendar, and the drift between
+> rebalances was computed by the strategy one bar out of phase with the engine
+> that consumes it. The engine holds the book from bar *t-1* and drifts it by
+> bar *t*'s return; the strategy could only drift its own *t-1* target by
+> *t-1*'s return. The two disagreed by one day's move on every bar in between,
+> and that disagreement was charged as a trade.
+>
+> **A book scheduled to rebalance twelve times a year traded on all 365 of
+> them.** On a synthetic panel the inflation was 9x: 17.4% of equity a year
+> against a correct 1.9%.
+>
+> So the cost column, `net_over_gross`, every net Sharpe, and gates 2 through 8
+> for all four families are computed from costs that are too high by an unknown
+> but large factor. **Finding 1 below — that the per-order floor is the binding
+> constraint — is exactly the claim this defect would manufacture**, and it is
+> withdrawn pending a re-run. Finding 2 (the control cannot clear gate 3) is
+> arithmetic about a Sharpe of 0.305 over sixteen years and survives; Finding 3
+> (SPA against buy-and-hold) is a comparison between two things costed the same
+> way, and its direction survives while its magnitude does not.
+>
+> The fix is in `Strategy.trades_on` and `run_backtest`, with the engine's
+> closed form checked against an explicit loop that is the definition. The
+> re-run has not happened yet, and this notice stays until it has.
+
 ## What was run
 
 | | |

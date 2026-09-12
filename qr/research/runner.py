@@ -25,7 +25,7 @@ import pandas as pd
 
 from qr.data.panel import Panel
 from qr.execution.costs import CostModel
-from qr.strategies.base import Strategy
+from qr.strategies.base import Strategy, hold_between
 
 
 @dataclass
@@ -174,7 +174,17 @@ def run_backtest(
     # "holds" a delisted coin neither earns nor can be sold. Re-masking after
     # the shift liquidates it at its last close, which is the honest reading of
     # a bucket that simply stops: no price, no position.
-    held = targets.shift(lag).fillna(0.0).where(panel.tradable(), 0.0)
+    held = targets.shift(lag).fillna(0.0)
+    # Hold the drifted book between rebalances. This has to happen *here*,
+    # after the shift, because the drift must be in the same phase as the
+    # turnover calculation below — a strategy computing it for itself is always
+    # one bar out and every bar of that disagreement is charged as a trade.
+    # Provably the identity when every bar is a rebalance bar, so a crypto
+    # family that trades daily is untouched.
+    marks = strategy.trades_on(panel.index) if hasattr(strategy, "trades_on") else None
+    if marks is not None and not bool(marks.all()):
+        held = hold_between(held, returns, marks)
+    held = held.where(panel.tradable(), 0.0)
     gross = (held * returns.fillna(0.0)).sum(axis=1).rename("gross")
 
     drifted = drift(held.shift(1).fillna(0.0), returns)

@@ -722,3 +722,89 @@ def test_the_two_readings_are_decided_by_what_the_factors_explain():
     from qr.validate.gates import GateThresholds
 
     assert GateThresholds().min_factor_r2 == 0.25
+
+
+# ------------------------------- a monthly book that traded every day for months
+
+
+def _oracle_held(panel, target, freq):
+    """Carry the drifted book forward; trade only on rebalance bars.
+
+    Written as an explicit loop precisely because it is the definition rather
+    than the optimisation — if the engine's closed form disagrees with this,
+    the closed form is wrong.
+    """
+    from qr.strategies.base import rebalance_mask
+
+    marks = rebalance_mask(panel.index, freq).to_numpy()
+    rr = panel.returns().fillna(0.0).to_numpy()
+    values = np.zeros_like(target.to_numpy())
+    prev = np.zeros(target.shape[1])
+    for i in range(len(target)):
+        port = 1.0 + float((prev * rr[i]).sum())
+        drifted = (prev * (1.0 + rr[i]) / port) if port else prev * (1.0 + rr[i])
+        values[i] = target.to_numpy()[i] if marks[i] else drifted
+        prev = values[i]
+    return pd.DataFrame(values, index=target.index, columns=target.columns)
+
+
+def test_a_monthly_book_trades_twelve_times_a_year_not_three_hundred_and_sixty_five():
+    """The drift used to be computed by the strategy, one bar out of phase.
+
+    `run_backtest` holds the book from bar t-1 and drifts it by bar t's return.
+    A strategy can only drift its own t-1 target by t-1's return — t's has not
+    happened. The two disagreed by one day's move on every bar between
+    rebalances and the engine charged the disagreement as a trade, so a book
+    scheduled to rebalance twelve times a year traded on all 365 of them, for
+    about nine times the cost. Every ETF family ran this way.
+    """
+    from qr.execution.costs import CostModel
+    from qr.research.runner import run_backtest
+    from qr.strategies.library import BuyAndHold
+    from qr.validate.selftest import noise_world
+
+    panel = noise_world(n_symbols=12, years=6, seed=3)
+    result = run_backtest(panel, BuyAndHold(rebalance_on="MS"), CostModel.etf_trial(), equity=1_000.0)
+
+    years = len(panel) / panel.periods_per_year
+    traded_bars = float((result.turnover > 1e-12).sum())
+    assert 10 <= traded_bars / years <= 13
+
+
+def test_the_engine_agrees_with_a_loop_that_is_the_definition():
+    from qr.execution.costs import CostModel
+    from qr.research.runner import drift, run_backtest
+    from qr.strategies.library import BuyAndHold
+    from qr.validate.selftest import noise_world
+
+    panel = noise_world(n_symbols=8, years=5, seed=9)
+    result = run_backtest(panel, BuyAndHold(rebalance_on="MS"), CostModel.etf_trial(), equity=1_000.0)
+
+    target = BuyAndHold().target_weights(panel).shift(1).fillna(0.0)
+    held = _oracle_held(panel, target, "MS")
+    expected = (held - drift(held.shift(1).fillna(0.0), panel.returns())).abs().sum().sum()
+    assert np.isclose(float(result.turnover.sum()), float(expected), rtol=1e-6)
+
+
+def test_a_strategy_that_trades_every_bar_is_untouched_by_the_schedule():
+    """The identity case. A crypto family must be bit-for-bit what it was."""
+    from qr.execution.costs import CostModel
+    from qr.research.runner import run_backtest
+    from qr.strategies.library import BuyAndHold
+    from qr.validate.selftest import noise_world
+
+    panel = noise_world(n_symbols=6, years=4, seed=2)
+    model = CostModel.trial()
+    implicit = run_backtest(panel, BuyAndHold(), model)
+    explicit = run_backtest(panel, BuyAndHold(rebalance_on="D"), model)
+    assert np.allclose(implicit.net, explicit.net)
+    assert np.allclose(implicit.turnover, explicit.turnover)
+
+
+def test_an_unknown_rebalance_frequency_is_refused_rather_than_ignored():
+    from qr.strategies.library import BuyAndHold
+    from qr.validate.selftest import noise_world
+
+    panel = noise_world(n_symbols=4, years=2, seed=1)
+    with pytest.raises(ValueError, match="rebalance_on"):
+        BuyAndHold(rebalance_on="fortnightly").target_weights(panel)

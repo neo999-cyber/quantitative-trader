@@ -76,15 +76,35 @@ class Strategy(ABC):
             allowed = allowed & universe.reindex_like(allowed).fillna(False)
         return weights.where(allowed, 0.0).fillna(0.0)
 
+    def trades_on(self, index: pd.DatetimeIndex) -> pd.Series:
+        """The bars this variant is allowed to trade on.
+
+        All of them unless the variant carries `rebalance_on`. The runner reads
+        this and holds the drifted book in between — see `run_backtest`, and see
+        `schedule` for why the drift is not applied here.
+        """
+        return rebalance_mask(index, self.params.get("rebalance_on"))
+
     def schedule(self, weights: pd.DataFrame, panel: Panel) -> pd.DataFrame:
-        """Apply this variant's `rebalance` parameter, if it has one.
+        """Validate this variant's rebalance parameter. Does **not** drift.
+
+        It used to drift, and the drift was a bar out of phase with the engine
+        that consumes it. `run_backtest` holds the book from bar *t-1* and
+        drifts it by bar *t*'s return; a strategy can only drift its own bar
+        *t-1* target by bar *t-1*'s return, because bar *t*'s has not happened
+        yet. The two books therefore disagreed by one day's move on every bar
+        between rebalances, and the engine charged that disagreement as a trade:
+        a book scheduled to rebalance twelve times a year traded on all 365,
+        for nine times the cost.
+
+        No arrangement of this method can fix that — matching the engine would
+        require next bar's return — so the drift now lives in the engine, where
+        the phase is right by construction, and this method only keeps the
+        parameter honest.
 
         A strategy with no `rebalance_on` parameter trades every bar, which is
         what every crypto family does and what a proportional-fee venue can
-        afford. With one, the book is left to drift between rebalance dates —
-        see `hold_between`, and note that this is provably the identity when the
-        schedule marks every bar, so adding the call cannot change a crypto
-        result.
+        afford.
 
         **The parameter is `rebalance_on`, not `rebalance`, deliberately.**
         `CrossSectionalMomentum` and `ShortTermReversal` already take a
@@ -95,10 +115,9 @@ class Strategy(ABC):
         return through a different path and never reach this method.
         """
         freq = self.params.get("rebalance_on")
-        if not freq:
-            return weights
-        marks = rebalance_mask(weights.index, freq)
-        return hold_between(weights, panel.returns(), marks)
+        if freq and freq not in _PERIOD:
+            raise ValueError(f"unknown rebalance_on {freq!r}; expected one of {sorted(_PERIOD)}")
+        return weights
 
     @staticmethod
     def normalise(weights: pd.DataFrame, gross: float = 1.0) -> pd.DataFrame:

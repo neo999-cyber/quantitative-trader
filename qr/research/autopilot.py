@@ -58,6 +58,23 @@ from qr.research.policy import (
 from qr.validate.trial_log import TrialLog
 
 
+def _is_deterministic(exc: Exception) -> bool:
+    """Would this failure repeat identically on the next brief?
+
+    A 4xx other than rate limiting is a statement about the request — a schema
+    the API will not accept, a model that does not exist, a missing key — and
+    no amount of different prose will change it. A 429 or a 5xx is about the
+    moment, and the next brief may well succeed.
+    """
+    status = getattr(exc, "status_code", None)
+    if status is None:
+        response = getattr(exc, "response", None)
+        status = getattr(response, "status_code", None)
+    if not isinstance(status, int):
+        return False
+    return 400 <= status < 500 and status != 429
+
+
 @dataclass
 class CandidateOutcome:
     """One brief, and how far it got."""
@@ -168,6 +185,18 @@ def run_night(
             outcome.stage, outcome.outcome = "memo", "error"
             outcome.reason = f"{type(exc).__name__}: {exc}"
             say(f"  memo failed: {outcome.reason}")
+            if _is_deterministic(exc):
+                # A 400 is a statement about the request, not about the brief.
+                # The next brief builds the same request and fails identically,
+                # so continuing only buys the same error once per brief — which
+                # is exactly what a live run did, three times, before anyone
+                # read the first one. Stop and say so.
+                night.stopped_early = (
+                    "the request itself was rejected, so every brief would fail the same "
+                    f"way: {outcome.reason}"
+                )
+                say("  this is a request error, not a brief error — stopping the night")
+                break
             continue
 
         outcome.candidate_id, outcome.title = memo.candidate_id, memo.title

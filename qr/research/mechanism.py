@@ -105,6 +105,63 @@ NON_MECHANISMS = (
     "fear and greed",
 )
 
+def _params_schema() -> dict[str, Any]:
+    """The parameter object a crude version may set, built from the real classes.
+
+    An open `additionalProperties: true` object would have been the obvious
+    shape and the API refuses it outright — structured outputs require a closed
+    schema. The refusal is doing the project a favour: enumerating the union of
+    every primitive's constructor arguments means the model cannot invent a
+    parameter that does not exist, and the names and types stay correct by
+    construction because they are read off the classes rather than copied here.
+
+    Every property is optional. The model is told to set only the ones
+    belonging to the primitive it chose, and `CrudeVersion.build()` drops nulls
+    before constructing, so a model that emits an irrelevant key as `null`
+    rather than omitting it is not punished for the difference.
+    """
+    import importlib
+    import inspect
+
+    types = {int: "integer", float: "number", str: "string", bool: "boolean"}
+    properties: dict[str, dict] = {}
+    for spec in PRIMITIVES.values():
+        cls = getattr(importlib.import_module(spec["module"]), spec["class"])
+        for name, param in inspect.signature(cls.__init__).parameters.items():
+            if name == "self" or name in properties:
+                continue
+            kind = types.get(type(param.default))
+            if kind is None:
+                # A `None` default carries no type, and guessing costs
+                # correctness: `rebalance_on: str | None = None` came back as a
+                # number until the annotation was read instead.
+                annotation = str(param.annotation)
+                kind = next(
+                    (t for marker, t in (("str", "string"), ("bool", "boolean"),
+                                         ("int", "integer"), ("float", "number"))
+                     if marker in annotation),
+                    "number",
+                )
+            # `anyOf` with a null branch rather than `"type": [kind, "null"]`:
+            # the former is what Pydantic emits for an optional field, and the
+            # SDK's own `messages.parse()` path generates Pydantic schemas, so
+            # it is the shape the server is certain to accept. Every property
+            # is then listed in `required` as well, which the documented
+            # examples all do — between them, the request validates whether or
+            # not the server insists on a closed, fully-required schema.
+            properties[name] = {"anyOf": [{"type": kind}, {"type": "null"}]}
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": sorted(properties),
+        "additionalProperties": False,
+        "description": (
+            "Set the parameters belonging to the primitive you chose and null for "
+            "every other one."
+        ),
+    }
+
+
 SYSTEM_PROMPT = """You are a sceptical quantitative researcher screening trade ideas for a small \
 retail account. Your job is to KILL ideas cheaply, not to find one.
 
@@ -134,7 +191,7 @@ MEMO_SCHEMA = {
             "type": "object",
             "properties": {
                 "primitive": {"type": "string"},
-                "params": {"type": "object", "additionalProperties": True},
+                "params": _params_schema(),
                 "expected_sign": {"type": "string", "enum": ["positive", "negative"]},
                 "rationale": {"type": "string"},
             },
@@ -170,7 +227,14 @@ class CrudeVersion:
         if spec is None:
             raise ValueError(f"unknown primitive {self.primitive!r}; known: {sorted(PRIMITIVES)}")
         module = importlib.import_module(spec["module"])
-        return getattr(module, spec["class"])(**self.params)
+        # A null is "not specified", not "specified as nothing": the schema has
+        # to offer every primitive's parameters at once, so a model naming the
+        # irrelevant ones explicitly is being tidy rather than wrong. Anything
+        # else the class does not accept still raises, and triage kills the
+        # memo for it — a parameter that was meant and is not understood must
+        # not be dropped in silence.
+        params = {k: v for k, v in self.params.items() if v is not None}
+        return getattr(module, spec["class"])(**params)
 
 
 @dataclass(frozen=True)

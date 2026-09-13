@@ -398,3 +398,129 @@ def test_a_grid_wider_than_the_policy_is_refused_at_promotion(tmp_path, panel):
     with pytest.raises(PolicyBreach, match="every family that comes after"):
         promote(memo(), killtest.KillTest("month_end_rebalance_v1", True, "", "passed", {}))
     assert not log.records(kind="prereg"), "nothing may be registered when the grid is refused"
+
+
+# ------------------------------------------------- the schema the API accepts
+
+
+def _objects(node, path="root"):
+    """Every object subschema in the tree, with its path."""
+    if isinstance(node, dict):
+        if node.get("type") == "object":
+            yield path, node
+        for key, value in node.items():
+            yield from _objects(value, f"{path}.{key}")
+    elif isinstance(node, list):
+        for i, value in enumerate(node):
+            yield from _objects(value, f"{path}[{i}]")
+
+
+def test_every_object_in_the_memo_schema_is_closed():
+    """`additionalProperties: true` is rejected outright by structured outputs.
+
+    A live run died on exactly this: the `params` object was open so that a
+    crude version could carry any primitive's arguments, and every memo came
+    back a 400 before the model had written a word.
+    """
+    from qr.research.mechanism import MEMO_SCHEMA
+
+    for path, node in _objects(MEMO_SCHEMA):
+        assert node.get("additionalProperties") is False, f"{path} is not closed"
+
+
+def test_every_object_requires_all_of_its_properties():
+    """What the documented examples do, and what strict validation expects."""
+    from qr.research.mechanism import MEMO_SCHEMA
+
+    for path, node in _objects(MEMO_SCHEMA):
+        assert set(node.get("required", [])) == set(node["properties"]), path
+
+
+def test_the_parameter_names_come_from_the_classes_not_from_a_list():
+    """So a renamed constructor argument cannot silently drift out of the schema."""
+    import inspect
+
+    from qr.research.autopilot import PRIMITIVES_FOR_SPEC
+    from qr.research.mechanism import MEMO_SCHEMA
+
+    schema = MEMO_SCHEMA["properties"]["crude_version"]["properties"]["params"]["properties"]
+    for cls in PRIMITIVES_FOR_SPEC.values():
+        for name in inspect.signature(cls.__init__).parameters:
+            if name != "self":
+                assert name in schema, f"{cls.__name__}.{name} is missing from the schema"
+
+
+def test_optional_parameters_are_nullable_and_typed_from_the_annotation():
+    from qr.research.mechanism import MEMO_SCHEMA
+
+    schema = MEMO_SCHEMA["properties"]["crude_version"]["properties"]["params"]["properties"]
+    assert schema["event"]["anyOf"] == [{"type": "string"}, {"type": "null"}]
+    assert schema["before"]["anyOf"][0]["type"] == "integer"
+    assert schema["gross"]["anyOf"][0]["type"] == "number"
+    # A `None` default carries no type; the annotation says str.
+    assert schema["rebalance_on"]["anyOf"][0]["type"] == "string"
+
+
+def test_nulls_for_irrelevant_parameters_do_not_break_the_build():
+    """The schema offers every primitive's parameters, so a memo will send nulls."""
+    from qr.research.mechanism import CrudeVersion
+
+    crude = CrudeVersion(
+        primitive="calendar_event",
+        params={"event": "month_end", "before": 2, "after": None, "lookback": None,
+                "n_long": None, "vol_target": None, "rebalance_on": None},
+        expected_sign="positive",
+    )
+    strategy = crude.build()
+    assert strategy.params["event"] == "month_end"
+    assert strategy.params["before"] == 2
+
+
+def test_a_non_null_parameter_the_primitive_does_not_accept_still_kills_the_memo():
+    """Dropping it in silence would be worse than refusing it."""
+    verdict = triage(
+        memo(
+            crude_version=CrudeVersion(
+                primitive="calendar_event",
+                params={"event": "month_end", "lookback": 60},
+                expected_sign="positive",
+            )
+        )
+    )
+    assert verdict.verdict == "killed"
+    assert "does not build" in verdict.reason
+
+
+def test_a_rejected_request_stops_the_night_instead_of_repeating_itself(tmp_path, panel):
+    """Three identical 400s is what a live run produced before anyone read one."""
+    log, policy = _log_with_policy(tmp_path)
+    calls = []
+
+    class BadRequest(Exception):
+        status_code = 400
+
+    def broken(brief):
+        calls.append(brief)
+        raise BadRequest("additionalProperties: true is not supported")
+
+    night = run_night(["a", "b", "c"], log, policy, SANDBOX, panel, propose=broken)
+    assert len(calls) == 1, "a request error must not be retried once per brief"
+    assert "every brief would fail the same way" in night.stopped_early
+
+
+def test_a_rate_limit_or_server_error_does_not_stop_the_night(tmp_path, panel):
+    log, policy = _log_with_policy(tmp_path)
+    calls = []
+
+    class Overloaded(Exception):
+        status_code = 529
+
+    def flaky(brief):
+        calls.append(brief)
+        if len(calls) == 1:
+            raise Overloaded("overloaded")
+        return memo(candidate_id="b_v1")
+
+    night = run_night(["a", "b"], log, policy, SANDBOX, panel, propose=flaky)
+    assert len(calls) == 2
+    assert not night.stopped_early

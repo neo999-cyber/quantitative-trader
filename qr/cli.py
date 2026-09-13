@@ -10,6 +10,7 @@
     qr fng pull | fng show        Fear & Greed index
     qr trial verify | trial show  the hash-chained trial log
     qr backtest --family ...      one strategy, honestly costed
+    qr site                       every gate report as one readable page
 
 The pull commands need internet and are meant to run on the laptop; everything
 else works offline against the mirror and the lake, which is what the cloud
@@ -808,6 +809,26 @@ def _parse_grid(pairs: list[str] | None) -> dict:
     return out
 
 
+def cmd_site(args) -> int:
+    """Render the reports directory and the trial log as one HTML file."""
+    from qr.site import collect, write_site
+
+    p = paths(args.root)
+    runs = collect(p.reports)
+    if not runs:
+        print(
+            f"no gate reports in {p.reports}. Run `qr families` first — the page is built "
+            f"from what the runs wrote, not from the lake.",
+            file=sys.stderr,
+        )
+        return 2
+    out = Path(args.out).expanduser() if args.out else p.root / "site" / "index.html"
+    written = write_site(p.reports, TrialLog(p.trial_log), out)
+    print(f"wrote {written} ({len(runs)} hypotheses, {written.stat().st_size / 1024:.0f} KB)")
+    print(f"open it with: open {written}" if sys.platform == "darwin" else f"open {written}")
+    return 0
+
+
 def cmd_backtest(args) -> int:
     from qr.research import crosscheck
     from qr.research.runner import leakage_probe, run_backtest
@@ -998,6 +1019,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     doctor = sub.add_parser("doctor", help="paths, versions and the manifest hash")
     doctor.set_defaults(func=cmd_doctor)
+
+    site = sub.add_parser("site", help="render every gate report as one readable page")
+    site.add_argument("--out", help="where to write it (default <root>/site/index.html)")
+    site.add_argument("--title", default="Trial Record")
+    site.set_defaults(func=cmd_site)
 
     bt = sub.add_parser("backtest", help="run one strategy over the lake")
     bt.add_argument("--family", choices=sorted(FAMILIES), default="tsmom")

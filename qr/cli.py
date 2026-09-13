@@ -896,23 +896,56 @@ def _asset_panel(args, asset: str):
     return lake, panel, universe, spec.name
 
 
-#: Seed briefs for an unattended night. Each names a class of forced trader
-#: rather than a pattern, because that is the generating question the research
-#: plan is organised around — "who is forced to trade?", never "what repeats?".
-DEFAULT_BRIEFS = [
-    "Balanced funds and target-date funds must rebalance to fixed weights at month end. "
-    "Is there a tradeable imbalance in the days into or out of that date?",
-    "Quarter end is larger than month end: more mandates, more reporting, more window dressing. "
-    "Does the quarter-end window differ from an ordinary month end?",
-    "December tax-loss selling is a deadline: holders of losers sell by year end whether they "
-    "want to or not, and buy back in January. Is that visible in a crypto universe?",
-    "Salary, pension contributions and coupon payments arrive at the turn of the month, and "
-    "much of it is invested mechanically. Is the turn of the month different?",
-    "Perpetual futures longs pay funding every eight hours when the crowd is long. Who collects, "
-    "and can spot express any part of it?",
-    "Token unlocks put a seller on a known date who has no choice about the date. Is the "
-    "pre-unlock window tradeable?",
+#: Seed briefs, **per asset class**, because a forced trader belongs to a
+#: market. The first night this ran, all three crypto briefs were self-killed
+#: by the memo with the same correct objection: balanced-fund rebalancing,
+#: quarter-end window dressing and wash-sale tax-loss selling name payers who
+#: trade equities and bonds. No 60/40 mandate rebalances into altcoins, and
+#: crypto has no wash-sale rule. The briefs were wrong, not the answers — and
+#: sending a mechanism to a market whose participants it does not describe
+#: wastes a memo to learn something that was knowable when the list was
+#: written.
+CRYPTO_BRIEFS = [
+    "Perpetual futures longs pay funding every eight hours when the crowd is long, and the "
+    "payment is owed regardless of what the holder thinks the price will do. Who collects, and "
+    "can a spot-only book express any part of it?",
+    "A leveraged position that hits its maintenance margin is closed by the exchange, not by "
+    "its owner — the most literally forced trade there is, and it clusters. Is the aftermath of "
+    "a liquidation cascade tradeable?",
+    "Quarterly futures and options on CME and Deribit expire on the last Friday of the quarter. "
+    "Hedges must be rolled or unwound on a date fixed years in advance. Does the expiry window "
+    "differ from an ordinary week in spot?",
+    "Token unlocks put a seller on a date chosen at fundraising, years before anyone knew what "
+    "the price would be. Is the window before or after an unlock tradeable?",
+    "CME bitcoin futures close for the weekend while spot does not, so hedging flow that would "
+    "have gone to futures has nowhere to go until Monday. Is the weekend different, and is the "
+    "Monday open different?",
+    "Market makers must quote continuously and cannot choose to stand aside when inventory runs "
+    "one way. Where does inventory pressure show up in a spot book that trades all night?",
 ]
+
+#: The same generating question, aimed at the market that actually has these
+#: payers. The ETF basket is twelve funds including SPY, TLT, LQD and HYG —
+#: precisely what a 60/40 mandate holds and must rebalance.
+ETF_BRIEFS = [
+    "Balanced funds and target-date funds must rebalance to fixed weights at month end, selling "
+    "what rose and buying what fell, in size, regardless of price. Is there a tradeable "
+    "imbalance in the days into or out of that date?",
+    "Quarter end carries more mandates, more reporting and more window dressing than an ordinary "
+    "month end. Does the quarter-end window differ?",
+    "December tax-loss selling is a deadline and the wash-sale rule makes the repurchase wait "
+    "31 days, so the seller cannot simply buy back. Is the December window different from any "
+    "other month?",
+    "Salary, pension contributions and coupon payments arrive at the turn of the month and much "
+    "of it is invested mechanically, on a schedule nobody chooses. Is the turn of the month "
+    "different?",
+    "Index reconstitution forces every tracking fund to buy an addition and sell a deletion on "
+    "the same day, at whatever price clears. Is that visible in the funds themselves?",
+    "A bond fund facing redemptions must sell to meet them, and sells what is liquid rather than "
+    "what it would choose. Does redemption pressure show up in credit ETFs?",
+]
+
+BRIEFS_BY_ASSET = {"crypto": CRYPTO_BRIEFS, "etf": ETF_BRIEFS, "etf-ls": ETF_BRIEFS}
 
 
 def cmd_autopilot(args) -> int:
@@ -940,7 +973,7 @@ def cmd_autopilot(args) -> int:
         print(str(exc), file=sys.stderr)
         return 2
 
-    briefs = list(DEFAULT_BRIEFS)
+    briefs = list(BRIEFS_BY_ASSET[args.asset])
     if args.briefs_file:
         text = Path(args.briefs_file).expanduser().read_text(encoding="utf-8")
         briefs = [b.strip() for b in text.split("\n\n") if b.strip()]
@@ -950,7 +983,20 @@ def cmd_autopilot(args) -> int:
         briefs = briefs[: args.limit]
 
     lake, panel, universe, _ = _asset_panel(args, args.asset)
-    costs = CostModel.etf_trial() if args.asset.startswith("etf") else CostModel.trial()
+    long_short = args.asset == "etf-ls"
+    etf = args.asset.startswith("etf")
+    costs = (
+        CostModel.etf_long_short() if long_short
+        else CostModel.etf_trial() if etf
+        else CostModel.trial()
+    )
+    # The account the kill test prices orders against. Without this the ETF
+    # side ran the per-order-floor question at `run_backtest`'s $10,000 default
+    # while the trial itself is priced at $1,000 — asking whether an edge
+    # survives a floor, in an account ten times too large to feel it.
+    equity = args.equity or (
+        LONG_SHORT_TRIAL_EQUITY if long_short else ETF_TRIAL_EQUITY if etf else None
+    )
 
     promote = None
     if not args.no_promote:
@@ -964,7 +1010,7 @@ def cmd_autopilot(args) -> int:
             reports_dir=paths(args.root).reports,
             prereg_dir=Path("docs/prereg"),
             manifest_hash=lake.manifest_hash(),
-            equity=args.equity,
+            equity=equity,
             permutations=args.permutations,
             progress=_progress,
         )
@@ -977,7 +1023,7 @@ def cmd_autopilot(args) -> int:
         panel,
         costs=costs,
         universe=universe,
-        equity=args.equity,
+        equity=equity,
         propose=(lambda brief: mechanism.propose(brief, model=args.model)),
         promote=promote,
         progress=_progress,

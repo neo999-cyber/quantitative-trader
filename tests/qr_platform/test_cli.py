@@ -434,3 +434,85 @@ def test_autopilot_runs_a_night_and_records_every_exit(env, tmp_path, capsys, mo
     memos = log.records(kind="memo")
     assert {m.hypothesis_id for m in memos} == {"month_end_v1", "killed_v1"}
     assert not log.records(kind="prereg"), "--no-promote must register nothing"
+
+
+def test_the_seed_briefs_match_the_market_they_are_sent_to():
+    """The first live night self-killed three crypto briefs for the same reason.
+
+    Balanced-fund rebalancing, quarter-end window dressing and wash-sale
+    tax-loss selling all name payers who trade equities and bonds. Aiming them
+    at a Binance spot universe spends a memo to learn something that was
+    knowable when the brief list was written.
+    """
+    from qr.cli import BRIEFS_BY_ASSET
+
+    crypto = " ".join(BRIEFS_BY_ASSET["crypto"]).lower()
+    etf = " ".join(BRIEFS_BY_ASSET["etf"]).lower()
+
+    for tradfi in ("balanced fund", "target-date", "wash-sale", "pension"):
+        assert tradfi not in crypto, f"{tradfi!r} names a payer that does not trade crypto"
+    for native in ("funding", "liquidation", "unlock"):
+        assert native in crypto
+
+    assert "balanced funds" in etf
+    assert "wash-sale" in etf
+    for native in ("perpetual", "token unlock"):
+        assert native not in etf
+
+    assert BRIEFS_BY_ASSET["etf-ls"] is BRIEFS_BY_ASSET["etf"]
+
+
+def test_autopilot_prices_each_asset_at_the_account_its_trial_uses(tmp_path, monkeypatch):
+    """The ETF side asked the per-order-floor question in the wrong account.
+
+    `CostModel.etf_trial()` was passed without an account size, so the kill
+    test fell through to `run_backtest`'s $10,000 default while the ETF trial
+    itself is priced at $1,000 — testing whether an edge survives a floor in an
+    account ten times too large to feel it.
+    """
+    import argparse
+
+    from qr import cli
+    from qr.execution.costs import ETF_TRIAL_EQUITY, LONG_SHORT_TRIAL_EQUITY
+    from qr.research import autopilot
+    from qr.research.policy import ResearchPolicy, declare
+    from qr.data.sandbox import SandboxSpec, declare as declare_sandbox
+
+    root = tmp_path / "lake"
+    log = TrialLog(paths(root).ensure().trial_log)
+    declare(log, ResearchPolicy())
+    declare_sandbox(log, SandboxSpec(market="binance/spot"))
+    declare_sandbox(log, SandboxSpec(market="tiingo/etf", mode="period", period_end="2018-12-31"))
+
+    panel = pytest.importorskip("qr.validate.selftest").noise_world(n_symbols=6, years=2, seed=1)
+    monkeypatch.setattr(cli, "_asset_panel", lambda args, asset: (None, panel, None, "u"))
+    monkeypatch.setattr(cli, "_progress", lambda line: None)
+
+    seen = {}
+    monkeypatch.setattr(
+        "qr.research.autopilot.run_night",
+        lambda briefs, log, policy, sandbox, panel, **kw: seen.update(kw) or autopilot.Night(),
+    )
+
+    def run_asset(asset):
+        seen.clear()
+        args = argparse.Namespace(
+            root=root, asset=asset, brief=["x"], briefs_file=None, limit=None,
+            model="claude-opus-5", equity=None, permutations=5, no_promote=True,
+            interval="1d", start=None, end=None, n=30, lookback=90, min_history=60,
+            no_restrict_universe=False,
+        )
+        assert cli.cmd_autopilot(args) == 0
+        return seen
+
+    crypto = run_asset("crypto")
+    assert crypto["equity"] is None, "a Binance taker pays the same bps at any size"
+    assert crypto["costs"].per_share_usd == 0.0
+
+    etf = run_asset("etf")
+    assert etf["equity"] == ETF_TRIAL_EQUITY
+    assert etf["costs"].min_commission_usd > 0
+
+    long_short = run_asset("etf-ls")
+    assert long_short["equity"] == LONG_SHORT_TRIAL_EQUITY
+    assert long_short["costs"].borrow_bps_per_year > 0

@@ -134,21 +134,44 @@ the log. Three outcomes are worth reading carefully:
   Passing is the hoped-for outcome, not the target.
 * **`stopped`** — the stopping rule fired. Do not raise the cap.
 
-## What will probably happen, so the result can disagree
+## What the first night actually did
 
-Most briefs will be **blocked**, not killed. Funding, liquidations, index
-inclusion and unlocks are the mechanisms with the clearest payers, and none of
-their data is in the lake — `qr/research/features.py` names what each one
-needs. The calendar family is the only mechanism today's data can actually
-test.
+*Run on 13 September 2026, `--limit 3`, crypto.*
 
-That is a real answer to "who is forced to trade?", and it says the next
-useful engineering job is probably an ingestor for Binance futures
-`fundingRate` and `openInterestHist` — both public, both free — rather than
-another strategy. If the first few nights come back as a list of blocked ideas
-pointing at the same dataset, that is the machine telling you what to build,
-and it is worth more than another momentum variant that happened to be
-runnable.
+All three candidates were **killed by the memo itself**, and the reasons were
+right:
+
+* month-end rebalancing — "the forced trader is real but trades a different
+  asset class";
+* quarter end — "no named forced trader in the tradable universe";
+* December tax-loss selling — "crypto has no wash-sale rule".
+
+That is the stage doing its job, on the wrong input. The briefs named payers
+who trade **equities and bonds** and were aimed at a Binance spot universe. No
+60/40 mandate rebalances into altcoins, and without a wash-sale rule a crypto
+holder can sell and rebuy the same minute, so there is no deadline and no
+forced January repurchase.
+
+The seed briefs are now per asset class (`BRIEFS_BY_ASSET`): funding,
+liquidation cascades, quarterly expiry, unlocks and the CME weekend for
+crypto; balanced-fund rebalancing, quarter end, wash-sale December, turn of
+month, index reconstitution and redemption pressure for the ETF basket, which
+is twelve funds including SPY, TLT, LQD and HYG — precisely what a 60/40
+mandate holds.
+
+**So run both:**
+
+    qr autopilot --asset etf --no-promote
+    qr autopilot --asset crypto --no-promote
+
+The calendar mechanisms belong to the ETF side. On the crypto side, expect
+most briefs to come back **blocked**: funding, open interest, liquidations and
+unlocks are the clearest payers in that market and none of their data is in
+the lake. `qr/research/features.py` names what each one needs, and the run
+prints the list. That is a shopping list, not a failure — and if the first
+nights keep pointing at Binance futures `fundingRate` and `openInterestHist`
+(both public, both free), the machine is telling you the next useful job is an
+ingestor rather than another strategy.
 
 ## What is still yours
 

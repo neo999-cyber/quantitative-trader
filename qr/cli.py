@@ -1038,9 +1038,11 @@ def cmd_autopilot(args) -> int:
           f"{len([o for o in night.outcomes if o.outcome == 'killed'])} killed at triage.")
     shopping = night.shopping_list()
     if shopping:
-        print("\n## Data that would unblock tonight's parked ideas\n")
-        for item in shopping:
-            print(f"  - {item}")
+        print("\n## Data the night ran into\n")
+        print("Counted across every candidate that named it, killed ones included — whether")
+        print("an idea survives and whether its data exists are different questions.\n")
+        for item, count in shopping.items():
+            print(f"  {count}x  {item}")
     print("\nEvery line above is in the trial log; `qr trial show` has the detail.")
     return 0
 

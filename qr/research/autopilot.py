@@ -47,7 +47,7 @@ import pandas as pd
 from qr.data.panel import Panel
 from qr.data.sandbox import SandboxSpec, restrict
 from qr.execution.costs import CostModel
-from qr.research import killtest, mechanism
+from qr.research import features, killtest, mechanism
 from qr.research.mechanism import MechanismMemo, Triage
 from qr.research.policy import (
     PolicyBreach,
@@ -114,16 +114,29 @@ class Night:
     def blocked(self) -> list[CandidateOutcome]:
         return [o for o in self.outcomes if o.outcome == "blocked"]
 
-    def shopping_list(self) -> list[str]:
-        """Datasets that would unblock something considered tonight.
+    def shopping_list(self) -> dict[str, int]:
+        """Datasets named tonight, and how many candidates named each.
 
-        The most valuable output of a night where nothing ran. An idea parked
-        for want of funding-rate history is not a failure, it is a request.
+        The most valuable output of a night where nothing ran, and it very
+        nearly went in the bin. It used to draw only from `blocked` candidates
+        — but triage honours a self-kill first, and a model that notices the
+        data is missing says so *by killing its own candidate*. So the first
+        two real nights reported "0 blocked on data" and an empty list while
+        three of the twelve memos said, in as many words, "blocked on data, not
+        on logic".
+
+        Drawing from every candidate that named a missing dataset fixes that
+        without touching the verdicts, which are separately right: a killed
+        candidate stays killed, because whether the *idea* survives and whether
+        the *data* exists are different questions and the shopping list only
+        asks the second one. A dataset named by three dead candidates is still
+        a dataset three lines of enquiry ran into.
         """
-        wanted: set[str] = set()
-        for outcome in self.blocked():
-            wanted.update(outcome.datasets_needed)
-        return sorted(wanted)
+        counts: dict[str, int] = {}
+        for outcome in self.outcomes:
+            for dataset in outcome.datasets_needed:
+                counts[dataset] = counts.get(dataset, 0) + 1
+        return dict(sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])))
 
 
 def run_night(
@@ -203,10 +216,13 @@ def run_night(
         verdict = mechanism.triage(memo)
         mechanism.record(log, memo, verdict)
         outcome.stage = "triage"
+        # Recorded whatever the verdict turns out to be. What a candidate
+        # needed is a fact about the data, and it stays true when the idea is
+        # rejected for some other reason entirely.
+        outcome.datasets_needed = tuple(features.datasets_needed(memo.required_features))
 
         if verdict.verdict == "blocked":
             outcome.outcome, outcome.reason = "blocked", verdict.reason
-            outcome.datasets_needed = verdict.missing_datasets
             say(f"  {memo.candidate_id}: blocked on data")
             continue
         if not verdict.proceed:

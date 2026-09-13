@@ -567,3 +567,48 @@ def test_confidence_is_clamped_because_the_schema_no_longer_bounds_it():
     assert MechanismMemo.from_dict({**raw, "confidence": 7.0}).confidence == 1.0
     assert MechanismMemo.from_dict({**raw, "confidence": -3.0}).confidence == 0.0
     assert MechanismMemo.from_dict({**raw, "confidence": 0.35}).confidence == 0.35
+
+
+# ------------------------------------------------------------ the shopping list
+
+
+def test_the_shopping_list_counts_datasets_named_by_killed_candidates_too(tmp_path, panel):
+    """Two real nights reported "0 blocked" while three memos said "blocked on data".
+
+    Triage honours a self-kill first, and a model that notices the data is
+    missing says so *by killing its own candidate*. Drawing the list only from
+    `blocked` candidates threw away the most useful thing the night produced.
+    """
+    log, policy = _log_with_policy(tmp_path)
+    memos = {
+        # Self-killed, and needs funding data. The verdict stays killed.
+        "a": memo(candidate_id="a_v1", self_verdict="killed",
+                  kill_reason="we trade spot and the payer is in perps",
+                  required_features=("close", "funding_rate")),
+        # Self-killed for an unrelated reason, but also named funding.
+        "b": memo(candidate_id="b_v1", self_verdict="killed", kill_reason="no payer",
+                  required_features=("funding_rate", "open_interest")),
+        # Proceeds, blocked on data.
+        "c": memo(candidate_id="c_v1", required_features=("close", "token_unlocks")),
+    }
+    night = run_night(["a", "b", "c"], log, policy, SANDBOX, panel,
+                      propose=lambda brief: memos[brief])
+
+    assert [o.outcome for o in night.outcomes] == ["killed", "killed", "blocked"]
+    shopping = night.shopping_list()
+    funding = next(d for d in shopping if "fundingRate" in d)
+    assert shopping[funding] == 2, "two candidates ran into funding data"
+    assert any("DropsTab" in d for d in shopping)
+    assert list(shopping)[0] == funding, "the most-wanted dataset comes first"
+
+
+def test_a_killed_candidate_stays_killed_even_when_it_names_missing_data(tmp_path, panel):
+    """The shopping list must not resurrect an idea that failed on its merits."""
+    log, policy = _log_with_policy(tmp_path)
+    dead = memo(candidate_id="d_v1", self_verdict="killed",
+                kill_reason="nobody is forced", required_features=("funding_rate",))
+    night = run_night(["d"], log, policy, SANDBOX, panel, propose=lambda b: dead)
+
+    assert night.outcomes[0].outcome == "killed"
+    assert night.blocked() == []
+    assert night.shopping_list(), "the dataset is still recorded"

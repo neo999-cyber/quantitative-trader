@@ -23,8 +23,10 @@ import argparse
 import json
 import os
 import sys
+from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
@@ -737,17 +739,31 @@ def cmd_gates(args) -> int:
     return 0 if verdict != "FAIL" else 1
 
 
-def cmd_families(args) -> int:
-    """Run the four registered trial families through the gates."""
-    from qr.research.families import (
-        BY_ID,
-        ETF_FAMILIES,
-        LONG_SHORT_FAMILIES,
-        TRIAL_FAMILIES,
-        run_family,
-        summarise,
-    )
-    from qr.validate.report import write_report
+@dataclass
+class _FamilySetup:
+    """Everything `qr families` and `qr accounts` both need to assemble.
+
+    They ask different questions of the same arrangement -- one runs the full
+    ladder once, the other runs gate 2 at several account sizes -- so the
+    panel, universe, costs and family list are built in one place rather than
+    twice with a chance of drifting apart.
+    """
+
+    lake: Any
+    panel: Any
+    universe: Any
+    spec: Any
+    costs: Any
+    log: TrialLog
+    families: list
+    equity: float | None
+    calendar: str
+    holdout_panel: Any = None
+    holdout_universe: Any = None
+
+
+def _family_setup(args) -> "_FamilySetup":
+    from qr.research.families import BY_ID, ETF_FAMILIES, LONG_SHORT_FAMILIES, TRIAL_FAMILIES
 
     long_short = args.asset == "etf-ls"
     etf = args.asset == "etf" or long_short
@@ -808,14 +824,42 @@ def cmd_families(args) -> int:
         default_families = TRIAL_FAMILIES
     chosen = [BY_ID[h] for h in args.only] if args.only else default_families
     missing = [f.hypothesis_id for f in chosen if not log.records(kind="prereg", hypothesis_id=f.hypothesis_id)]
-    if missing and not args.skip_prereg_check:
+    if missing and not getattr(args, "skip_prereg_check", False):
         print(
             "not pre-registered: " + ", ".join(missing) + "\n"
             "Register each before running, or gate 0 will fail them — which it should:\n"
             + "\n".join(f"  qr trial prereg {h} --file docs/prereg/{h}.md" for h in missing),
             file=sys.stderr,
         )
-        return 2
+        raise SystemExit(2)
+
+    return _FamilySetup(
+        lake=lake,
+        panel=panel,
+        universe=universe,
+        spec=spec,
+        costs=costs,
+        log=log,
+        families=chosen,
+        equity=args.equity or (LONG_SHORT_TRIAL_EQUITY if long_short else ETF_TRIAL_EQUITY if etf else None),
+        calendar="xnys" if etf else "continuous",
+        holdout_panel=holdout_panel,
+        holdout_universe=holdout_universe,
+    )
+
+
+def cmd_families(args) -> int:
+    """Run the registered trial families through the gates."""
+    from qr.research.families import run_family, summarise
+    from qr.validate.report import write_report
+
+    try:
+        setup = _family_setup(args)
+    except SystemExit as exc:
+        return int(exc.code or 2)
+    panel, universe, costs, log, lake = setup.panel, setup.universe, setup.costs, setup.log, setup.lake
+    spec, chosen = setup.spec, setup.families
+    holdout_panel, holdout_universe = setup.holdout_panel, setup.holdout_universe
 
     runs = []
     for family in chosen:
@@ -832,8 +876,8 @@ def cmd_families(args) -> int:
             holdout_universe=holdout_universe,
             permutations=args.permutations,
             vol_preserving_permutations=args.vol_permutations,
-            equity=args.equity or (LONG_SHORT_TRIAL_EQUITY if long_short else ETF_TRIAL_EQUITY if etf else None),
-            calendar="xnys" if etf else "continuous",
+            equity=setup.equity,
+            calendar=setup.calendar,
             upto=args.upto,
             stop_on_fail=not args.all_gates,
             progress=_progress,
@@ -854,6 +898,141 @@ def cmd_families(args) -> int:
         )
     print(f"\n{len(passed)} of {len([r for r in runs if not r.spec.control])} real families survived.")
     return 0
+
+
+def cmd_accounts(args) -> int:
+    """Step 0: the same families priced against several account sizes.
+
+    One question, narrowly: **does the cost picture change with account
+    size?** Not "does anything pass at $100,000" -- that would be a search
+    over one more dimension, and selecting the account size that rescues a
+    family is overfitting with extra steps.
+
+    So this runs the gates only as far as **gate 2**. Gates 3 upward ask
+    questions that do not depend on the account at all: a permutation test and
+    a purged CV say the same thing at $1,000 and at $100,000, so re-running
+    them would cost hours and buy nothing. Gate 2, the net-over-gross ratio,
+    the round trips and the cost attribution are the whole diagnostic.
+
+    Nothing here is a verdict. A family whose cost picture transforms at a
+    larger size has earned a *fresh pre-registration*, not a pass -- and the
+    trial log gets a note saying exactly what was evaluated, so the record
+    shows this happened.
+    """
+    from qr.research.families import run_family
+
+    try:
+        setup = _family_setup(args)
+    except SystemExit as exc:
+        return int(exc.code or 2)
+
+    equities = args.equities or [1_000.0, 10_000.0, 100_000.0]
+    rows: list[dict[str, Any]] = []
+    for equity in equities:
+        for family in setup.families:
+            print(f"\n### ${equity:,.0f} — {family.hypothesis_id}", file=sys.stderr)
+            run = run_family(
+                family,
+                setup.panel,
+                setup.costs,
+                setup.universe,
+                setup.spec.name,
+                trial_log=None,
+                manifest_hash=setup.lake.manifest_hash(),
+                permutations=0,
+                equity=equity,
+                calendar=setup.calendar,
+                upto=2,
+                stop_on_fail=False,
+                charge_impact=not args.no_impact,
+                progress=_progress,
+            )
+            stats = run.sweep.results[run.best_variant].stats()
+            gate2 = next((g for g in run.report.results if g.number == 2), None)
+            rows.append(
+                {
+                    "equity": equity,
+                    "hypothesis": family.hypothesis_id,
+                    "sharpe": round(stats["sharpe"], 3),
+                    "net/gross": round(stats["net_over_gross"], 3)
+                    if pd.notna(stats["net_over_gross"])
+                    else None,
+                    "round_trips": int(stats["round_trips"]),
+                    "gate2": gate2.verdict if gate2 else "—",
+                    "dominant cost": _dominant_from(gate2),
+                }
+            )
+
+    frame = pd.DataFrame(rows)
+    print("\n# Account-size sweep — gate 2 only\n")
+    for equity in equities:
+        block = frame[frame["equity"] == equity].drop(columns=["equity"])
+        print(f"\n## ${equity:,.0f}\n")
+        print(table(block))
+
+    print("\n## What moved\n")
+    print(table(_account_deltas(frame, equities)))
+    print(
+        "\nThese are re-scores of the same variants on the same data with one cost "
+        "parameter changed. They are not verdicts and no holdout was touched. A family "
+        "whose cost picture transforms here needs a fresh pre-registration before it is "
+        "run through the full ladder at that size."
+    )
+
+    setup.log.note(
+        "step_0_account_sweep",
+        f"account-size sensitivity: {len(setup.families)} families x {len(equities)} "
+        f"account sizes, gates 0-2 only, no holdout opened, no variant selected",
+        equities=[float(e) for e in equities],
+        families=[f.hypothesis_id for f in setup.families],
+        manifest_hash=setup.lake.manifest_hash(),
+    )
+    out = paths(args.root).reports / "account_sweep.csv"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    frame.to_csv(out, index=False)
+    print(f"\nwrote {out}", file=sys.stderr)
+    return 0
+
+
+def _dominant_from(gate) -> str:
+    """The cost component gate 2 named, if it named one."""
+    if gate is None:
+        return "—"
+    for key in ("dominant_cost", "dominant"):
+        if key in gate.stats:
+            return str(gate.stats[key])
+    detail = gate.detail
+    for name in ("commission", "spread", "impact", "borrow"):
+        if name in detail:
+            return name
+    return ""
+
+
+def _account_deltas(frame: pd.DataFrame, equities: list[float]) -> pd.DataFrame:
+    """One row per family: what the smallest and largest accounts each gave.
+
+    The point of the sweep is the *difference*, so it gets its own table
+    rather than leaving the reader to diff two blocks by eye.
+    """
+    lo, hi = min(equities), max(equities)
+    small = frame[frame["equity"] == lo].set_index("hypothesis")
+    large = frame[frame["equity"] == hi].set_index("hypothesis")
+    rows = []
+    for hid in small.index:
+        a, b = small.loc[hid], large.loc[hid]
+        keeps_a, keeps_b = a["net/gross"], b["net/gross"]
+        rows.append(
+            {
+                "hypothesis": hid,
+                f"net/gross @ ${lo:,.0f}": keeps_a,
+                f"net/gross @ ${hi:,.0f}": keeps_b,
+                "change": None
+                if keeps_a is None or keeps_b is None
+                else round(float(keeps_b) - float(keeps_a), 3),
+                "gate 2": f"{a['gate2']} -> {b['gate2']}",
+            }
+        )
+    return pd.DataFrame(rows)
 
 
 def _parse_grid(pairs: list[str] | None) -> dict:
@@ -1161,7 +1340,7 @@ def build_parser() -> argparse.ArgumentParser:
         dest="no_restrict_universe",
         help="keep every symbol in the lake in the panel, not only those the universe admits (slower; changes gate 1's shuffled-ticker null)",
     )
-    gt.add_argument("--upto", type=int, default=9, help="highest gate to run")
+    gt.add_argument("--upto", type=int, default=11, help="highest gate to run")
     gt.add_argument("--all-gates", action="store_true", dest="all_gates", help="do not stop at the first FAIL")
     gt.set_defaults(func=cmd_gates)
 
@@ -1207,7 +1386,7 @@ def build_parser() -> argparse.ArgumentParser:
         dest="no_restrict_universe",
         help="keep every symbol in the lake in the panel, not only those the universe admits (slower; changes gate 1's shuffled-ticker null)",
     )
-    fam.add_argument("--upto", type=int, default=9)
+    fam.add_argument("--upto", type=int, default=11)
     fam.add_argument("--all-gates", action="store_true", dest="all_gates")
     fam.add_argument(
         "--skip-prereg-check",
@@ -1216,6 +1395,41 @@ def build_parser() -> argparse.ArgumentParser:
         help="run without pre-registrations; gate 0 will fail them, which is the point",
     )
     fam.set_defaults(func=cmd_families)
+
+    acc = sub.add_parser(
+        "accounts",
+        help="Step 0: price the same families against several account sizes (gate 2 only)",
+    )
+    acc.add_argument("--interval", default="1d")
+    acc.add_argument("--start")
+    acc.add_argument("--end")
+    add_universe_args(acc)
+    acc.add_argument("--tier", default=TRIAL_FEE_TIER)
+    acc.add_argument("--bnb", action=argparse.BooleanOptionalAction, default=TRIAL_BNB_DISCOUNT)
+    acc.add_argument("--spread", type=float, default=2.0)
+    acc.add_argument("--asset", choices=("crypto", "etf", "etf-ls"), default="crypto")
+    acc.add_argument(
+        "--no-restrict-universe", action="store_true", dest="no_restrict_universe"
+    )
+    acc.add_argument(
+        "--equities",
+        type=float,
+        nargs="+",
+        default=None,
+        help="account sizes to price against (default: 1000 10000 100000)",
+    )
+    acc.add_argument("--only", nargs="+", help="hypothesis ids, instead of the whole set")
+    acc.add_argument(
+        "--no-impact",
+        action="store_true",
+        dest="no_impact",
+        help="omit the square-root impact term, as the original family runs did — which "
+        "makes a basis-point venue scale-free and the sweep a comparison of a constant "
+        "with itself",
+    )
+    acc.set_defaults(func=cmd_accounts, upto=2, all_gates=False, skip_prereg_check=True,
+                     permutations=0, vol_permutations=0, equity=None,
+                     holdout_start=None, holdout_end=None)
 
     return parser
 

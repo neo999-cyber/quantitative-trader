@@ -238,14 +238,26 @@ def run_family(
     progress=None,
     equity: float | None = None,
     calendar: str = "continuous",
-    upto: int = 9,
+    upto: int = 11,
     stop_on_fail: bool = True,
+    charge_impact: bool = False,
 ) -> FamilyRun:
-    """Sweep one family's registered grid and run it through the gates."""
+    """Sweep one family's registered grid and run it through the gates.
+
+    `charge_impact` adds the square-root market-impact term. It is off by
+    default and every family in the trial so far ran without it: at a $1,000
+    account the orders are thousands of times smaller than the top of book,
+    and `CostModel.impact_bps` argues at length that extrapolating the law
+    down there charges the spread twice. But impact is the *only* channel by
+    which account size reaches a venue priced in basis points, so anything
+    comparing account sizes must turn it on or it is comparing a constant
+    with itself.
+    """
     costs = costs or CostModel.trial()
     strategies = spec.strategies()
     kw = {"equity": equity} if equity else {}
-    sweep = run_sweep(panel, strategies, costs, universe, universe_name, **kw)
+    sweep = run_sweep(panel, strategies, costs, universe, universe_name,
+                      charge_impact=charge_impact, **kw)
 
     if trial_log is not None:
         trial_log.run(

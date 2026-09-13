@@ -42,10 +42,36 @@ ETF trial found IBKR's $0.35 per-order floor eating 94% of a weekly
 strategy's gross return. So: are the nine families failing because they are
 bad ideas, or because $1,000 makes them uneconomic?
 
-**The method.** Re-run all nine at $1,000 / $10,000 / $100,000. Same
-variants, same data, same everything — only `--equity` changes. This is a
-sensitivity analysis on one cost parameter, **not a new search**, so it adds
-nothing to the trial count and gate 4 is unaffected. Record it as such.
+**The method.** `qr accounts` re-runs the families at $1,000 / $10,000 /
+$100,000. Same variants, same data, only the account changes.
+
+**Gates 0–2 only.** Gates 3 upward do not depend on the account at all — a
+permutation test and a purged CV say the same thing at either size — so
+running them would cost hours and buy nothing. Gate 2, net-over-gross, round
+trips and the cost attribution are the whole diagnostic.
+
+**Nothing is selected and no trial is counted.** Choosing the account size
+that rescues a family would be overfitting with extra steps, so the sweep
+picks no winner, opens no holdout, and writes a *note* rather than run
+records: gate 4 must not deflate a future family for a measurement this one
+made. A family whose cost picture transforms here has earned a **fresh
+pre-registration**, not a pass. The tests in
+`tests/qr_platform/test_account_sweep.py` hold each of those to account.
+
+**Impact must be charged, and was not before.** Every family in the trial so
+far ran with the square-root market-impact term **off** (`charge_impact`
+defaults to `False`, and nothing in `qr families` ever set it). For a $1,000
+book that is defensible — `CostModel.impact_bps` argues at length against
+extrapolating the law to orders a thousandfold below the top of book. But
+Binance is priced in basis points with no per-order floor, so fee and spread
+are a fixed *fraction* of whatever is traded and **the account cancels out
+entirely**. Impact is the only channel by which account size reaches such a
+venue. Run without it, the crypto arm of this sweep would have reported "no
+change" for a purely mechanical reason and we would have believed it. So
+`qr accounts` charges impact by default, which also means its $1,000 column
+will not match the original nine runs — the comparison is valid because all
+three columns are priced the same way, and the gap at $1,000 is a second
+finding: how much ignoring impact flattered the original results.
 
 **What it cannot do.** The ETF holdout was opened once already and is spent.
 These are re-scores of in-sample periods. A family that "passes" at $100,000

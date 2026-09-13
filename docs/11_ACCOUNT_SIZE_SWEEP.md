@@ -121,37 +121,74 @@ and this command does not exist on that branch, so switch first:
 
 and paste the two tables it prints into the next section.
 
-### Results — not yet run
+### Results — run 13 September 2026
 
-| hypothesis | asset | $1,000 | $10,000 | $100,000 | reading |
-|---|---|---|---|---|---|
-| tsmom_v1 | crypto | | | | expected `size-independent` |
-| xsmom_v1 | crypto | | | | expected `size-independent` |
-| reversal_v1 | crypto | | | | expected `size-independent` |
-| rsi_reversal_v1 | crypto | | | | expected `size-independent` |
-| etf_tsmom_v1 | etf | | | | |
-| etf_xsmom_v1 | etf | | | | |
-| etf_reversal_v1 | etf | | | | |
-| etf_buyhold_v1 | etf | | | | |
-| ls_xsmom_v1 | etf-ls | | | | |
+Net Sharpe, and the share of gross return surviving costs, at each account
+size. `qr account-size --asset all`, full output in `reports/account_size.csv`.
 
-### How to read what comes back
+| hypothesis | asset | $1,000 | $10,000 | $100,000 | net/gross 1k → 100k | gate 2 | SPA *p* 1k → 100k | reading |
+|---|---|---|---|---|---|---|---|---|
+| tsmom_v1 | crypto | 0.582 | 0.582 | 0.582 | 0.739 → 0.739 | PASS | 0.733 → 0.733 | `size-independent` |
+| xsmom_v1 | crypto | 0.277 | 0.277 | 0.277 | 0.822 → 0.822 | PASS | 0.779 → 0.779 | `size-independent` |
+| reversal_v1 | crypto | −0.048 | −0.048 | −0.048 | n/a (no gross) | FAIL | 0.853 → 0.853 | `size-independent` |
+| rsi_reversal_v1 | crypto | 0.539 | 0.539 | 0.539 | 0.930 → 0.930 | PASS | 0.649 → 0.649 | `size-independent` |
+| etf_tsmom_v1 | etf | 0.778 | 0.949 | **0.979** | 0.781 → 0.984 | PASS | 0.941 → 0.797 | `cheaper, still failing` |
+| etf_xsmom_v1 | etf | 0.574 | 0.694 | 0.797 | 0.685 → 0.950 | PASS | 0.984 → 0.957 | `cheaper, still failing` |
+| etf_reversal_v1 | etf | 0.309 | 0.681 | 0.816 | 0.380 → 0.913 | **FAIL → PASS** | 0.569 → 0.953 | `cost-bound` |
+| etf_buyhold_v1 | etf | 0.749 | 0.756 | 0.767 | 0.974 → 0.997 | PASS | control | `cheaper, still failing` |
+| ls_xsmom_v1 | etf-ls | 0.006 | 0.148 | 0.252 | 0.019 → 0.797 | **FAIL → PASS** | 0.552 → 0.528 | `cost-bound` |
 
-* Any crypto row that is **not** `size-independent` is a defect report, not a
-  result. Stop and look at the cost model before looking at the Sharpe.
-* `etf_reversal_v1` is the family the floor was eating; it is the one most
-  likely to read `cost-bound`. A `cost-bound` reading says the small account
-  cannot afford to find out whether the idea works — not that it works.
-* The SPA column is the one that decides the project. Every family so far has
-  failed gate 5 with *p* > 0.5 against buy-and-hold. If that *p* barely moves
-  from $1,000 to $100,000, then costs were never what stood between these
-  families and an edge, and the honest answer is that the ideas were the
-  problem — which is what the research plan in `docs/10_NEXT.md` is already
-  organised around ("who is forced to trade?", not "what pattern repeats?").
-* `etf_buyhold_v1` is the control and it trades monthly with almost no
-  turnover. It should improve least. If it improves *most*, the comparison in
-  gate 5 is being made against a benchmark that is itself moving with account
-  size, and every other row in the table needs re-reading.
+Trial count: **1541 → 1541.** The sweep searched nothing and was charged
+nothing, as designed.
+
+### What it says
+
+**The crypto half is confirmed, to four significant figures.** All four
+families are *identical* at every size — same best variant, same Sharpe, same
+turnover, same everything. Not "roughly unchanged": unchanged. Account size
+was never the binding constraint there, exactly as reading the cost model
+predicted.
+
+**The ETF half moves a great deal, and it does not matter.** Costs fall
+sharply with size — the long-short book keeps 1.9% of its gross return at
+$1,000 and 80% at $100,000 — and two families flip gate 2 from FAIL to PASS.
+`etf_reversal_v1` and `ls_xsmom_v1` really were unaffordable at $1,000.
+
+**But the SPA column never improves.** That is the column that decides the
+project, and at $100,000 — a hundred times the account — not one family beats
+buy-and-hold: *p* = 0.797, 0.957, 0.953, 0.528. On the crypto side, 0.649 to
+0.853. The families get **cheaper without getting better**.
+
+So the question "are they failing because they are bad ideas, or because
+$1,000 makes them uneconomic?" has an answer:
+
+> **Bad ideas.** Capital makes two of them affordable. It makes none of them
+> good.
+
+### Two checks that had to pass, and did
+
+**The control improved least.** `docs/11` said in advance: if buy-and-hold
+improves *most*, gate 5 is comparing against a benchmark that is itself moving
+with size and every row needs re-reading. Buy-and-hold gained 0.023 of
+net-over-gross; the others gained 0.20 to 0.53. The comparison is sound.
+
+**`etf_reversal_v1`'s SPA got *worse* with size** — 0.569 at $1,000, 0.953 at
+$100,000 — and that is correct rather than alarming. At $1,000 the benchmark
+is crippled by the per-order floor too, so beating it is easy; at $100,000
+buy-and-hold keeps 99.7% of its gross return and the bar is much higher. This
+row only reads correctly because gate 5's benchmark is now priced at the same
+account as the strategy (`docs/07` §8). Under the old code the columns would
+not have been comparable with each other at all.
+
+### One thing to note rather than chase
+
+Gate 11 returned SKIP for every family at every size. That is the gate
+refusing to size from an in-sample Sharpe, which is its whole purpose — but
+the ETF families *do* have holdout records from the first ETF run. The likely
+cause is that those records predate the `holdout_volatility` field gate 11
+needs, and a Sharpe without the volatility behind it cannot be turned into a
+position. Nothing is being sized, so nothing is blocked by it; worth knowing
+before the first family that does reach gate 9.
 
 ## Two things settled elsewhere, recorded so they are not re-derived
 
@@ -189,5 +226,19 @@ should not wait by being forgotten.
 
 ## Verdict
 
-**Pending the ETF run.** The crypto half is answered: no, $1,000 is not why
-the crypto families failed.
+**The next six months are about finding ideas, not finding capital.**
+
+Both halves agree. Crypto is size-independent to four significant figures, so
+the account was never the constraint. The ETF families get dramatically
+cheaper with size — two of them cross from unaffordable to affordable — and
+still cannot beat holding the basket at a hundred times the account.
+
+That closes the question `docs/10_NEXT.md` opened. It also means the money
+question is settled in the least expensive way possible: **there is no deposit
+that would rescue any of these nine.** "It would work with a bigger account"
+was the sentence this sweep existed to test, and the answer is no.
+
+What it does *not* say is that no edge exists at this size — only that these
+nine do not contain one, and that cost was not what hid it. The mechanism
+nights (`docs/15`) point at the actual constraint: instrument access and
+missing data, not capital and not idea generation.

@@ -63,7 +63,13 @@ something is wrong with the cost model and that is the finding.
 **Why it is worth a day.** It decides what the next six months are about:
 finding ideas, or finding capital. Those are different projects.
 
-**Status (13 September 2026): started — `docs/11_ACCOUNT_SIZE_SWEEP.md`.**
+**Status (13 September 2026): DONE — `docs/11_ACCOUNT_SIZE_SWEEP.md`.**
+The answer is **finding ideas, not finding capital**: crypto is size-independent
+to four significant figures, and the ETF families get much cheaper with size
+without the SPA test against buy-and-hold improving at all. No deposit rescues
+any of the nine.
+
+Original note:
 `qr account-size` runs it, writing nothing to the trial log and producing
 readings rather than verdicts. The crypto half is answered already, and more
 strongly than expected: the four crypto families are *bit-identical* across

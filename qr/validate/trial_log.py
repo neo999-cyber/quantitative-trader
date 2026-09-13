@@ -34,7 +34,15 @@ GENESIS = "0" * 64
 #: "policy" is the research budget an unattended run may not exceed: the
 #: promotion quota, the kill-test bar and the stopping rule, fixed before
 #: any run rather than judged after one. See `qr/research/policy.py`.
-Kind = Literal["prereg", "run", "gate", "holdout", "forward", "note", "sandbox", "policy"]
+#: "memo" is a Stage 2 mechanism memo and what triage did to it. The killed
+#: ones matter most: they are what stops the same idea being regenerated and
+#: re-rejected at the same cost, and they are the evidence that the stopping
+#: rule counted eight genuine candidates rather than eight versions of one.
+#: "killtest" is Stage 3's verdict on a memo that survived triage.
+Kind = Literal[
+    "prereg", "run", "gate", "holdout", "forward", "note", "sandbox", "policy",
+    "memo", "killtest",
+]
 
 
 class TrialLogCorrupt(RuntimeError):

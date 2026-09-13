@@ -14,6 +14,7 @@
     qr account-size               every family at $1k/$10k/$100k (a sensitivity)
     qr sandbox declare|show       the discovery slice, where looking is free
     qr policy declare|show        the budget an unattended run may not exceed
+    qr autopilot                  the overnight loop: memo -> kill test -> gates
     qr site                       every gate report as one readable page
 
 The pull commands need internet and are meant to run on the laptop; everything
@@ -895,6 +896,109 @@ def _asset_panel(args, asset: str):
     return lake, panel, universe, spec.name
 
 
+#: Seed briefs for an unattended night. Each names a class of forced trader
+#: rather than a pattern, because that is the generating question the research
+#: plan is organised around — "who is forced to trade?", never "what repeats?".
+DEFAULT_BRIEFS = [
+    "Balanced funds and target-date funds must rebalance to fixed weights at month end. "
+    "Is there a tradeable imbalance in the days into or out of that date?",
+    "Quarter end is larger than month end: more mandates, more reporting, more window dressing. "
+    "Does the quarter-end window differ from an ordinary month end?",
+    "December tax-loss selling is a deadline: holders of losers sell by year end whether they "
+    "want to or not, and buy back in January. Is that visible in a crypto universe?",
+    "Salary, pension contributions and coupon payments arrive at the turn of the month, and "
+    "much of it is invested mechanically. Is the turn of the month different?",
+    "Perpetual futures longs pay funding every eight hours when the crowd is long. Who collects, "
+    "and can spot express any part of it?",
+    "Token unlocks put a seller on a known date who has no choice about the date. Is the "
+    "pre-unlock window tradeable?",
+]
+
+
+def cmd_autopilot(args) -> int:
+    """The overnight loop: memo, kill test, quota, pre-register, twelve gates.
+
+    Every exit is recorded in the trial log, so the morning's question — what
+    happened and why — is answered from the chain rather than from scrollback.
+    """
+    from qr.data.sandbox import SandboxRedeclared, require as require_sandbox
+    from qr.research import mechanism
+    from qr.research.autopilot import promoter, run_night
+    from qr.research.policy import PolicyBreach, require as require_policy
+
+    log = TrialLog(paths(args.root).ensure().trial_log)
+    try:
+        policy = require_policy(log)
+    except PolicyBreach as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+
+    market = "/".join(ASSET_PARTITION[args.asset])
+    try:
+        sandbox = require_sandbox(log, market)
+    except SandboxRedeclared as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+
+    briefs = list(DEFAULT_BRIEFS)
+    if args.briefs_file:
+        text = Path(args.briefs_file).expanduser().read_text(encoding="utf-8")
+        briefs = [b.strip() for b in text.split("\n\n") if b.strip()]
+    if args.brief:
+        briefs = list(args.brief)
+    if args.limit:
+        briefs = briefs[: args.limit]
+
+    lake, panel, universe, _ = _asset_panel(args, args.asset)
+    costs = CostModel.etf_trial() if args.asset.startswith("etf") else CostModel.trial()
+
+    promote = None
+    if not args.no_promote:
+        promote = promoter(
+            log,
+            panel,
+            sandbox,
+            policy,
+            costs=costs,
+            universe=universe,
+            reports_dir=paths(args.root).reports,
+            prereg_dir=Path("docs/prereg"),
+            manifest_hash=lake.manifest_hash(),
+            equity=args.equity,
+            permutations=args.permutations,
+            progress=_progress,
+        )
+
+    night = run_night(
+        briefs,
+        log,
+        policy,
+        sandbox,
+        panel,
+        costs=costs,
+        universe=universe,
+        equity=args.equity,
+        propose=(lambda brief: mechanism.propose(brief, model=args.model)),
+        promote=promote,
+        progress=_progress,
+    )
+
+    print("\n# The night\n")
+    print(table(night.frame()))
+    if night.stopped_early:
+        print(f"\nstopped early: {night.stopped_early}")
+    promoted = night.promoted()
+    print(f"\n{len(promoted)} promoted, {len(night.blocked())} blocked on data, "
+          f"{len([o for o in night.outcomes if o.outcome == 'killed'])} killed at triage.")
+    shopping = night.shopping_list()
+    if shopping:
+        print("\n## Data that would unblock tonight's parked ideas\n")
+        for item in shopping:
+            print(f"  - {item}")
+    print("\nEvery line above is in the trial log; `qr trial show` has the detail.")
+    return 0
+
+
 def cmd_policy(args) -> int:
     """Declare or report the research budget an unattended run may not exceed."""
     from qr.research.policy import PolicyBreach, ResearchPolicy, budget, current, declare
@@ -1538,6 +1642,30 @@ def build_parser() -> argparse.ArgumentParser:
     polsub.add_parser("show", help="what is left of the budget")
 
     pol.set_defaults(func=cmd_policy)
+
+    auto = sub.add_parser(
+        "autopilot",
+        help="the overnight loop: memo, kill test, quota, pre-register, twelve gates",
+    )
+    auto.add_argument("--asset", choices=("crypto", "etf", "etf-ls"), default="crypto")
+    auto.add_argument("--brief", action="append", help="one brief; repeatable, overrides the defaults")
+    auto.add_argument("--briefs-file", dest="briefs_file", help="briefs separated by blank lines")
+    auto.add_argument("--limit", type=int, help="consider at most this many briefs tonight")
+    auto.add_argument("--model", default="claude-opus-5", help="model that writes the memos")
+    auto.add_argument("--equity", type=float, default=None)
+    auto.add_argument("--permutations", type=int, default=200)
+    auto.add_argument(
+        "--no-promote",
+        action="store_true",
+        dest="no_promote",
+        help="stop at the sandbox: write memos and kill tests, register nothing",
+    )
+    auto.add_argument("--interval", default="1d")
+    auto.add_argument("--start")
+    auto.add_argument("--end")
+    add_universe_args(auto)
+    auto.add_argument("--no-restrict-universe", action="store_true", dest="no_restrict_universe")
+    auto.set_defaults(func=cmd_autopilot)
 
     return parser
 

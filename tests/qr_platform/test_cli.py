@@ -377,3 +377,60 @@ def test_policy_declare_then_show(env, tmp_path, capsys):
     out = capsys.readouterr().out
     assert "candidates_remaining" in out and "stopping_rule_reached" in out
     assert TrialLog(paths(tmp_path / "lake").trial_log).verify() == 1
+
+
+def test_autopilot_refuses_to_start_without_its_pre_commitments(env, capsys):
+    assert run(env, "autopilot", "--no-promote") == 2
+    assert "no research policy" in capsys.readouterr().err
+
+    run(env, "policy", "declare")
+    capsys.readouterr()
+    assert run(env, "autopilot", "--no-promote") == 2
+    assert "no discovery sandbox" in capsys.readouterr().err
+
+
+def test_autopilot_runs_a_night_and_records_every_exit(env, tmp_path, capsys, monkeypatch):
+    from qr.research import mechanism as mech
+
+    run(env, "data", "ingest")
+    run(env, "policy", "declare")
+    run(env, "sandbox", "declare", "--market", "binance/spot", "--symbol-fraction", "0.5")
+    capsys.readouterr()
+
+    def fake(brief, model=None, **kw):
+        killed = "December" in brief
+        return mech.MechanismMemo(
+            candidate_id="killed_v1" if killed else "month_end_v1",
+            title="a stub",
+            forced_trader="a fund with a mandate",
+            persistence="momentum works" if killed else "the mandate is audited every month",
+            other_side="market makers",
+            what_breaks_it="continuous rebalancing",
+            crude_version=mech.CrudeVersion(
+                "calendar_event", {"event": "month_end", "before": 2}, "positive"
+            ),
+            required_features=("close", "calendar"),
+        )
+
+    monkeypatch.setattr(mech, "propose", fake)
+    assert (
+        run(
+            env,
+            "autopilot",
+            "--no-promote",
+            "--brief", "month end rebalancing",
+            "--brief", "December tax-loss selling",
+            "--n", "3",
+            "--min-history", "30",
+        )
+        == 0
+    )
+    out = capsys.readouterr().out
+    assert "The night" in out
+    assert "killed" in out
+
+    log = TrialLog(paths(tmp_path / "lake").trial_log)
+    assert log.verify() > 0
+    memos = log.records(kind="memo")
+    assert {m.hypothesis_id for m in memos} == {"month_end_v1", "killed_v1"}
+    assert not log.records(kind="prereg"), "--no-promote must register nothing"

@@ -125,6 +125,13 @@ Most candidates die at (2), on paper, for free.
 - Is it at least **3x** trading costs? Not 1.2x — that lesson was expensive.
 - Does the turnover survive the per-order floor at the size Step 0 found?
 
+**Status (13 September 2026): Stages 2 and 3 are built.** `qr autopilot` runs
+memo -> triage -> kill test unattended; `docs/14_RUNNING_IT.md` is the laptop
+guide. Triage re-decides without reference to the model's own verdict, and a
+candidate needing data the lake lacks is *blocked* with the dataset named
+rather than killed — see `qr/research/features.py`. Today only the calendar
+family is runnable; every other mechanism on the list above waits on data.
+
 ### Stage 4 — pre-register and run the gates (~1 week each)
 
 **Three to five candidates a quarter, not fifty.** Every additional variant

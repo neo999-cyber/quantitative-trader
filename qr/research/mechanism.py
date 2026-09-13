@@ -86,6 +86,17 @@ PRIMITIVES: dict[str, dict[str, Any]] = {
                  "expresses": "short-term reversal — tested as reversal_v1, failed"},
 }
 
+#: JSON Schema keywords structured outputs is known to accept. Deliberately a
+#: list of what has been *proven* to pass rather than a claim about the API's
+#: full capability: two nights were spent discovering, one rejection at a time,
+#: that `additionalProperties: true` and numeric `minimum`/`maximum` are not
+#: supported. A test asserts the schema uses nothing outside this set, so the
+#: next unsupported keyword is caught by pytest in a second rather than by a
+#: run that has already loaded the lake.
+SCHEMA_KEYWORDS = frozenset(
+    {"type", "properties", "required", "additionalProperties", "description", "enum", "anyOf", "items"}
+)
+
 #: Phrases that are a pattern wearing a mechanism's clothes. Question 2 asks
 #: why the forced trader keeps being forced; an answer drawn from this list is
 #: an answer about price behaviour, which is the thing being explained rather
@@ -201,7 +212,15 @@ MEMO_SCHEMA = {
         "required_features": {"type": "array", "items": {"type": "string"}},
         "self_verdict": {"type": "string", "enum": ["proceed", "killed"]},
         "kill_reason": {"type": "string"},
-        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        # No `minimum`/`maximum`: structured outputs rejects numeric bounds
+        # ("For 'number' type, properties maximum, minimum are not supported"),
+        # which cost a second night. The range lives in the description and
+        # `from_dict` clamps it, because a confidence of 7 is a malformed memo
+        # rather than a very confident one.
+        "confidence": {
+            "type": "number",
+            "description": "Between 0 and 1. Low is the honest answer for most candidates.",
+        },
     },
     "required": [
         "candidate_id", "title", "forced_trader", "persistence", "other_side",
@@ -273,7 +292,7 @@ class MechanismMemo:
             required_features=tuple(raw.get("required_features") or ()),
             self_verdict=raw.get("self_verdict", "proceed"),
             kill_reason=raw.get("kill_reason", ""),
-            confidence=float(raw.get("confidence", 0.0)),
+            confidence=min(1.0, max(0.0, float(raw.get("confidence", 0.0)))),
             model=model,
         )
 

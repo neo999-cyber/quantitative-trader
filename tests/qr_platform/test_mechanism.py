@@ -524,3 +524,46 @@ def test_a_rate_limit_or_server_error_does_not_stop_the_night(tmp_path, panel):
     night = run_night(["a", "b"], log, policy, SANDBOX, panel, propose=flaky)
     assert len(calls) == 2
     assert not night.stopped_early
+
+
+def test_the_schema_uses_only_keywords_the_api_is_known_to_accept():
+    """Two nights were spent finding these one rejection at a time.
+
+    `additionalProperties: true` went first, then numeric `minimum`/`maximum`
+    on `confidence`. Each cost a run that had already loaded the lake. The
+    whitelist is what has been *proven* to pass, not a claim about the API's
+    full capability, and it fails here in a second instead.
+    """
+    from qr.research.mechanism import MEMO_SCHEMA, SCHEMA_KEYWORDS
+
+    def walk(node, path="root"):
+        if isinstance(node, dict):
+            if {"type", "anyOf", "enum"} & set(node):
+                for key in node:
+                    assert key in SCHEMA_KEYWORDS, f"{path}.{key} is not a known-good keyword"
+            for key, value in node.items():
+                if key == "properties":
+                    for name, sub in value.items():
+                        walk(sub, f"{path}.{name}")
+                else:
+                    walk(value, f"{path}.{key}")
+        elif isinstance(node, list):
+            for i, value in enumerate(node):
+                walk(value, f"{path}[{i}]")
+
+    walk(MEMO_SCHEMA)
+
+
+def test_confidence_is_clamped_because_the_schema_no_longer_bounds_it():
+    from qr.research.mechanism import MechanismMemo
+
+    raw = {
+        "candidate_id": "x_v1", "title": "t", "forced_trader": "f", "persistence": "p",
+        "other_side": "o", "what_breaks_it": "w",
+        "crude_version": {"primitive": "calendar_event", "params": {},
+                          "expected_sign": "positive", "rationale": ""},
+        "required_features": [], "self_verdict": "proceed", "kill_reason": "",
+    }
+    assert MechanismMemo.from_dict({**raw, "confidence": 7.0}).confidence == 1.0
+    assert MechanismMemo.from_dict({**raw, "confidence": -3.0}).confidence == 0.0
+    assert MechanismMemo.from_dict({**raw, "confidence": 0.35}).confidence == 0.35

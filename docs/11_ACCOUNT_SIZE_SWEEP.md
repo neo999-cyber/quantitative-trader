@@ -15,10 +15,13 @@ strategy. So: re-score every family at **$1,000 / $10,000 / $100,000**, same
 variants, same data, same everything, with only the account size the cost model
 prices orders against changed.
 
-    qr account-size                     # all nine, three sizes
-    qr account-size --asset etf         # one trial's families
+    qr account-size
+    qr account-size --asset etf
     qr account-size --only etf_reversal_v1 --sizes 1000 5000 25000 100000
     qr account-size --out reports/account_size.csv
+
+Bare, that is all nine families at the three sizes; `--asset` narrows it to one
+trial's families.
 
 ## What this is, and what it is not
 

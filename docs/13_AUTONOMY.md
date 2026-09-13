@@ -45,7 +45,10 @@ Rationing by design, not by good intentions.
 
 ### The policy, as declared
 
-    qr policy declare            # 2/week, 5/quarter, ≤250 variants, 3x costs, 8 candidates
+    qr policy declare
+
+Those defaults are 2 a week, 5 a quarter, ≤250 variants a family, 3x costs at
+the kill test, and 8 candidates before the stopping rule fires.
 
 * **2 a week, 5 a quarter.** `docs/10_NEXT.md`'s "three to five candidates a
   quarter, not fifty", made mechanical.
@@ -67,23 +70,34 @@ applies to the weekly quota, because a rate limit that retroactively charges
 for last week is not a rate limit, it is an outage. (A test found that one, not
 a reviewer.)
 
-## What is not built yet
+## The rest of the funnel, as built
 
-**Stage 2, the mechanism memo generator.** Claude called from inside `qr` with
-structured outputs — the pattern `centaur/screens/catalyst.py` already uses —
-answering the five questions from `docs/10_NEXT.md` and, critically, *killing
-its own candidate at question 2* when the answer to "why will they keep being
-forced?" is "momentum works". Most candidates should die there, on paper, for
-free. Needs `ANTHROPIC_API_KEY` on the laptop.
+**Stage 2, the mechanism memo.** `qr/research/mechanism.py`. Claude answers the
+five questions with structured outputs; `triage()` then re-decides from the
+structured fields **without reference to the model's own verdict**, because a
+model asked to generate candidates and judge them will judge its own work
+kindly. A question-2 answer drawn from price behaviour is killed; a crude
+version that compiles to one of the nine already-failed families is killed
+whatever the prose says; an idea needing data the lake lacks is *blocked* with
+the dataset named, not killed. Needs `ANTHROPIC_API_KEY`.
 
-**Stage 3, the kill-test harness.** Run the crudest version of a surviving
-mechanism in the sandbox and check three things: does the effect exist, is it
-at least 3x costs, does the turnover survive the per-order floor at the size
-Step 0 found.
+**Stage 3, the kill tests.** `qr/research/killtest.py`. Runs the crude version
+on the discovery side — refusing a panel that is not stamped, rather than
+trusting the caller — and asks three questions in order: does the effect exist
+*in the direction the memo committed to*, is it at least 3x costs, does
+anything survive. The sign check is what stops a memo being retrofitted to its
+result.
 
-**The overnight loop** (`qr autopilot`) that ties them together: explore →
-memo → kill test → `check_promotion` → pre-register → run the twelve gates →
-write the report → stop when the quota or the stopping rule says so.
+**The loop.** `qr autopilot`. Every exit is recorded in the chain, so the
+morning's question is answered from the log rather than from scrollback.
+
+**The gap that building it exposed.** Almost none of the mechanisms the
+research plan is organised around can be tested with what is in the lake:
+funding, open interest, liquidations, index membership, unlocks. The calendar
+is the only one OHLCV supports, which is why `CalendarEvent` exists. Expect the
+first nights to return mostly `blocked`, pointing at the same missing dataset —
+that is the machine saying what to build next, and it is a more useful answer
+than another runnable pattern.
 
 ## Why this is safe to leave alone
 

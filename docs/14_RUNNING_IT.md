@@ -6,6 +6,15 @@ working overnight.*
 Read `docs/13_AUTONOMY.md` first for *why* the boundaries are where they are.
 This is the how.
 
+## One note on pasting
+
+Every block below is meant to be run **one line at a time**. Interactive `zsh`
+does not treat `#` as a comment unless `setopt interactive_comments` is set, so
+a command pasted with a trailing `# explanation` arrives at the program as an
+argument and is rejected — which is exactly what an earlier version of this
+document caused. Nothing here has trailing comments any more; the explanations
+sit under each block.
+
 ## Once: get the laptop onto this branch
 
 The checkout is on `claude/admiring-ptolemy-tfp528`, which has none of this.
@@ -15,17 +24,27 @@ The checkout is on `claude/admiring-ptolemy-tfp528`, which has none of this.
     git checkout claude/funny-faraday-nizzck
     source .venv/bin/activate
     pip install -e ".[dev,qr,gates,ai]"
-    pytest -q                       # expect a clean run before trusting anything
-    export ANTHROPIC_API_KEY=...    # the memo generator needs it
+    pytest -q
+    export ANTHROPIC_API_KEY=...
+
+Expect `pytest -q` to be clean before trusting anything below.
+`ANTHROPIC_API_KEY` is what the memo generator uses.
 
 ## Once: fill the lake
 
 Needs network; the cloud sandbox has none, which is why this step is yours.
 
-    qr data pull        # Binance bucket -> local mirror (tens of thousands of files)
-    qr data ingest      # mirror -> Parquet lake + DuckDB manifest
-    qr data qa          # read this before believing anything downstream
-    qr data etf-pull && qr data etf-ingest      # the ETF side, if you want Step 0 finished
+    qr data pull
+    qr data ingest
+    qr data qa
+    qr data etf-pull
+    qr data etf-ingest
+
+`pull` fetches the Binance bucket into the local mirror — tens of thousands of
+small files, so it is the slow one. `ingest` turns the mirror into the Parquet
+lake and the DuckDB manifest. **Read the `qa` report before believing anything
+downstream.** The two `etf-` commands are the Tiingo side, needed to finish
+Step 0.
 
 ## Once, and irreversibly: the two pre-commitments
 
@@ -91,13 +110,19 @@ To watch it think without letting it register anything:
 
 To point it at your own ideas:
 
-    qr autopilot --briefs-file my_briefs.txt      # blank line between briefs
+    qr autopilot --briefs-file my_briefs.txt
+
+One brief per paragraph, blank line between them.
 
 ## Every morning
 
-    qr policy show      # what is left of the quota and the stopping rule
-    qr trial verify     # the chain, unbroken
-    qr site             # every gate report as one page
+    qr policy show
+    qr trial verify
+    qr site
+
+`policy show` is what is left of the quota and the stopping rule, `trial
+verify` walks the hash chain, and `site` renders every gate report as one
+page.
 
 The night's table is printed at the end of the run and every line of it is in
 the log. Three outcomes are worth reading carefully:

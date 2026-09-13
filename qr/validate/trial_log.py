@@ -137,25 +137,47 @@ class TrialLog:
         ]
 
     def head(self) -> TrialRecord | None:
-        """The last record, read without loading the whole file."""
+        """The last record, read without loading the whole file.
+
+        The subtlety is which newline counts. An earlier version walked
+        backwards in 4 KB blocks and stopped as soon as the buffer held any
+        newline at all — but the file's own terminating newline satisfies that
+        on the very first read, so for any record longer than one block it
+        returned a *fragment* of that record and the JSON decoder raised
+        "Extra data". It survived for months because nothing this project wrote
+        was that big; the first Stage 2 mechanism memo was, and every append
+        after it failed.
+
+        So: drop the terminating newline first, then look for a separator in
+        what remains. What follows it is the last complete line; if there is
+        none and the whole file has been read, the file is one line. The block
+        doubles each pass so an unusually large record costs a handful of reads
+        rather than one per 4 KB.
+        """
         if not self.path.exists() or self.path.stat().st_size == 0:
             return None
-        last = None
+        last = b""
         with self.path.open("rb") as fh:
-            # Walk backwards in blocks until a complete final line is in hand.
             size = fh.seek(0, os.SEEK_END)
             block = 4096
             buf = b""
-            while size > 0:
+            while True:
                 step = min(block, size)
                 size -= step
                 fh.seek(size)
                 buf = fh.read(step) + buf
-                lines = [ln for ln in buf.split(b"\n") if ln.strip()]
-                if lines and (size == 0 or buf.count(b"\n") >= 1):
-                    last = lines[-1]
+                # Trailing newlines terminate the record; they do not separate
+                # it from anything, so they must not be mistaken for a boundary.
+                stripped = buf.rstrip(b"\n")
+                cut = stripped.rfind(b"\n")
+                if cut != -1:
+                    last = stripped[cut + 1 :]
                     break
-        return TrialRecord.from_json(last.decode("utf-8")) if last else None
+                if size == 0:
+                    last = stripped
+                    break
+                block *= 2
+        return TrialRecord.from_json(last.decode("utf-8")) if last.strip() else None
 
     def trial_count(self, hypothesis_id: str | None = None) -> int:
         """Every variant ever run — the N that gate 4's deflation consumes."""

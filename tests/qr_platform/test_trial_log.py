@@ -143,3 +143,67 @@ def test_a_hypothesis_registered_inline_has_no_document_to_drift_from(tmp_path):
     log.prereg("h1", "typed straight in", source="inline")
     log.prereg("h2", "no source recorded at all")
     assert log.document_drift() == []
+
+
+# ------------------------------------------------- a record larger than a block
+
+
+def test_head_reads_a_record_larger_than_one_block(tmp_path):
+    """The chain broke the first time a record exceeded 4 KB.
+
+    `head()` walked backwards in blocks and accepted the buffer as soon as it
+    held any newline — but the file's own terminating newline satisfies that on
+    the first read, so a long record came back as a fragment and the decoder
+    raised "Extra data". Nothing was big enough until Stage 2 wrote a mechanism
+    memo, and then every append after one failed.
+    """
+    log = TrialLog(tmp_path / "trial.jsonl")
+    log.note("small_v1", "short")
+    log.note("huge_v1", "y" * 20_000)
+
+    head = log.head()
+    assert head is not None
+    assert head.hypothesis_id == "huge_v1"
+    assert head.payload["text"] == "y" * 20_000
+
+
+def test_appending_after_a_large_record_keeps_the_chain(tmp_path):
+    log = TrialLog(tmp_path / "trial.jsonl")
+    log.note("small_v1", "short")
+    log.note("huge_v1", "y" * 50_000)
+    log.note("after_v1", "short again")
+
+    assert log.verify() == 3
+    assert log.head().hypothesis_id == "after_v1"
+    assert [r.seq for r in log] == [0, 1, 2]
+
+
+def test_head_handles_a_file_that_is_one_very_long_record(tmp_path):
+    log = TrialLog(tmp_path / "trial.jsonl")
+    log.note("only_v1", "z" * 30_000)
+    assert log.head().hypothesis_id == "only_v1"
+    assert log.verify() == 1
+
+
+def test_a_memo_sized_record_round_trips(tmp_path):
+    """The real shape that found this: five prose answers and a triage verdict."""
+    from qr.research.mechanism import CrudeVersion, MechanismMemo, record, triage
+
+    log = TrialLog(tmp_path / "trial.jsonl")
+    prose = "A balanced fund must rebalance to fixed weights. " * 60
+    memo = MechanismMemo(
+        candidate_id="month_end_v1",
+        title="Balanced funds rebalance at month end",
+        forced_trader=prose,
+        persistence=prose,
+        other_side=prose,
+        what_breaks_it=prose,
+        crude_version=CrudeVersion("calendar_event", {"event": "month_end"}, "positive", prose),
+        required_features=("close", "calendar"),
+    )
+    assert len(memo.as_markdown()) > 4096, "the fixture must exceed one block to be a test"
+
+    record(log, memo, triage(memo))
+    record(log, memo, triage(memo))
+    assert log.verify() == 2
+    assert log.head().payload["memo"]["candidate_id"] == "month_end_v1"

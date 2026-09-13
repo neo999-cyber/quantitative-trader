@@ -1278,7 +1278,7 @@ def build_parser() -> argparse.ArgumentParser:
         dest="no_restrict_universe",
         help="keep every symbol in the lake in the panel, not only those the universe admits (slower; changes gate 1's shuffled-ticker null)",
     )
-    gt.add_argument("--upto", type=int, default=9, help="highest gate to run")
+    gt.add_argument("--upto", type=int, default=11, help="highest gate to run")
     gt.add_argument("--all-gates", action="store_true", dest="all_gates", help="do not stop at the first FAIL")
     gt.set_defaults(func=cmd_gates)
 
@@ -1324,7 +1324,7 @@ def build_parser() -> argparse.ArgumentParser:
         dest="no_restrict_universe",
         help="keep every symbol in the lake in the panel, not only those the universe admits (slower; changes gate 1's shuffled-ticker null)",
     )
-    fam.add_argument("--upto", type=int, default=9)
+    fam.add_argument("--upto", type=int, default=11)
     fam.add_argument("--all-gates", action="store_true", dest="all_gates")
     fam.add_argument(
         "--skip-prereg-check",

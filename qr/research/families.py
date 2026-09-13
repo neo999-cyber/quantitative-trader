@@ -238,7 +238,7 @@ def run_family(
     progress=None,
     equity: float | None = None,
     calendar: str = "continuous",
-    upto: int = 9,
+    upto: int = 11,
     stop_on_fail: bool = True,
 ) -> FamilyRun:
     """Sweep one family's registered grid and run it through the gates."""

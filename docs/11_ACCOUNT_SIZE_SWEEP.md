@@ -108,8 +108,12 @@ IBKR charges per share with a floor per order and the cost in basis points
 therefore collapses with order size: one leg of a twelve-ETF basket is an $83
 order paying 42 bps at $1,000, and the same trade pays 0.42 bps at $100,000.
 
-**To run it:**
+**To run it.** The laptop checkout is on `claude/admiring-ptolemy-tfp528`
+and this command does not exist on that branch, so switch first:
 
+    git fetch origin claude/funny-faraday-nizzck
+    git checkout claude/funny-faraday-nizzck
+    source .venv/bin/activate
     qr account-size --asset all --out reports/account_size.csv
 
 and paste the two tables it prints into the next section.
@@ -145,6 +149,40 @@ and paste the two tables it prints into the next section.
   turnover. It should improve least. If it improves *most*, the comparison in
   gate 5 is being made against a benchmark that is itself moving with account
   size, and every other row in the table needs re-reading.
+
+## Two things settled elsewhere, recorded so they are not re-derived
+
+**A second implementation of this sweep existed and was discarded.**
+`qr accounts`, on `claude/admiring-ptolemy-tfp528` (commit e2ac9a0), was built
+in parallel and is not in this history. Three reasons, so it is not
+reintroduced by someone finding it and assuming it was lost:
+
+* It passed `trial_log=None` to keep the log clean. That works, and it also
+  blinds gate 0 to the pre-registration and leaves gate 4 deflating against
+  the current sweep instead of the real log. `SealedTrialLog` keeps the reads
+  and drops only the writes, which is the distinction that matters.
+* It stopped at gate 2, which cuts gate 5 — and gate 5 carries the SPA test
+  against buy-and-hold, the row that actually decides whether costs or the
+  ideas are the problem. A cost sweep that cannot see the cost-adjusted
+  comparison is answering a smaller question than the one asked.
+* It did not have the `buy_and_hold_benchmark` equity fix (§ above), without
+  which the three columns are not comparable anyway.
+
+**Impact is not charged in any family run, so the cost model currently implies
+unbounded capacity.** That is true, it was found while building the other
+implementation, and it is *not* a Step 0 problem. Turning impact on for this
+sweep was the wrong response twice over: `CostModel.impact_bps` argues
+explicitly against extrapolating the √-law to orders far below the top of
+book, and impact can only ever make the *larger* accounts look worse — so it
+cannot change the answer to "is $1,000 too small?", only muddy it. The
+treatment here stands: crypto is size-independent by construction, and if it
+ever moves that is a defect report.
+
+The capacity question is real and belongs on its own: what the ceiling
+actually is, measured with a charge that is defensible at these participations
+rather than one extrapolated a thousandfold below its fitted range. Nothing in
+this project is near a size where it binds, which is why it can wait — but it
+should not wait by being forgotten.
 
 ## Verdict
 

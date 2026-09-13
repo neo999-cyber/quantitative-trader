@@ -9,7 +9,7 @@ The validation engine runs **gates 0–11**, complete. 560 tests pass.
 
 **Nine families have been pre-registered and run. None has passed gate 5.**
 Buy-and-hold beat every one of them (SPA *p* > 0.5 in all cases, across two
-asset classes and ~1,450 variants). The full record is in `docs/06` (crypto)
+asset classes and well over a thousand variants). The full record is in `docs/06` (crypto)
 and `docs/08` (ETF), and `qr site` renders it as one page.
 
 Nothing has ever been traded. No live order has ever been placed.
@@ -135,7 +135,9 @@ family is runnable; every other mechanism on the list above waits on data.
 ### Stage 4 — pre-register and run the gates (~1 week each)
 
 **Three to five candidates a quarter, not fifty.** Every additional variant
-raises gate 4's bar for every future family; the trial log is at ~1,450.
+raises gate 4's bar for every future family, and the log is already in the
+thousands — `qr trial verify` prints the count, which is the only figure worth
+quoting because a written-down one goes stale the next time anything runs.
 Searching wider is not the lever. Choosing better is.
 
 ### Running stages 2 and 3 as parallel agents (worth trying, when we get there)

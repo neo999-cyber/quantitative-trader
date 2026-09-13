@@ -18,7 +18,7 @@ should do this all night, and the more it does the better.
 
 **Stage 4 is not.** Every variant that reaches the gates raises gate 4's
 deflation bar for every family that comes after it, permanently. The trial log
-is already at ~1,450. So an agent that decides what to promote *after seeing
+is already in the thousands. So an agent that decides what to promote *after seeing
 results* does two bad things, not one: given enough attempts it eventually
 promotes noise, and it also spends the project's remaining ability to
 demonstrate a real edge — the failure nobody notices until the edge arrives and

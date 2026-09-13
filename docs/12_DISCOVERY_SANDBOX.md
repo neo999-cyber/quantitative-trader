@@ -86,8 +86,10 @@ autonomous.
 Stage 4 is the opposite and the distinction is not stylistic: every variant
 raises gate 4's deflation bar for every future family, so an agent that decides
 what to promote after seeing results will eventually promote noise *and* burn
-the project's ability to detect a real edge. The trial log is already at
-~1,450. Autonomy there is safe only under a promotion rule and a quota fixed
-in code before any run — rationing by design, not by good intentions.
+the project's ability to detect a real edge. The trial log is already in the
+thousands — `qr trial verify` prints the count. Autonomy there is safe only
+under a promotion rule and a quota fixed in code before any run: rationing by
+design, not by good intentions.
 
-That quota is the next thing to build.
+That quota is `qr/research/policy.py`, and the funnel that spends it is
+`qr autopilot`. See `docs/13_AUTONOMY.md` and `docs/14_RUNNING_IT.md`.

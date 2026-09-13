@@ -78,6 +78,15 @@ PRIMITIVES: dict[str, dict[str, Any]] = {
         "already_failed": False,
         "expresses": "a forced trade on a knowable date: month/quarter end, turn of month, year end",
     },
+    "funding_tilt": {
+        "class": "FundingTilt",
+        "module": "qr.strategies.funding",
+        "already_failed": False,
+        "expresses": (
+            "spot positioning from perpetual funding: hold the pairs whose levered crowd is "
+            "most one-sided. Reads funding, never collects it — no spot position can"
+        ),
+    },
     "tsmom": {"class": "TSMOM", "module": "qr.strategies.library", "already_failed": True,
               "expresses": "time-series momentum — tested as tsmom_v1, failed"},
     "xsmom": {"class": "CrossSectionalMomentum", "module": "qr.strategies.library", "already_failed": True,
@@ -350,7 +359,7 @@ def _reads_as_a_pattern(text: str) -> str | None:
     return None
 
 
-def triage(memo: MechanismMemo) -> Triage:
+def triage(memo: MechanismMemo, panel=None) -> Triage:
     """Decide what happens to a memo. Deterministic, and deliberately harsh.
 
     Order matters. A self-kill is honoured first because it is the outcome the
@@ -380,10 +389,24 @@ def triage(memo: MechanismMemo) -> Triage:
     if blocked:
         return Triage(
             "blocked",
-            "the mechanism is coherent but the data is not in the lake: "
+            "the mechanism is coherent but this project has no source for the data: "
             + ", ".join(f.key for f in blocked),
             tuple(features.datasets_needed(memo.required_features)),
         )
+
+    # The registry says what this project *can* have; the panel says what this
+    # lake *does* have. Conflating them sends a memo whose mechanism is fine to
+    # a kill test with no data, where it produces a strategy holding nothing —
+    # which reads exactly like a strategy that found nothing.
+    if panel is not None:
+        absent = features.satisfied_by(panel, memo.required_features)
+        if absent:
+            return Triage(
+                "blocked",
+                "the data exists but has not been pulled into this lake: "
+                + ", ".join(absent)
+                + ". Run the ingestor and this candidate is ready.",
+            )
 
     spec = PRIMITIVES.get(memo.crude_version.primitive)
     if spec is None:

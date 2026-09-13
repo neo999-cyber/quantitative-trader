@@ -20,7 +20,15 @@ import pandas as pd
 #: in the book comes from the latter. A source that has no such distinction
 #: (crypto) simply does not carry the column, and `from_frames` drops any field
 #: that is not present for every symbol.
-FIELDS = ("open", "high", "low", "close", "close_unadjusted", "volume", "quote_volume", "trades")
+#: `funding_rate`, `open_interest` and `open_interest_usd` come from the
+#: perpetual market rather than from the bars themselves — see
+#: `qr/data/funding.py`. They are features *about* a spot pair, never a licence
+#: to trade the perp, and they are absent from any panel that was not joined
+#: to them.
+FIELDS = (
+    "open", "high", "low", "close", "close_unadjusted", "volume", "quote_volume", "trades",
+    "funding_rate", "open_interest", "open_interest_usd",
+)
 
 
 @dataclass(frozen=True)

@@ -61,13 +61,16 @@ def memo(**overrides) -> MechanismMemo:
 def test_the_registry_separates_what_we_have_from_what_we_would_need():
     assert features.available("calendar")
     assert features.available("quote_volume")
-    assert not features.available("funding_rate")
+    # Obtainable since the funding ingestor. "Available" is a claim about the
+    # project, not about any particular lake — see the panel check below.
+    assert features.available("funding_rate")
     assert not features.available("token_unlocks")
+    assert not features.available("liquidations")
 
 
 def test_a_blocked_idea_names_the_dataset_that_would_unblock_it():
-    needed = features.datasets_needed(["close", "funding_rate", "token_unlocks"])
-    assert any("fundingRate" in d for d in needed)
+    needed = features.datasets_needed(["close", "liquidations", "token_unlocks"])
+    assert any("forceOrder" in d for d in needed)
     assert any("DropsTab" in d for d in needed)
 
 
@@ -116,7 +119,7 @@ def test_restating_an_already_failed_family_is_killed_not_rerun():
 
 
 def test_missing_data_blocks_rather_than_kills():
-    verdict = triage(memo(required_features=("close", "funding_rate")))
+    verdict = triage(memo(required_features=("close", "token_unlocks")))
     assert verdict.verdict == "blocked"
     assert verdict.missing_datasets
     assert not verdict.proceed
@@ -266,7 +269,7 @@ def test_a_night_records_every_exit(tmp_path, panel):
     log, policy = _log_with_policy(tmp_path)
     memos = {
         "a": memo(candidate_id="a_v1", self_verdict="killed", kill_reason="no obligation"),
-        "b": memo(candidate_id="b_v1", required_features=("close", "funding_rate")),
+        "b": memo(candidate_id="b_v1", required_features=("close", "token_unlocks")),
         "c": memo(candidate_id="c_v1"),
     }
     night = run_night(
@@ -274,8 +277,7 @@ def test_a_night_records_every_exit(tmp_path, panel):
     )
 
     assert [o.outcome for o in night.outcomes] == ["killed", "blocked", "failed"]
-    assert night.shopping_list()
-    assert any("fundingRate" in d for d in night.shopping_list())
+    assert any("DropsTab" in d for d in night.shopping_list())
     assert log.verify() > 0
 
 
@@ -581,13 +583,13 @@ def test_the_shopping_list_counts_datasets_named_by_killed_candidates_too(tmp_pa
     """
     log, policy = _log_with_policy(tmp_path)
     memos = {
-        # Self-killed, and needs funding data. The verdict stays killed.
+        # Self-killed, and needs liquidation data. The verdict stays killed.
         "a": memo(candidate_id="a_v1", self_verdict="killed",
-                  kill_reason="we trade spot and the payer is in perps",
-                  required_features=("close", "funding_rate")),
-        # Self-killed for an unrelated reason, but also named funding.
+                  kill_reason="we trade spot and the payer is levered",
+                  required_features=("close", "liquidations")),
+        # Self-killed for an unrelated reason, but also named liquidations.
         "b": memo(candidate_id="b_v1", self_verdict="killed", kill_reason="no payer",
-                  required_features=("funding_rate", "open_interest")),
+                  required_features=("liquidations",)),
         # Proceeds, blocked on data.
         "c": memo(candidate_id="c_v1", required_features=("close", "token_unlocks")),
     }
@@ -596,19 +598,50 @@ def test_the_shopping_list_counts_datasets_named_by_killed_candidates_too(tmp_pa
 
     assert [o.outcome for o in night.outcomes] == ["killed", "killed", "blocked"]
     shopping = night.shopping_list()
-    funding = next(d for d in shopping if "fundingRate" in d)
-    assert shopping[funding] == 2, "two candidates ran into funding data"
+    liquidations = next(d for d in shopping if "forceOrder" in d)
+    assert shopping[liquidations] == 2, "two candidates ran into liquidation data"
     assert any("DropsTab" in d for d in shopping)
-    assert list(shopping)[0] == funding, "the most-wanted dataset comes first"
+    assert list(shopping)[0] == liquidations, "the most-wanted dataset comes first"
 
 
 def test_a_killed_candidate_stays_killed_even_when_it_names_missing_data(tmp_path, panel):
     """The shopping list must not resurrect an idea that failed on its merits."""
     log, policy = _log_with_policy(tmp_path)
     dead = memo(candidate_id="d_v1", self_verdict="killed",
-                kill_reason="nobody is forced", required_features=("funding_rate",))
+                kill_reason="nobody is forced", required_features=("liquidations",))
     night = run_night(["d"], log, policy, SANDBOX, panel, propose=lambda b: dead)
 
     assert night.outcomes[0].outcome == "killed"
     assert night.blocked() == []
     assert night.shopping_list(), "the dataset is still recorded"
+
+
+def test_a_feature_this_project_has_but_this_lake_lacks_is_blocked(panel):
+    """Obtainable and present are different, and conflating them is expensive.
+
+    `funding_rate` is available to the project — the ingestor exists — but a
+    lake that has not pulled it carries no such column. Sending the memo on
+    would produce a strategy holding nothing, which reads exactly like a
+    strategy that found nothing.
+    """
+    needs_funding = memo(required_features=("close", "funding_rate"))
+    assert triage(needs_funding).proceed, "the project can have it"
+
+    verdict = triage(needs_funding, panel)
+    assert verdict.verdict == "blocked"
+    assert "has not been pulled into this lake" in verdict.reason
+    assert "funding_rate" in verdict.reason
+
+
+def test_the_same_memo_proceeds_once_the_lake_has_the_column(panel):
+    import numpy as np
+    import pandas as pd
+
+    from qr.data.funding import attach
+
+    funded = attach(
+        panel,
+        {s: pd.DataFrame({"funding_rate": 1e-4}, index=panel.index) for s in panel.symbols},
+    )
+    verdict = triage(memo(required_features=("close", "funding_rate")), funded)
+    assert verdict.proceed

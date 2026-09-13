@@ -204,7 +204,33 @@ class Lake:
         frames = {s: f for s, f in frames.items() if len(f)}
         if not frames:
             raise ValueError("no symbols in the lake match that query")
-        return Panel.from_frames(frames, interval=interval)
+        panel = Panel.from_frames(frames, interval=interval)
+        return self._attach_perp_features(panel, interval, start, end, source, market)
+
+    def _attach_perp_features(self, panel, interval, start, end, source, market):
+        """Join perp funding and open interest onto a spot panel, if ingested.
+
+        Silent when there is nothing to join, because every command that loaded
+        a panel before this existed must keep working unchanged — and loudly
+        absent otherwise: a strategy that needs funding raises rather than
+        holding nothing, since a book holding nothing for want of a column
+        looks exactly like a book that found no signal.
+        """
+        from qr.data.funding import MARKET, attach
+
+        if market == MARKET or source != "binance":
+            return panel
+        available = set(self.symbols("1d", source, MARKET))
+        wanted = [s for s in panel.symbols if s in available]
+        if not wanted:
+            return panel
+        features = {}
+        for symbol in wanted:
+            try:
+                features[symbol] = self.read_klines(symbol, "1d", start, end, source, MARKET)
+            except FileNotFoundError:
+                continue
+        return attach(panel, features)
 
 
 def _ts(value) -> datetime | None:

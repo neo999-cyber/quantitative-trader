@@ -86,6 +86,27 @@ What you are fixing, and why it cannot be nudged later:
 Paste the two tables into `docs/11_ACCOUNT_SIZE_SWEEP.md`. The crypto rows must
 read `size-independent`; anything else is a defect report, not a result.
 
+## Perp funding — pull it once
+
+The mechanism nights asked for this more than anything else (`docs/15`).
+
+    qr data funding-pull --limit 40
+    qr data funding-ingest
+
+`funding-pull` needs network and is the **verification** of paths this
+repository could never check: it is written from Binance's published bucket
+layout and has never met the live bucket. An empty listing means the prefix is
+wrong; a parse error quotes the header that actually arrived, and that header
+is the correction to make. `--limit 40` keeps the first pull small enough to
+find out cheaply. Drop `--metrics` if the daily open-interest files are too
+many to start with.
+
+Once ingested, `load_panel` joins funding and open interest onto the spot
+panel automatically, and `qr autopilot --asset crypto` can compile a memo to
+`FundingTilt`. Nothing collects funding — no spot position can — so what the
+feature supports is "the levered crowd is positioned this way and paying for
+it", and a memo proposing to collect it should still be killed.
+
 ## Every night
 
     qr autopilot --asset crypto 2> autopilot.log
@@ -172,6 +193,30 @@ prints the list. That is a shopping list, not a failure — and if the first
 nights keep pointing at Binance futures `fundingRate` and `openInterestHist`
 (both public, both free), the machine is telling you the next useful job is an
 ingestor rather than another strategy.
+
+## Can this run while you sleep?
+
+Partly, and the honest boundary is worth knowing before you set a cron job.
+
+**What genuinely runs unattended:** `qr autopilot`. It is one command, every
+exit is recorded, and the policy stops it. On macOS wrap it so the laptop stays
+awake — `caffeinate -i qr autopilot --asset crypto 2> autopilot.log`.
+
+**What it will not do is discover anything new by running again.** Three nights
+produced twelve candidates and twelve kills with one structural answer
+(`docs/15`). Re-running the same briefs against the same lake re-derives the
+same answer and spends API tokens doing it. The autopilot is worth running
+again **after the lake changes** — a new dataset, a new primitive — and not
+before.
+
+That is the real limit on autonomy here, and it is not a missing feature. The
+funnel is gated on *inputs*: new data, or new instruments. Neither arrives by
+running the loop harder, and both need a decision that is yours. The machine
+can tell you which input is binding — it did — but it cannot go and get one.
+
+**So the useful overnight work is code, not runs.** Building the funding
+ingestor while you slept was worth a night; running the autopilot again would
+not have been.
 
 ## What is still yours
 

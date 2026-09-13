@@ -112,3 +112,39 @@ missing dataset, killed ones included, ranked by how many ran into each.
 The verdicts are unchanged, which is the point: whether an idea survives and
 whether its data exists are different questions, and only the second one
 belongs on a shopping list.
+
+
+---
+
+## Addendum — the ingestor exists (13 September 2026, overnight)
+
+Option 1 is built. `qr data funding-pull` and `qr data funding-ingest` bring
+Binance perpetual funding and open interest into the lake as **daily features
+on the spot panel**, and `FundingTilt` is the crude primitive the autopilot can
+compile a memo to.
+
+Three things were kept deliberately narrow, because the objection that killed
+these candidates was right and must not be quietly walked back:
+
+* **Nothing collects funding.** No spot position earns it. The claim the
+  feature supports is "the levered crowd is positioned this way and paying for
+  it", which is a fact about *positioning* that spot prices may or may not
+  reflect. A memo proposing to collect it should still be killed at question 1.
+* **The join cannot widen the universe.** A perp with no spot pair contributes
+  nothing; the spot panel decides the index and the symbol set. A feature must
+  never smuggle in an instrument the cost model has never priced.
+* **A pair with no perp carries NaN, not zero.** Zero funding is a claim about
+  the market; absence is not.
+
+`features.available("funding_rate")` is now true — this project *can* have the
+data — and a second check asks whether this *lake* has it, because conflating
+those two would send a sound mechanism to a kill test with no data, where it
+produces a strategy holding nothing. That looks exactly like a strategy that
+found nothing, and the two conclusions could not be further apart.
+
+**Unverified, and stated as such.** The bucket paths and CSV column names are
+written from Binance's published layout and have never met the live bucket;
+this repository is developed where that bucket is unreachable. Both parsers
+fail loudly and quote the header they actually received. The first real pull is
+the verification — if it errors with a column list, that list is the
+correction.

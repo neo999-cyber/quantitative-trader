@@ -67,17 +67,21 @@ REGISTRY: dict[str, Feature] = {
         Feature("trades", "trade count per bar", "trades"),
         Feature("calendar", "the date itself: month ends, quarter ends, weekdays, December"),
         Feature("listing_dates", "when a pair started and stopped trading; survivorship"),
-        Feature("fear_greed", "the crypto Fear & Greed index", needs_dataset=""),
+        Feature("fear_greed", "the crypto Fear & Greed index"),
         # --- named, and not in the lake
+        # Obtainable since `qr/data/funding.py`. Available here means "this
+        # project can have it", not "this lake has it" — the panel check in
+        # `triage` answers the second question, because a registry that
+        # conflated them would send a memo to a kill test with no data.
         Feature(
             "funding_rate",
             "perpetual funding, paid every eight hours by the crowded side",
-            needs_dataset="binance futures fundingRate (public, free; needs an ingestor)",
+            panel_field="funding_rate",
         ),
         Feature(
             "open_interest",
             "how much leverage is on, and which way",
-            needs_dataset="binance futures openInterestHist (public, free)",
+            panel_field="open_interest",
         ),
         Feature(
             "liquidations",

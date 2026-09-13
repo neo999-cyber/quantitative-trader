@@ -5,6 +5,8 @@
     qr data ingest                mirror -> Parquet lake + manifest
     qr data etf-pull              fill the Tiingo mirror (ETF trial; needs network)
     qr data etf-ingest            Tiingo mirror -> lake, dividend-adjusted
+    qr data funding-pull          perp funding + open interest (needs network)
+    qr data funding-ingest        funding mirror -> lake, as daily features
     qr data qa                    QA report over the lake
     qr data universe              the point-in-time top-N, as of today
     qr fng pull | fng show        Fear & Greed index
@@ -292,6 +294,117 @@ def cmd_data_ingest(args) -> int:
         lake.write_reference("instruments", bucket.instruments(symbols, args.interval))
     print(table(pd.DataFrame(written)))
     print(f"manifest hash: {lake.manifest_hash()}")
+    return 0 if written else 1
+
+
+def cmd_data_funding_pull(args) -> int:
+    """Download perp funding (and metrics) into the local mirror. Laptop only.
+
+    The bucket paths and column names in `qr/data/funding.py` are written from
+    Binance's published layout and have never been checked against the live
+    bucket, because this repository is developed where that bucket is
+    unreachable. This command is the verification: an empty listing means the
+    prefix is wrong, and a parse error quotes the header that actually arrived.
+    """
+    from qr.data.binance import HttpBucket
+    from qr.data.funding import FundingBucket, funding_key, metrics_key
+
+    mirror = _mirror(args)
+    remote = FundingBucket(HttpBucket())
+    symbols = args.symbols or remote.symbols()
+    if not symbols:
+        print(
+            "the bucket listed no symbols under data/futures/um/monthly/fundingRate/.\n"
+            "Either the prefix in qr/data/funding.py is wrong or the network is not "
+            "reachable; `qr doctor` shows what is.",
+            file=sys.stderr,
+        )
+        return 2
+    if args.limit:
+        symbols = symbols[: args.limit]
+
+    rows = []
+    for symbol in symbols:
+        periods = remote.periods(symbol)
+        got = 0
+        for period in periods:
+            if not _period_in_window(period, args.start, args.end):
+                continue
+            key = funding_key(symbol, period)
+            if mirror.exists(key) and not args.force:
+                got += 1
+                continue
+            try:
+                mirror.write(key, remote.source.read(key))
+                got += 1
+            except Exception as exc:  # one missing month must not end the pull
+                print(f"  {symbol} {period}: {_root_cause(exc)}", file=sys.stderr)
+        metrics = 0
+        if args.metrics:
+            for key in remote.source.list_keys(f"data/futures/um/daily/metrics/{symbol}/"):
+                if not key.endswith(".zip") or (mirror.exists(key) and not args.force):
+                    metrics += 1
+                    continue
+                try:
+                    mirror.write(key, remote.source.read(key))
+                    metrics += 1
+                except Exception as exc:
+                    print(f"  {symbol} metrics: {_root_cause(exc)}", file=sys.stderr)
+        rows.append({"symbol": symbol, "funding_files": got, "metrics_files": metrics})
+    print(table(pd.DataFrame(rows)))
+    print(f"mirrored into {mirror.root}")
+    return 0
+
+
+def _period_in_window(period: str, start, end) -> bool:
+    stamp = pd.Timestamp(period, tz="UTC")
+    if start is not None and stamp < pd.Timestamp(start, tz="UTC").normalize().replace(day=1):
+        return False
+    if end is not None and stamp > pd.Timestamp(end, tz="UTC"):
+        return False
+    return True
+
+
+def cmd_data_funding_ingest(args) -> int:
+    """Mirror -> lake, as daily per-symbol perp features."""
+    from qr.data.funding import MARKET, FundingBucket, combine
+
+    bucket = FundingBucket(_mirror(args))
+    lake = _lake(args)
+    symbols = args.symbols or bucket.symbols()
+    if not symbols:
+        print(
+            "no funding files in the mirror. Run `qr data funding-pull` on a machine with "
+            "network first.",
+            file=sys.stderr,
+        )
+        return 2
+
+    written = []
+    for symbol in symbols:
+        funding = bucket.load_funding(symbol)
+        if funding.empty:
+            print(f"  {symbol}: no funding in the mirror", file=sys.stderr)
+            continue
+        metrics = bucket.load_metrics(symbol) if args.metrics else None
+        frame = combine(funding, metrics)
+        lake.write_klines(symbol, frame, "1d", market=MARKET)
+        written.append(
+            {
+                "symbol": symbol,
+                "days": len(frame),
+                "start": frame.index[0],
+                "end": frame.index[-1],
+                "mean_daily_funding_bps": round(float(frame["funding_rate"].mean() * 1e4), 3),
+            }
+        )
+    print(table(pd.DataFrame(written)))
+    print(f"manifest hash: {lake.manifest_hash()}")
+    if written:
+        print(
+            "\nThese are a feature about spot pairs, not a licence to trade the perp. "
+            "No spot position collects funding — see qr/strategies/funding.py."
+        )
     return 0 if written else 1
 
 
@@ -906,9 +1019,11 @@ def _asset_panel(args, asset: str):
 #: wastes a memo to learn something that was knowable when the list was
 #: written.
 CRYPTO_BRIEFS = [
-    "Perpetual futures longs pay funding every eight hours when the crowd is long, and the "
-    "payment is owed regardless of what the holder thinks the price will do. Who collects, and "
-    "can a spot-only book express any part of it?",
+    "Perpetual funding is now in the lake. A spot book cannot collect it, but it can read "
+    "which side of the levered book is crowded and what that side is paying to stay there. "
+    "Is extreme funding a tradeable signal about the spot price?",
+    "Open interest says how much leverage is on and funding says which way it leans. Is a "
+    "crowded position that is *growing* different from one that is unwinding?",
     "A leveraged position that hits its maintenance margin is closed by the exchange, not by "
     "its owner — the most literally forced trade there is, and it clusters. Is the aftermath of "
     "a liquidation cascade tradeable?",
@@ -1398,6 +1513,30 @@ def build_parser() -> argparse.ArgumentParser:
     etf_pull.add_argument("--workers", type=int, default=4)
     etf_pull.add_argument("--tiingo-mirror", dest="tiingo_mirror")
     etf_pull.set_defaults(func=cmd_etf_pull)
+
+    fund_pull = data.add_parser(
+        "funding-pull", help="perp funding + metrics -> local mirror (needs network)"
+    )
+    fund_pull.add_argument("--symbols", nargs="*")
+    fund_pull.add_argument("--limit", type=int, help="first N symbols, alphabetically")
+    fund_pull.add_argument("--start")
+    fund_pull.add_argument("--end")
+    fund_pull.add_argument(
+        "--metrics",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="also pull open interest (daily files; many more of them)",
+    )
+    fund_pull.add_argument("--force", action="store_true", help="re-download files already mirrored")
+    fund_pull.set_defaults(func=cmd_data_funding_pull)
+
+    fund_ingest = data.add_parser("funding-ingest", help="funding mirror -> lake, as daily features")
+    fund_ingest.add_argument("--symbols", nargs="*")
+    fund_ingest.add_argument(
+        "--metrics", action=argparse.BooleanOptionalAction, default=True,
+        help="include open interest if it was pulled",
+    )
+    fund_ingest.set_defaults(func=cmd_data_funding_ingest)
 
     etf_ingest = data.add_parser("etf-ingest", help="Tiingo mirror -> Parquet lake (dividend-adjusted)")
     etf_ingest.add_argument("--symbols", nargs="*")

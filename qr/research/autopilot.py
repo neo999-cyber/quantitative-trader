@@ -213,7 +213,7 @@ def run_night(
             continue
 
         outcome.candidate_id, outcome.title = memo.candidate_id, memo.title
-        verdict = mechanism.triage(memo)
+        verdict = mechanism.triage(memo, discovery)
         mechanism.record(log, memo, verdict)
         outcome.stage = "triage"
         # Recorded whatever the verdict turns out to be. What a candidate

@@ -628,7 +628,7 @@ def gate_5_selection(ctx: GateContext) -> GateResult:
     # worth trading. Only SPA says so.
     spa_verdict = None
     try:
-        benchmark = buy_and_hold_benchmark(ctx.panel, ctx.universe, ctx.costs)
+        benchmark = buy_and_hold_benchmark(ctx.panel, ctx.universe, ctx.costs, ctx.equity)
         spa_result = superior_predictive_ability(
             matrix, benchmark, ctx.periods_per_year, reps=ctx.spa_reps, seed=ctx.seed
         )

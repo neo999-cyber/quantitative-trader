@@ -331,3 +331,42 @@ class TrialLog:
             prev_hash, expected_seq = rec.hash, rec.seq + 1
             count += 1
         return count
+
+
+@dataclass
+class SealedTrialLog(TrialLog):
+    """A trial log that can be read but never written.
+
+    A sensitivity analysis re-runs strategies that are already on the record
+    with one parameter changed. It must read the log — gate 0 needs the
+    pre-registration and gate 11 needs the holdout that gate 9 opened — and it
+    must not write to it, for two reasons that are not stylistic.
+
+    The trial count gate 4 deflates against is the number of configurations
+    ever searched. Re-scoring nine known families at three account sizes
+    searches nothing new: the same variants, the same data, one cost parameter
+    moved. Logging them as `run` records would treble the count and raise
+    gate 4's bar for every future family, which would make honest bookkeeping
+    punish a sensitivity check — precisely backwards.
+
+    And the `gate` records `run_gates` writes would be verdicts. These are not
+    verdicts; the holdout is spent and a family that looks better at $100,000
+    here has earned a place in the next pre-registration, nothing more. A
+    reader scanning the log for "did it pass" must not find a row that says so.
+
+    Writes are dropped rather than raised on, so the ordinary gate machinery
+    runs unmodified. The record it returns is well-formed and correctly
+    chained onto the current head; it simply never reaches the file.
+    """
+
+    def append(self, kind: Kind, hypothesis_id: str, payload: dict[str, Any]) -> TrialRecord:
+        prev = self.head()
+        body = {
+            "seq": 0 if prev is None else prev.seq + 1,
+            "ts": datetime.now(timezone.utc).isoformat(timespec="microseconds"),
+            "kind": kind,
+            "hypothesis_id": hypothesis_id,
+            "payload": {**payload, "agent": self._agent, "sealed": True},
+            "prev_hash": GENESIS if prev is None else prev.hash,
+        }
+        return TrialRecord(**body, hash=record_hash(body))

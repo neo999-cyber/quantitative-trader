@@ -144,15 +144,31 @@ def superior_predictive_ability(
     )
 
 
-def buy_and_hold_benchmark(panel, universe: pd.DataFrame | None = None, costs=None) -> pd.Series:
+def buy_and_hold_benchmark(
+    panel, universe: pd.DataFrame | None = None, costs=None, equity: float | None = None
+) -> pd.Series:
     """The benchmark gate 5 tests against: equal-weight the same universe.
 
     Costed with the same model as the strategy, because comparing a costed
     strategy against a free benchmark is a comparison the strategy is designed
     to win.
+
+    `equity` matters for the same reason and was missing: on a venue charging
+    per order, the cost model alone does not fix the cost. Without it the
+    benchmark fell back to `run_backtest`'s $10,000 default while the ETF trial
+    priced its strategies at $1,000 — so gate 5 asked every ETF family to beat
+    a buy-and-hold running in an account ten times larger and therefore an
+    order of magnitude cheaper per trade. That is the wrong direction: it
+    flatters the benchmark and makes the strategy harder to beat. Buy-and-hold
+    barely trades, so the effect is small; it is still a comparison between two
+    different accounts.
     """
     from qr.execution.costs import CostModel
     from qr.research.runner import run_backtest
+
     from qr.strategies.library import BuyAndHold
 
-    return run_backtest(panel, BuyAndHold(), costs or CostModel.trial(), universe).net.rename("buy_and_hold")
+    kwargs = {"equity": equity} if equity else {}
+    return run_backtest(
+        panel, BuyAndHold(), costs or CostModel.trial(), universe, **kwargs
+    ).net.rename("buy_and_hold")

@@ -11,6 +11,7 @@
     qr trial verify | trial show  the hash-chained trial log
     qr forward observe | status   the live paper record gate 10 reads
     qr backtest --family ...      one strategy, honestly costed
+    qr account-size               every family at $1k/$10k/$100k (a sensitivity)
     qr site                       every gate report as one readable page
 
 The pull commands need internet and are meant to run on the laptop; everything
@@ -856,6 +857,122 @@ def cmd_families(args) -> int:
     return 0
 
 
+def _asset_panel(args, asset: str):
+    """The panel and universe one asset class runs on.
+
+    The same three lines `cmd_families` uses, pulled out because the
+    account-size sweep needs all three asset classes in one invocation and a
+    second copy of the ETF basket handling is exactly where the two would
+    drift apart.
+    """
+    from qr.data.universe import ETF_BASKET, fixed_basket
+
+    source, market = ASSET_PARTITION[asset]
+    lake = _lake(args)
+    panel = _load_panel(lake, args.interval, args.start, args.end, source, market)
+    if asset in ("etf", "etf-ls"):
+        spec = UniverseSpec(n=len(ETF_BASKET), name="etf_basket_12")
+        try:
+            universe = fixed_basket(panel, ETF_BASKET)
+        except ValueError as exc:
+            print(f"{exc}", file=sys.stderr)
+            raise SystemExit(2) from None
+        missing = universe.attrs.get("missing") or []
+        if missing:
+            print(
+                f"warning: {len(missing)} of {len(ETF_BASKET)} basket funds are not in the "
+                f"lake ({', '.join(missing)}); running on the rest. The pre-registered "
+                f"universe is all twelve.",
+                file=sys.stderr,
+            )
+    else:
+        spec = UniverseSpec(n=args.n, lookback=args.lookback, min_history=args.min_history)
+        universe = membership(panel, spec)
+    if not args.no_restrict_universe:
+        panel, universe = _restrict_to_universe(panel, universe, f"{asset}: ")
+    return lake, panel, universe, spec.name
+
+
+def cmd_account_size(args) -> int:
+    """Step 0 of `docs/10_NEXT.md`: every family, re-scored at three account sizes.
+
+    A sensitivity analysis on one cost parameter. It writes no `run` record, so
+    the trial count gate 4 deflates against is untouched, and it produces
+    readings rather than verdicts — see `qr.research.account_size`.
+    """
+    from qr.research.account_size import ACCOUNT_SIZES, SizeSweep, run_size_sweep
+    from qr.research.families import (
+        BY_ID,
+        ETF_FAMILIES,
+        LONG_SHORT_FAMILIES,
+        TRIAL_FAMILIES,
+    )
+
+    groups = {
+        "crypto": TRIAL_FAMILIES,
+        "etf": ETF_FAMILIES,
+        "etf-ls": LONG_SHORT_FAMILIES,
+    }
+    chosen = list(groups) if args.asset == "all" else [args.asset]
+    only = set(args.only or [])
+    if only - set(BY_ID):
+        print(f"unknown hypothesis id(s): {', '.join(sorted(only - set(BY_ID)))}", file=sys.stderr)
+        return 2
+    sizes = tuple(args.sizes) if args.sizes else ACCOUNT_SIZES
+    if len(sizes) < 2:
+        print("an account-size sweep needs at least two sizes to compare", file=sys.stderr)
+        return 2
+
+    log = TrialLog(paths(args.root).ensure().trial_log)
+    before = log.trial_count()
+    sweep = SizeSweep(sizes=sizes)
+    for asset in chosen:
+        families = [f for f in groups[asset] if not only or f.hypothesis_id in only]
+        if not families:
+            continue
+        lake, panel, universe, universe_name = _asset_panel(args, asset)
+        for spec in families:
+            print(f"\n### {spec.hypothesis_id} — {spec.summary}", file=sys.stderr)
+            sweep.runs.extend(
+                run_size_sweep(
+                    spec,
+                    panel,
+                    universe,
+                    universe_name,
+                    asset,
+                    trial_log=log,
+                    manifest_hash=lake.manifest_hash(),
+                    sizes=sizes,
+                    calendar="xnys" if asset in ("etf", "etf-ls") else "continuous",
+                    progress=_progress,
+                )
+            )
+
+    if not sweep.runs:
+        print("nothing to run", file=sys.stderr)
+        return 2
+
+    print("\n# Account-size sensitivity — not a verdict\n")
+    print(table(sweep.frame()))
+    print("\n## Readings\n")
+    print(table(sweep.readings()))
+
+    after = TrialLog(paths(args.root).trial_log).trial_count()
+    print(
+        f"\ntrial count {before} -> {after}. This sweep re-scored known families with one "
+        f"cost parameter changed; it searched nothing and is charged nothing."
+    )
+    if after != before:
+        print("the trial count moved, which it must not — the log was written to", file=sys.stderr)
+        return 1
+    if args.out:
+        out = Path(args.out).expanduser()
+        out.parent.mkdir(parents=True, exist_ok=True)
+        sweep.frame().to_csv(out, index=False)
+        print(f"wrote {out}")
+    return 0
+
+
 def _parse_grid(pairs: list[str] | None) -> dict:
     """`--grid lookback=[30,60,90]` -> {"lookback": [30, 60, 90]}."""
     out: dict[str, object] = {}
@@ -1216,6 +1333,37 @@ def build_parser() -> argparse.ArgumentParser:
         help="run without pre-registrations; gate 0 will fail them, which is the point",
     )
     fam.set_defaults(func=cmd_families)
+
+    size = sub.add_parser(
+        "account-size",
+        help="Step 0: re-score every family at $1k/$10k/$100k (a sensitivity, not a search)",
+    )
+    size.add_argument(
+        "--asset",
+        choices=("all", "crypto", "etf", "etf-ls"),
+        default="all",
+        help="which trial's families to re-score (default: all nine)",
+    )
+    size.add_argument("--only", nargs="*", help="hypothesis ids to re-score (default: all in --asset)")
+    size.add_argument(
+        "--sizes",
+        nargs="*",
+        type=float,
+        default=None,
+        help="account sizes in dollars (default: 1000 10000 100000)",
+    )
+    size.add_argument("--interval", default="1d")
+    size.add_argument("--start")
+    size.add_argument("--end")
+    add_universe_args(size)
+    size.add_argument(
+        "--no-restrict-universe",
+        action="store_true",
+        dest="no_restrict_universe",
+        help="keep every symbol in the lake in the panel (slower)",
+    )
+    size.add_argument("--out", help="write the per-size table to this CSV")
+    size.set_defaults(func=cmd_account_size)
 
     return parser
 

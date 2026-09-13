@@ -1,5 +1,7 @@
 # Seven engine defects the real runs exposed, and the sweep for the rest
 
+*An eighth was found on 13 September 2026 and is recorded at the bottom.*
+
 *Written 12 September 2026, after the four-family run against real Binance data
 and before the confirmation re-run.*
 
@@ -312,6 +314,43 @@ low equity, which is a real bug. So the pointwise measure still decides, and
 `scale_relative_error` is reported beside it: a large pointwise error with a
 tiny scale-relative one means the account is nearly empty, not that the engines
 disagree.
+
+## 8. Gate 5 made every ETF family beat a buy-and-hold in a bigger account
+
+*Found 13 September 2026, while building the account-size sweep. It is number
+eight in a document titled "seven", which is the honest way to record that the
+sweep for the rest (§7) did not catch it.*
+
+`buy_and_hold_benchmark()` took a panel, a universe and a cost model — and no
+account size. On a proportional venue that is complete: a Binance taker pays
+7.5 bps whatever the order. On a venue charging per *share* with a floor per
+*order* it is not, because the cost model alone does not fix the cost. The
+benchmark therefore fell through to `run_backtest`'s default of $10,000 while
+the ETF trial priced its strategies at $1,000, and gate 5's SPA test asked
+every ETF family to beat a buy-and-hold trading in an account ten times larger
+and an order of magnitude cheaper per trade.
+
+The direction is the bad one. Under-costing the benchmark flatters it and
+makes the strategy harder to beat, so the test was conservative rather than
+lenient — no ETF verdict in `docs/08` is overturned by this, and the effect is
+small in any case, because buy-and-hold rebalances monthly and pays almost no
+commission at either size. But it was a comparison between two different
+accounts presented as a comparison between two strategies, and the whole point
+of costing the benchmark (§ the function's own docstring) was that comparing a
+costed strategy against a cheaper benchmark is a comparison the strategy is
+designed to lose.
+
+`gate_5_selection` now passes `ctx.equity` through. The defect mattered
+immediately for the account-size sweep, whose entire output is the SPA column
+read across three account sizes: with the benchmark pinned at $10,000 the
+strategies would move with size and the thing they are measured against would
+not, which would have made every column in the table incomparable with the
+others.
+
+The regression test is
+`test_gate_fives_benchmark_is_priced_at_the_account_the_strategy_runs_in`.
+It asserts both halves: that the benchmark costs more in the smaller account
+on the ETF model, and that it is unchanged across sizes on the crypto one.
 
 ## What was checked afterwards
 

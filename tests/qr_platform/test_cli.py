@@ -312,3 +312,33 @@ def test_root_cause_of_a_bare_exception_is_itself():
     from qr.cli import _root_cause
 
     assert _root_cause(ValueError("nothing underneath")) == "ValueError: nothing underneath"
+
+
+def test_account_size_sweeps_without_touching_the_trial_log(env, tmp_path, capsys):
+    """Step 0's command: a sensitivity that must not be charged as a search."""
+    run(env, "data", "ingest")
+    capsys.readouterr()
+    log = TrialLog(paths(tmp_path / "lake").ensure().trial_log)
+    log.run("reversal_v1", "reversal", {}, "u", {"sharpe": 0.3}, variants=54)
+    before = log.trial_count()
+
+    assert (
+        run(
+            env,
+            "account-size",
+            "--asset", "crypto",
+            "--only", "reversal_v1",
+            "--sizes", "1000", "100000",
+            "--n", "3",
+            "--min-history", "30",
+        )
+        == 0
+    )
+    out = capsys.readouterr().out
+    assert "not a verdict" in out
+    assert "size-independent" in out
+    assert "PASS" not in out.split("## Readings")[-1]
+
+    after = TrialLog(paths(tmp_path / "lake").trial_log)
+    assert after.trial_count() == before
+    assert after.verify() == 1

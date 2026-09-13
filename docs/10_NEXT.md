@@ -63,6 +63,14 @@ something is wrong with the cost model and that is the finding.
 **Why it is worth a day.** It decides what the next six months are about:
 finding ideas, or finding capital. Those are different projects.
 
+**Status (13 September 2026): started — `docs/11_ACCOUNT_SIZE_SWEEP.md`.**
+`qr account-size` runs it, writing nothing to the trial log and producing
+readings rather than verdicts. The crypto half is answered already, and more
+strongly than expected: the four crypto families are *bit-identical* across
+the three sizes, because the Binance model is purely proportional and the
+taker fee is flat from VIP0 to VIP2. Account size was not the binding
+constraint there. The ETF half needs the lake and must run on the laptop.
+
 **Note on capital.** `$25,000` and similar figures that come out of this are
 *model parameters*, not deposits. Nothing should be funded on the strength of
 this sweep. "It would work with a bigger account" is the most expensive

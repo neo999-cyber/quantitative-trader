@@ -12,6 +12,8 @@
     qr forward observe | status   the live paper record gate 10 reads
     qr backtest --family ...      one strategy, honestly costed
     qr account-size               every family at $1k/$10k/$100k (a sensitivity)
+    qr sandbox declare|show       the discovery slice, where looking is free
+    qr policy declare|show        the budget an unattended run may not exceed
     qr site                       every gate report as one readable page
 
 The pull commands need internet and are meant to run on the laptop; everything
@@ -893,6 +895,123 @@ def _asset_panel(args, asset: str):
     return lake, panel, universe, spec.name
 
 
+def cmd_policy(args) -> int:
+    """Declare or report the research budget an unattended run may not exceed."""
+    from qr.research.policy import PolicyBreach, ResearchPolicy, budget, current, declare
+
+    log = TrialLog(paths(args.root).ensure().trial_log)
+
+    if args.policy_cmd == "declare":
+        policy = ResearchPolicy(
+            max_promotions_per_week=args.per_week,
+            max_promotions_per_quarter=args.per_quarter,
+            max_variants_per_family=args.max_variants,
+            min_cost_multiple=args.min_cost_multiple,
+            max_candidates=args.max_candidates,
+            note=args.note or "",
+        )
+        try:
+            record = declare(log, policy, force=args.force)
+        except PolicyBreach as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
+        declared = current(log)
+        print(table(pd.DataFrame([declared.describe()])))
+        print(f"\ndeclared as record {record.seq}, counting candidates from seq {declared.counts_from}")
+        print(
+            "The nine families that already failed are before this point and do not count "
+            "against the stopping rule; they had no mechanism, which is the diagnosis."
+        )
+        return 0
+
+    # show
+    if current(log) is None:
+        print(
+            "no research policy declared. An unattended run has no budget and no stopping rule "
+            "until one exists:\n  qr policy declare",
+            file=sys.stderr,
+        )
+        return 2
+    state = budget(log)
+    print(table(pd.DataFrame([state])))
+    if state["stopping_rule_reached"]:
+        print(
+            "\nThe stopping rule has been reached. The finding is that no edge is accessible "
+            "at this account size with this data. Write it up, stop, hold an index fund."
+        )
+    return 0
+
+
+def cmd_sandbox(args) -> int:
+    """Declare, show or query a market's discovery/validation boundary."""
+    from qr.data.sandbox import (
+        SandboxRedeclared,
+        SandboxSpec,
+        current,
+        declare,
+    )
+
+    log = TrialLog(paths(args.root).ensure().trial_log)
+
+    if args.sandbox_cmd == "declare":
+        spec = SandboxSpec(
+            market=args.market,
+            mode=args.mode,
+            symbol_fraction=args.symbol_fraction,
+            period_end=args.period_end,
+            salt=args.salt,
+            note=args.note or "",
+        )
+        try:
+            record = declare(log, spec, force=args.force)
+        except SandboxRedeclared as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
+        print(table(pd.DataFrame([spec.describe()])))
+        print(f"\ndeclared as record {record.seq}, fingerprint {spec.fingerprint()[:16]}…")
+        if args.force:
+            print(
+                "this SUPERSEDED an existing boundary. The log records that it moved and when; "
+                "any result that predates the move should be read knowing it."
+            )
+        return 0
+
+    if args.sandbox_cmd == "show":
+        rows = []
+        for record in log.records(kind="sandbox"):
+            spec = record.payload.get("spec", {})
+            rows.append(
+                {
+                    "seq": record.seq,
+                    "market": spec.get("market"),
+                    "mode": spec.get("mode"),
+                    "symbol_fraction": spec.get("symbol_fraction"),
+                    "period_end": spec.get("period_end"),
+                    "fingerprint": (spec.get("fingerprint") or "")[:12],
+                    "superseded": bool(record.payload.get("supersedes")),
+                    "declared": record.ts[:19],
+                }
+            )
+        if not rows:
+            print(
+                "no sandbox declared. Nothing may be explored until one exists:\n"
+                "  qr sandbox declare --market binance/spot",
+                file=sys.stderr,
+            )
+            return 2
+        print(table(pd.DataFrame(rows)))
+        return 0
+
+    # check
+    spec = current(log, args.market)
+    if spec is None:
+        print(f"no sandbox declared for {args.market}", file=sys.stderr)
+        return 2
+    rows = [{"symbol": s, "side": spec.assign(s)} for s in args.symbols]
+    print(table(pd.DataFrame(rows)))
+    return 0
+
+
 def cmd_account_size(args) -> int:
     """Step 0 of `docs/10_NEXT.md`: every family, re-scored at three account sizes.
 
@@ -1364,6 +1483,61 @@ def build_parser() -> argparse.ArgumentParser:
     )
     size.add_argument("--out", help="write the per-size table to this CSV")
     size.set_defaults(func=cmd_account_size)
+
+    sb = sub.add_parser(
+        "sandbox",
+        help="the discovery sandbox: where looking is free and nothing is reportable",
+    )
+    sbsub = sb.add_subparsers(dest="sandbox_cmd", required=True)
+
+    sbd = sbsub.add_parser("declare", help="draw a market's boundary. Once.")
+    sbd.add_argument("--market", required=True, help="e.g. binance/spot or tiingo/etf")
+    sbd.add_argument(
+        "--mode",
+        choices=("symbols", "period", "both"),
+        default="symbols",
+        help="split by symbol (734 pairs can spare a quarter), by date (twelve ETFs cannot), or both",
+    )
+    sbd.add_argument("--symbol-fraction", dest="symbol_fraction", type=float, default=0.25)
+    sbd.add_argument("--period-end", dest="period_end", help="the sandbox gets bars up to this date")
+    sbd.add_argument("--salt", default="qr-sandbox-v1", help="fixes the hash that assigns symbols")
+    sbd.add_argument("--note", help="why this boundary, in one line")
+    sbd.add_argument(
+        "--force",
+        action="store_true",
+        help="supersede an existing boundary. Recorded in the log as a supersession, loudly.",
+    )
+
+    sbs = sbsub.add_parser("show", help="every boundary ever declared")
+
+    sbc = sbsub.add_parser("check", help="which side these symbols fall on")
+    sbc.add_argument("--market", required=True)
+    sbc.add_argument("symbols", nargs="+")
+
+    sb.set_defaults(func=cmd_sandbox)
+
+    pol = sub.add_parser(
+        "policy",
+        help="the research budget: promotion quota, kill-test bar and stopping rule",
+    )
+    polsub = pol.add_subparsers(dest="policy_cmd", required=True)
+
+    pold = polsub.add_parser("declare", help="fix the rules before any unattended run. Once.")
+    pold.add_argument("--per-week", dest="per_week", type=int, default=2)
+    pold.add_argument("--per-quarter", dest="per_quarter", type=int, default=5)
+    pold.add_argument("--max-variants", dest="max_variants", type=int, default=250,
+                      help="widest grid one family may sweep; gate 4 deflates against the real count")
+    pold.add_argument("--min-cost-multiple", dest="min_cost_multiple", type=float, default=3.0,
+                      help="stage 3's bar: gross effect as a multiple of round-trip costs")
+    pold.add_argument("--max-candidates", dest="max_candidates", type=int, default=8,
+                      help="the stopping rule: mechanisms tested before the project stops")
+    pold.add_argument("--note", help="why these numbers, in one line")
+    pold.add_argument("--force", action="store_true",
+                      help="supersede the policy in force. Recorded in the log, loudly.")
+
+    polsub.add_parser("show", help="what is left of the budget")
+
+    pol.set_defaults(func=cmd_policy)
 
     return parser
 

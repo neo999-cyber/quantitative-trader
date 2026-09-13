@@ -254,7 +254,22 @@ def write_report(
     trial_log: TrialLog | None = None,
     tear_sheet: dict[str, float] | None = None,
 ) -> tuple[Path, Path]:
-    """Write `<id>.md` and `<id>.json` side by side. Returns both paths."""
+    """Write `<id>.md` and `<id>.json` side by side. Returns both paths.
+
+    Refuses a run computed on the discovery sandbox. Gate 0 already fails such
+    a run, but a report is the artefact that leaves this machine — it is what
+    gets read, quoted and remembered — so the refusal is repeated at the point
+    of writing rather than trusted to a gate somebody might have skipped with
+    `--upto`. The sandbox's entire value is the promise that nothing from it
+    reaches the record; a promise with one enforcement point is a promise one
+    refactor from being broken.
+    """
+    if (report.context or {}).get("sandbox_side") == "discovery":
+        raise ValueError(
+            f"{report.hypothesis_id} was run on the discovery sandbox, which is not reportable. "
+            "Exploration there is free precisely because nothing leaves it — re-run against "
+            "the validation side if this is a candidate rather than a look."
+        )
     out = Path(directory)
     out.mkdir(parents=True, exist_ok=True)
     stem = report.hypothesis_id.replace("/", "_")

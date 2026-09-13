@@ -46,6 +46,7 @@ from qr.validate.permutation import (
     random_entry_test,
     shuffled_ticker_test,
 )
+from qr.data.sandbox import sandbox_side
 from qr.validate.spa import buy_and_hold_benchmark, superior_predictive_ability
 from qr.portfolio import sizing
 from qr.validate import forward
@@ -212,6 +213,20 @@ class GateContext:
 
 def gate_0_preregistration(ctx: GateContext) -> GateResult:
     """Was the hypothesis written down before the data was touched?"""
+    # The sandbox is where looking is free, and the price of that freedom is
+    # that nothing found there counts. A gate report computed on discovery data
+    # is not a weak result, it is a category error, and it fails here rather
+    # than three gates later so that no part of the run can be mistaken for
+    # evidence. See `qr/data/sandbox.py`.
+    if sandbox_side(ctx.panel) == "discovery":
+        return GateResult(
+            0,
+            "pre-registration",
+            FAIL,
+            "this panel is the discovery sandbox; nothing computed on it is reportable. "
+            "Re-run the candidate against the validation side.",
+            {"sandbox_side": "discovery"},
+        )
     if ctx.trial_log is None:
         return GateResult(0, "pre-registration", SKIP, "no trial log supplied; exploratory only")
     records = ctx.trial_log.records(kind="prereg", hypothesis_id=ctx.hypothesis_id)
@@ -1507,6 +1522,7 @@ def run_gates(
             "trials": ctx.trial_count,
             "manifest_hash": ctx.manifest_hash,
             "symbols": ctx.panel.symbols,
+            "sandbox_side": sandbox_side(ctx.panel),
             "start": str(ctx.panel.index[0]) if len(ctx.panel) else None,
             "end": str(ctx.panel.index[-1]) if len(ctx.panel) else None,
             "thresholds": ctx.thresholds.__dict__,

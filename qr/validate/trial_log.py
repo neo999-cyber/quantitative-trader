@@ -28,7 +28,13 @@ from typing import Any, Iterator, Literal
 
 GENESIS = "0" * 64
 
-Kind = Literal["prereg", "run", "gate", "holdout", "forward", "note"]
+#: "sandbox" declares a market's discovery/validation boundary. It is a kind
+#: rather than a note because the boundary has to be machine-readable: the
+#: code that refuses to redraw it reads it back out of the chain.
+#: "policy" is the research budget an unattended run may not exceed: the
+#: promotion quota, the kill-test bar and the stopping rule, fixed before
+#: any run rather than judged after one. See `qr/research/policy.py`.
+Kind = Literal["prereg", "run", "gate", "holdout", "forward", "note", "sandbox", "policy"]
 
 
 class TrialLogCorrupt(RuntimeError):

@@ -342,3 +342,38 @@ def test_account_size_sweeps_without_touching_the_trial_log(env, tmp_path, capsy
     after = TrialLog(paths(tmp_path / "lake").trial_log)
     assert after.trial_count() == before
     assert after.verify() == 1
+
+
+def test_sandbox_declare_show_and_check(env, tmp_path, capsys):
+    assert run(env, "sandbox", "show") == 2
+    assert "no sandbox declared" in capsys.readouterr().err
+
+    assert run(env, "sandbox", "declare", "--market", "binance/spot", "--note", "stage 1") == 0
+    assert "declared as record" in capsys.readouterr().out
+
+    assert run(env, "sandbox", "declare", "--market", "binance/spot") == 2
+    assert "already has a sandbox" in capsys.readouterr().err
+
+    assert run(env, "sandbox", "check", "--market", "binance/spot", "BTCUSDT", "ETHUSDT") == 0
+    out = capsys.readouterr().out
+    assert "BTCUSDT" in out and ("discovery" in out or "validation" in out)
+
+    assert run(env, "sandbox", "show") == 0
+    assert "binance/spot" in capsys.readouterr().out
+    assert TrialLog(paths(tmp_path / "lake").trial_log).verify() == 1
+
+
+def test_policy_declare_then_show(env, tmp_path, capsys):
+    assert run(env, "policy", "show") == 2
+    assert "no research policy declared" in capsys.readouterr().err
+
+    assert run(env, "policy", "declare", "--note", "the stage 4 budget") == 0
+    assert "counting candidates from seq" in capsys.readouterr().out
+
+    assert run(env, "policy", "declare") == 2
+    assert "already in force" in capsys.readouterr().err
+
+    assert run(env, "policy", "show") == 0
+    out = capsys.readouterr().out
+    assert "candidates_remaining" in out and "stopping_rule_reached" in out
+    assert TrialLog(paths(tmp_path / "lake").trial_log).verify() == 1

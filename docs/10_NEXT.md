@@ -101,6 +101,11 @@ Carve off a permanent discovery set — a slice of symbols and an early period
 reported. Validation happens on the untouched remainder. This is what makes
 exploration free.
 
+**Status (13 September 2026): built — `docs/12_DISCOVERY_SANDBOX.md`.**
+`qr sandbox declare` draws the line by SHA-256, once, into the trial log, and
+refuses to redraw it. Three enforcement layers keep a sandbox result out of the
+record. Declare the two boundaries on the laptop before any exploration starts.
+
 ### Stage 2 — mechanism before code (~2 days per candidate)
 
 A one-page memo before anything runs:

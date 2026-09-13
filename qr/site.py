@@ -39,6 +39,8 @@ GATE_NAMES = {
     7: "cross-validated OOS",
     8: "robustness",
     9: "holdout",
+    10: "incubation",
+    11: "sizing",
 }
 
 VERDICT_ORDER = {"FAIL": 0, "WARN": 1, "SKIP": 2, "PASS": 3}
@@ -194,7 +196,7 @@ footer{margin-top:56px;padding-top:18px;border-top:1px solid var(--rule);
 def _ladder(run: dict[str, Any]) -> str:
     by_gate = {int(g["gate"]): g for g in run.get("gates", [])}
     cells = []
-    for number in range(10):
+    for number in sorted(GATE_NAMES):
         gate = by_gate.get(number)
         verdict = gate["verdict"] if gate else "NONE"
         title = (

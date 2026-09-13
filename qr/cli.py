@@ -9,6 +9,7 @@
     qr data universe              the point-in-time top-N, as of today
     qr fng pull | fng show        Fear & Greed index
     qr trial verify | trial show  the hash-chained trial log
+    qr forward observe | status   the live paper record gate 10 reads
     qr backtest --family ...      one strategy, honestly costed
     qr site                       every gate report as one readable page
 
@@ -548,6 +549,62 @@ def cmd_trial_verify(args) -> int:
     return 0
 
 
+def cmd_forward_observe(args) -> int:
+    """Record one bar of the live paper run into the same chain as everything else."""
+    log = TrialLog(paths(args.root).trial_log)
+    weights = json.loads(args.weights) if args.weights else None
+    expected = json.loads(args.expected_weights) if args.expected_weights else None
+    rec = log.forward(
+        args.hypothesis,
+        date=args.date,
+        net_return=args.net_return,
+        cost=args.cost,
+        weights=weights,
+        expected_weights=expected,
+        expected_cost=args.expected_cost,
+    )
+    print(f"seq {rec.seq}: {args.hypothesis} {args.date} net {args.net_return:+.4%}")
+    if expected is None:
+        print(
+            "no expected book supplied, so gate 10 cannot check the wiring for this bar; "
+            "pass --expected-weights to make it a real check",
+            file=sys.stderr,
+        )
+    return 0
+
+
+def cmd_forward_status(args) -> int:
+    """Where each incubating hypothesis stands against gate 10's requirements."""
+    from qr.validate import forward as fwd
+    from qr.validate.gates import GateThresholds
+
+    log = TrialLog(paths(args.root).trial_log)
+    need = GateThresholds().min_forward_observations
+    ids = args.hypothesis and [args.hypothesis] or sorted(
+        {r.hypothesis_id for r in log.records(kind="forward")}
+    )
+    if not ids:
+        print("nothing is incubating")
+        return 0
+    rows = []
+    for hid in ids:
+        records = fwd.frame(log, hid)
+        summary = fwd.summarise(records, args.periods_per_year)
+        rows.append(
+            {
+                "hypothesis": hid,
+                "observations": f"{summary.observations}/{need}",
+                "since": summary.first or "—",
+                "fwd sharpe": round(summary.net_sharpe, 3),
+                "cost vs model": round(summary.cost_ratio, 2),
+                "worst wiring gap": round(summary.max_weight_error, 4),
+                "wiring checked": f"{summary.checked_bars}/{summary.observations}",
+            }
+        )
+    print(table(pd.DataFrame(rows)))
+    return 0
+
+
 def cmd_trial_show(args) -> int:
     log = TrialLog(paths(args.root).trial_log)
     records = log.records(kind=args.kind, hypothesis_id=args.hypothesis)[-args.tail :]
@@ -1012,10 +1069,31 @@ def build_parser() -> argparse.ArgumentParser:
     verify.add_argument("--prereg-dir", help="where the documents live (default docs/prereg)")
     verify.set_defaults(func=cmd_trial_verify)
     show = trial.add_parser("show", help="recent records")
-    show.add_argument("--kind", choices=["prereg", "run", "gate", "holdout", "note"])
+    show.add_argument("--kind", choices=["prereg", "run", "gate", "holdout", "forward", "note"])
     show.add_argument("--hypothesis")
     show.add_argument("--tail", type=int, default=20)
     show.set_defaults(func=cmd_trial_show)
+
+    fwd = sub.add_parser(
+        "forward", help="the live paper record that gate 10 reads"
+    ).add_subparsers(dest="subcommand", required=True)
+    obs = fwd.add_parser("observe", help="record one bar of the live run")
+    obs.add_argument("hypothesis")
+    obs.add_argument("--date", required=True, help="the bar's date, e.g. 2026-09-13")
+    obs.add_argument("--net-return", type=float, required=True, help="realised net return, e.g. 0.0031")
+    obs.add_argument("--cost", type=float, default=0.0, help="realised cost as a fraction of equity")
+    obs.add_argument("--expected-cost", type=float, help="what the cost model said this bar would cost")
+    obs.add_argument("--weights", help='the book actually held, as JSON: \'{"SPY": 0.5}\'')
+    obs.add_argument(
+        "--expected-weights",
+        help="what the research code says the book should have been; without it gate 10 "
+        "cannot tell a decayed strategy from a mis-wired one",
+    )
+    obs.set_defaults(func=cmd_forward_observe)
+    fstat = fwd.add_parser("status", help="how far each incubation has to run")
+    fstat.add_argument("--hypothesis")
+    fstat.add_argument("--periods-per-year", type=float, default=365.0)
+    fstat.set_defaults(func=cmd_forward_status)
 
     doctor = sub.add_parser("doctor", help="paths, versions and the manifest hash")
     doctor.set_defaults(func=cmd_doctor)

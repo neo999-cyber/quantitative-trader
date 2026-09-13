@@ -77,8 +77,8 @@ def test_the_page_needs_nothing_from_the_network(lake):
     assert "@import" not in page
 
 
-def test_every_family_shows_all_ten_gates_even_the_ones_it_never_reached(lake):
-    """A family stopped at gate 2 still has a ten-cell ladder.
+def test_every_family_shows_every_gate_even_the_ones_it_never_reached(lake):
+    """A family stopped at gate 2 still shows every gate it never reached.
 
     Otherwise a short row reads as a different shape rather than as an early
     death, and the one thing this page exists to show is where each family
@@ -89,7 +89,7 @@ def test_every_family_shows_all_ten_gates_even_the_ones_it_never_reached(lake):
     ladders = re.findall(r'<div class="ladder">(.*?)</div>\s*</td>', page, re.S)
     assert ladders, "no ladders rendered"
     for ladder in ladders:
-        assert ladder.count('class="cell') == len(GATE_NAMES) == 10
+        assert ladder.count('class="cell') == len(GATE_NAMES) == 12
 
 
 def test_an_unreached_gate_is_drawn_as_absence_not_as_a_verdict(lake):

@@ -28,7 +28,7 @@ from typing import Any, Iterator, Literal
 
 GENESIS = "0" * 64
 
-Kind = Literal["prereg", "run", "gate", "holdout", "note"]
+Kind = Literal["prereg", "run", "gate", "holdout", "forward", "note"]
 
 
 class TrialLogCorrupt(RuntimeError):
@@ -269,6 +269,44 @@ class TrialLog:
             raise ValueError(f"verdict must be PASS/WARN/FAIL/SKIP, got {verdict!r}")
         return self.append(
             "gate", hypothesis_id, {"gate": gate, "name": name, "verdict": verdict, "stats": stats}
+        )
+
+    def forward(
+        self,
+        hypothesis_id: str,
+        date: str,
+        net_return: float,
+        cost: float,
+        weights: dict[str, float] | None = None,
+        expected_weights: dict[str, float] | None = None,
+        expected_cost: float | None = None,
+        **extra: Any,
+    ) -> TrialRecord:
+        """One bar of the live paper record.
+
+        It goes in the same hash-chained file as everything else, and that is
+        the point. A paper record kept in a spreadsheet is worth nothing: the
+        one failure mode of incubation is the operator quietly dropping the
+        week it went badly, and a chain makes that visible instead of
+        tempting. `expected_weights` and `expected_cost` are what the research
+        code said should happen on this bar, so gate 10 can tell a strategy
+        that decayed from a strategy that was never wired up correctly.
+        """
+        return self.append(
+            "forward",
+            hypothesis_id,
+            {
+                "date": str(date),
+                "net_return": float(net_return),
+                "cost": float(cost),
+                "weights": {str(k): float(v) for k, v in (weights or {}).items()},
+                "expected_weights": (
+                    None if expected_weights is None
+                    else {str(k): float(v) for k, v in expected_weights.items()}
+                ),
+                "expected_cost": None if expected_cost is None else float(expected_cost),
+                **extra,
+            },
         )
 
     def note(self, hypothesis_id: str, text: str, **extra: Any) -> TrialRecord:

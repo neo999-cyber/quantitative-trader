@@ -47,6 +47,8 @@ from qr.validate.permutation import (
     shuffled_ticker_test,
 )
 from qr.validate.spa import buy_and_hold_benchmark, superior_predictive_ability
+from qr.portfolio import sizing
+from qr.validate import forward
 from qr.validate.trial_log import TrialLog, content_hash
 
 PASS, WARN, FAIL, SKIP = "PASS", "WARN", "FAIL", "SKIP"
@@ -109,6 +111,24 @@ class GateThresholds:
     min_profitable_years: float = 2 / 3
     # gate 9
     min_holdout_ratio: float = 0.50
+    # gate 11. The four caps in `SizingPolicy`, and the floor below which a
+    # position is too small for the venue to be worth the trouble.
+    min_leverage: float = 0.05
+    # gate 10. Three months of daily bars. Short enough that incubation is a
+    # decision rather than a career, long enough that a dead strategy shows it.
+    min_forward_observations: int = 63
+    #: Forward Sharpe as a fraction of in-sample. Below this the edge is gone;
+    #: between this and `warn_forward_ratio` it is worth another month.
+    min_forward_ratio: float = 0.50
+    warn_forward_ratio: float = 0.70
+    #: Realised cost over modelled cost. Gate 2 decided every family this
+    #: project has run, so a cost model that is a third light in the real
+    #: world means gate 2 was scoring a fiction.
+    max_cost_ratio: float = 1.30
+    #: Worst single-bar disagreement between the live book and the researched
+    #: book, as a fraction of gross exposure. This is a wiring check, so the
+    #: tolerance is for rounding to whole shares, not for judgement.
+    max_weight_error: float = 0.02
 
 
 @dataclass
@@ -141,6 +161,9 @@ class GateContext:
     trial_log: TrialLog | None = None
     manifest_hash: str | None = None
     holdout_panel: Panel | None = None
+    #: The live paper record, if this hypothesis is in incubation. Gate 10
+    #: reads it; nothing else does.
+    forward_log: TrialLog | None = None
     holdout_universe: pd.DataFrame | None = None
     raw_frames: dict[str, pd.DataFrame] | None = None
     thresholds: GateThresholds = field(default_factory=GateThresholds)
@@ -947,6 +970,9 @@ def gate_9_holdout(ctx: GateContext) -> GateResult:
         "holdout_over_in_sample": ratio,
         "holdout_bars": float(len(holdout.net)),
         "holdout_max_drawdown": holdout.stats()["max_drawdown"],
+        # Gate 11 sizes on this. A Sharpe without the volatility behind it
+        # cannot be turned into a position.
+        "holdout_volatility": float(holdout.net.std(ddof=1) * np.sqrt(ctx.periods_per_year)),
     }
     if ctx.trial_log is not None:
         ctx.trial_log.append("holdout", ctx.hypothesis_id, {"stats": stats, "strategy": ctx.strategy.describe()})
@@ -956,6 +982,193 @@ def gate_9_holdout(ctx: GateContext) -> GateResult:
     if not np.isfinite(ratio) or ratio < ctx.thresholds.min_holdout_ratio:
         return GateResult(9, "true holdout", WARN, f"holdout keeps only {ratio:.0%} of in-sample Sharpe", stats)
     return GateResult(9, "true holdout", PASS, f"holdout Sharpe {out_sample:.2f} ({ratio:.0%} of in-sample)", stats)
+
+
+def gate_10_forward(ctx: GateContext) -> GateResult:
+    """Incubation: the only gate that looks at bars nobody had.
+
+    It runs three checks in a deliberate order — wiring, then cost, then
+    decay — because they fail for different reasons and only the last one is
+    about the strategy. A book that never matched the research is a defect
+    and more incubation does not fix it; a cost model that was optimistic
+    invalidates gate 2 for every family, not just this one.
+
+    The decay check is last and is the weakest of the three. Sixty-three
+    observations cannot establish that a Sharpe is real, and this gate never
+    claims they can: a PASS here says the record is *consistent with* the
+    research, which is the strongest thing three months can say.
+    """
+    log = ctx.forward_log if ctx.forward_log is not None else ctx.trial_log
+    if log is None:
+        return GateResult(10, "incubation", SKIP, "no forward record supplied")
+
+    records = forward.frame(log, ctx.hypothesis_id)
+    summary = forward.summarise(records, ctx.periods_per_year)
+    stats = summary.as_dict()
+    need = ctx.thresholds.min_forward_observations
+
+    if summary.observations == 0:
+        return GateResult(10, "incubation", SKIP, "not yet incubating", stats)
+    if summary.observations < need:
+        return GateResult(
+            10,
+            "incubation",
+            SKIP,
+            f"incubating: {summary.observations} of {need} observations "
+            f"since {summary.first}",
+            stats,
+        )
+
+    # 1. Wiring. Did the live system hold the book the research asked for?
+    if summary.checked_bars == 0:
+        wiring = WARN, "no bar carried an expected book, so nothing checked the wiring"
+    elif summary.checked_bars < summary.observations:
+        wiring = WARN, (
+            f"only {summary.checked_bars} of {summary.observations} bars carried "
+            "an expected book"
+        )
+    else:
+        wiring = None
+    if np.isfinite(summary.max_weight_error) and summary.max_weight_error > ctx.thresholds.max_weight_error:
+        return GateResult(
+            10,
+            "incubation",
+            FAIL,
+            f"the live book diverged from the researched book by "
+            f"{summary.max_weight_error:.1%} of gross on its worst bar; this is a "
+            f"wiring defect, not a decay, and incubating longer will not fix it",
+            stats,
+        )
+
+    # 2. Cost. Was the model that decided gate 2 telling the truth?
+    if np.isfinite(summary.cost_ratio) and summary.cost_ratio > ctx.thresholds.max_cost_ratio:
+        return GateResult(
+            10,
+            "incubation",
+            FAIL,
+            f"trading cost {summary.cost_ratio:.2f}x what the cost model predicted "
+            f"({summary.realised_cost:.4f} against {summary.expected_cost:.4f}); "
+            f"gate 2 scored this family on a cost that does not exist",
+            stats,
+        )
+
+    # 3. Decay. The weak check, and the one everybody means.
+    in_sample = ctx.result.sharpe()
+    stats["in_sample_sharpe"] = in_sample
+    ratio = (
+        summary.net_sharpe / in_sample
+        if np.isfinite(in_sample) and in_sample > 0 and np.isfinite(summary.net_sharpe)
+        else float("nan")
+    )
+    stats["forward_over_in_sample"] = ratio
+    window = f"{summary.observations} observations, {summary.first} to {summary.last}"
+
+    if not np.isfinite(summary.net_sharpe) or summary.net_sharpe <= 0:
+        return GateResult(
+            10,
+            "incubation",
+            FAIL,
+            f"forward Sharpe {summary.net_sharpe:.2f} over {window}",
+            stats,
+        )
+    if not np.isfinite(ratio):
+        return GateResult(
+            10,
+            "incubation",
+            WARN,
+            f"forward Sharpe {summary.net_sharpe:.2f} over {window}, with no "
+            "positive in-sample Sharpe to compare it against",
+            stats,
+        )
+    if ratio < ctx.thresholds.min_forward_ratio:
+        return GateResult(
+            10,
+            "incubation",
+            FAIL,
+            f"forward keeps {ratio:.0%} of in-sample Sharpe over {window}",
+            stats,
+        )
+    if ratio < ctx.thresholds.warn_forward_ratio:
+        return GateResult(
+            10,
+            "incubation",
+            WARN,
+            f"forward keeps {ratio:.0%} of in-sample Sharpe over {window}; "
+            "worth another month before it is believed",
+            stats,
+        )
+
+    detail = (
+        f"forward Sharpe {summary.net_sharpe:.2f} ({ratio:.0%} of in-sample) over "
+        f"{window}; consistent with the research, which is the strongest claim "
+        f"{summary.observations} observations can support"
+    )
+    if wiring is not None:
+        return GateResult(10, "incubation", wiring[0], f"{detail} — but {wiring[1]}", stats)
+    return GateResult(10, "incubation", PASS, detail, stats)
+
+
+def gate_11_sizing(ctx: GateContext) -> GateResult:
+    """How much money — and the refusal to answer from the in-sample Sharpe.
+
+    The Sharpe this gate sizes on must come from data the strategy was not
+    fitted to: the forward record if it is incubating, otherwise the holdout
+    that gate 9 opened. There is no fallback to the in-sample number. A
+    strategy that has not reached gate 9 does not get a size, because the only
+    Sharpe available for it is the one the search maximised, and sizing off
+    that is how a real edge still ends in a blown account.
+    """
+    sharpe = volatility = float("nan")
+    basis = ""
+
+    log = ctx.forward_log if ctx.forward_log is not None else ctx.trial_log
+    if log is not None:
+        records = forward.frame(log, ctx.hypothesis_id)
+        if len(records) >= ctx.thresholds.min_forward_observations:
+            summary = forward.summarise(records, ctx.periods_per_year)
+            net = records["net_return"].astype(float).dropna()
+            sharpe = summary.net_sharpe
+            volatility = float(net.std(ddof=1) * np.sqrt(ctx.periods_per_year))
+            basis = f"the forward record ({summary.observations} observations)"
+
+    if not np.isfinite(sharpe) and ctx.trial_log is not None:
+        opened = ctx.trial_log.records(kind="holdout", hypothesis_id=ctx.hypothesis_id)
+        if opened:
+            stats9 = opened[-1].payload.get("stats", {})
+            sharpe = float(stats9.get("holdout_sharpe", float("nan")))
+            volatility = float(stats9.get("holdout_volatility", float("nan")))
+            basis = "the holdout"
+
+    if not np.isfinite(sharpe) or not np.isfinite(volatility):
+        return GateResult(
+            11,
+            "sizing",
+            SKIP,
+            "no out-of-sample Sharpe to size from; this gate will not size off "
+            "the in-sample number",
+            {},
+        )
+
+    held = ctx.result.held
+    max_weight = float(held.abs().max().max()) if held.size else 1.0
+    plan = sizing.size(sharpe, volatility, max_weight=max_weight, equity=ctx.equity)
+    stats = {**plan.as_dict(), "sizing_basis": basis, "max_single_weight": max_weight}
+
+    if plan.leverage <= 0:
+        return GateResult(11, "sizing", FAIL,
+                          f"{basis} gives Sharpe {sharpe:.2f}; there is nothing to size", stats)
+
+    money = f", ${plan.notional:,.0f} on ${ctx.equity:,.0f}" if ctx.equity else ""
+    detail = (
+        f"{plan.leverage:.2f}x from {basis}{money}; the {plan.binding.replace('_', ' ')} "
+        f"cap binds, and P(drawdown > {int(sizing.SizingPolicy().max_drawdown * 100)}% ever) "
+        f"is {plan.drawdown_probability:.1%}"
+    )
+    if plan.leverage < ctx.thresholds.min_leverage:
+        return GateResult(11, "sizing", WARN, f"{detail} — too small to be worth trading", stats)
+    if plan.notes:
+        return GateResult(11, "sizing", PASS, f"{detail}; {plan.notes[0]}", stats)
+    return GateResult(11, "sizing", PASS, detail, stats)
 
 
 GATES: list[Callable[[GateContext], GateResult]] = [
@@ -969,6 +1182,8 @@ GATES: list[Callable[[GateContext], GateResult]] = [
     gate_7_cross_validation,
     gate_8_robustness,
     gate_9_holdout,
+    gate_10_forward,
+    gate_11_sizing,
 ]
 
 

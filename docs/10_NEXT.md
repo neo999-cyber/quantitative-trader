@@ -118,6 +118,35 @@ Most candidates die at (2), on paper, for free.
 raises gate 4's bar for every future family; the trial log is at ~1,450.
 Searching wider is not the lever. Choosing better is.
 
+### Running stages 2 and 3 as parallel agents (worth trying, when we get there)
+
+Stages 2 and 3 are the one part of this project shaped for multi-agent
+orchestration: eight mechanism candidates are **independent of each other**,
+each needs the same fixed treatment (write the memo, answer the five
+questions, run the kill tests), and the outputs are comparable. One sub-agent
+per candidate, fanned out, then merged and ranked — instead of one at a time.
+The `Workflow` tool does exactly this.
+
+Two limits on it, so the idea does not get applied where it does not belong:
+
+**It costs multiples, not a little more.** Each agent carries its own context.
+A fan-out of eight is not eight times *one prompt*, it is eight times
+*everything each agent needs to know*, and this project's background is not
+small. It is worth it when the work is genuinely parallel and the alternative
+is eight sequential sessions. It is waste anywhere the next step depends on
+the exact state left by the last one — which is most of this codebase, where
+a sloppy handoff means a wrong trial count rather than a stylistic miss.
+
+**It is not a substitute for the gates, and specifically not for the pending
+gate 10/11 review.** An LLM checking another LLM's work catches some things
+and misses others, and it fails hardest exactly where the author was
+motivated — which is the case in question. The gates are deterministic:
+formulas, a hash chain, the same verdict every run. That is strictly better
+than an agent with opinions, and the reason the sizing-maths review is routed
+to a separate human-triggered session rather than an automated reviewer.
+
+So: fan out the *search*, never the *verdict*.
+
 ### Honest odds
 
 At $1,000, roughly **1 in 5** that something clears all twelve gates and is

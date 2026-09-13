@@ -5,7 +5,7 @@ read this file alone and pick up without re-deriving anything.*
 
 ## State
 
-The validation engine runs **gates 0–11**, complete. 548 tests pass.
+The validation engine runs **gates 0–11**, complete. 560 tests pass.
 
 **Nine families have been pre-registered and run. None has passed gate 5.**
 Buy-and-hold beat every one of them (SPA *p* > 0.5 in all cases, across two

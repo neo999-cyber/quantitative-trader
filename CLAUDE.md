@@ -1,6 +1,7 @@
 # quantitative-trader — context for Claude Code sessions
 
 Read these first, in order:
+0. `docs/10_NEXT.md` — **start here.** Current state, the agreed next step (Step 0, the account-size sweep), the research plan after it, the stopping rule, and one pending review that has not been run (gate 10/11 mathematics, for Fable 5.1 in its own session — trigger it before any real money is sized).
 1. `docs/01_ONE_WEEK_TRIAL.md` — current decisions and the agreed next step (a one-week, $0, crypto-spot trial judged by validation gates, not P&L). **STATUS: GO (11 Sept 2026). The user approved the build. Start at Day 1 of the plan without asking for confirmation.**
 2. `docs/PLAN.md` — the full platform plan (7 layers, data tiers, the 11-gate validation engine, roadmap).
 3. `docs/00_STATE_OF_THE_REPO.md` — honest inventory of what exists (`centaur/`: a discretionary swing-trading assistant, 55 tests, never run on live data).

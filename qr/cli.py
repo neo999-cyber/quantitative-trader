@@ -297,6 +297,59 @@ def cmd_data_ingest(args) -> int:
     return 0 if written else 1
 
 
+def cmd_data_flows_collect(args) -> int:
+    """Record today's ETF share counts. Laptop or server; needs network.
+
+    Built to be a cron job. It appends one line per fund per run and never
+    rewrites a previous line, so the file's value grows with nothing but
+    patience — and unlike anything downloadable, it is point-in-time by
+    construction.
+
+    The URL and field names in `qr/data/etf_flows.py` have never been checked
+    against the live site, because the environment they were written in has no
+    egress to issuer pages. This command is that verification, and `--dump`
+    keeps the payload so a wrong guess costs one run rather than two.
+    """
+    from qr.data import etf_flows
+
+    out = Path(args.out) if args.out else paths(args.root).flows
+    dump = Path(args.dump) if args.dump else None
+    try:
+        payload = etf_flows.fetch(args.url or etf_flows.ISHARES_SCREENER, dump=dump)
+    except Exception as exc:
+        print(f"could not fetch {args.url}\n  {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 2
+
+    try:
+        counts = etf_flows.parse_ishares(payload)
+    except etf_flows.FlowSourceError as exc:
+        print(
+            f"the response parsed as JSON but not as funds:\n  {exc}\n"
+            + (f"The raw payload is at {dump}." if dump else
+               "Re-run with --dump lake/flows/raw.json to keep the payload."),
+            file=sys.stderr,
+        )
+        return 2
+
+    if args.dry_run:
+        print(table([c.as_dict() for c in counts]))
+        print("\n--dry-run: nothing was written")
+        return 0
+
+    written = etf_flows.append(out, counts)
+    frame = etf_flows.load(out)
+    days = frame["observed_utc"].dt.date.nunique() if not frame.empty else 0
+    print(f"recorded {written} funds to {out}")
+    print(f"{len(frame)} observations over {days} day(s) so far")
+    if days < 2:
+        print(
+            "\nOne day is not a flow. A flow is a change between two observations, so the "
+            "first useful number arrives tomorrow and the first usable sample in months. "
+            "Put this in cron now rather than remembering to run it."
+        )
+    return 0
+
+
 def cmd_data_funding_pull(args) -> int:
     """Download perp funding (and metrics) into the local mirror. Laptop only.
 
@@ -1593,6 +1646,15 @@ def build_parser() -> argparse.ArgumentParser:
     fund_pull = data.add_parser(
         "funding-pull", help="perp funding + metrics -> local mirror (needs network)"
     )
+    flows = data.add_parser(
+        "flows-collect",
+        help="record today's ETF share counts (needs network; built for cron)",
+    )
+    flows.add_argument("--url", default=None, help="override the issuer endpoint")
+    flows.add_argument("--out", help="where to append; defaults to the lake")
+    flows.add_argument("--dump", help="save the raw response here before parsing")
+    flows.add_argument("--dry-run", action="store_true", help="show what would be recorded")
+    flows.set_defaults(func=cmd_data_flows_collect)
     fund_pull.add_argument("--symbols", nargs="*")
     fund_pull.add_argument("--limit", type=int, help="first N symbols, alphabetically")
     fund_pull.add_argument("--start")

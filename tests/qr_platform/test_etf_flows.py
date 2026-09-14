@@ -1,0 +1,121 @@
+"""The forward collector for ETF creation and redemption flow.
+
+None of these URLs could be reached from the machine the parser was written on,
+so what is tested here is everything that does not need the network: that a
+plausible payload is read correctly, that an implausible one fails with the
+fields it actually saw, and that the record is append-only — which is the
+property the whole exercise depends on.
+"""
+import json
+
+import pandas as pd
+import pytest
+
+from qr.data import etf_flows
+
+
+def screener(**overrides) -> dict:
+    """The shape the iShares product screener is documented to return."""
+    body = {
+        "239710": {
+            "localExchangeTicker": "IWM",
+            "fundName": "iShares Russell 2000 ETF",
+            "sharesOutstanding": {"r": 275_000_000.0, "d": "275,000,000"},
+            "totalNetAssets": {"r": 61_000_000_000.0, "d": "61,000,000,000"},
+            "navAmount": {"r": 221.82, "d": "221.82"},
+        },
+        "239726": {
+            "localExchangeTicker": "HYG",
+            "fundName": "iShares iBoxx High Yield",
+            "sharesOutstanding": {"r": 190_000_000.0, "d": "190,000,000"},
+            "totalNetAssets": {"r": 15_000_000_000.0, "d": "15,000,000,000"},
+            "navAmount": {"r": 78.95, "d": "78.95"},
+        },
+        "999999": {
+            "localExchangeTicker": "IVV",  # not in the basket; must be ignored
+            "sharesOutstanding": {"r": 1.0},
+        },
+    }
+    body.update(overrides)
+    return body
+
+
+def test_a_plausible_payload_yields_one_row_per_basket_fund():
+    counts = etf_flows.parse_ishares(screener())
+
+    assert {c.ticker for c in counts} == {"IWM", "HYG"}, "a fund outside the basket was kept"
+    iwm = next(c for c in counts if c.ticker == "IWM")
+    assert iwm.shares_outstanding == 275_000_000.0
+    assert iwm.total_net_assets == 61_000_000_000.0
+    assert iwm.nav == pytest.approx(221.82)
+    assert iwm.source == "ishares_product_screener"
+    assert iwm.observed_utc.endswith("+00:00"), "the observation time is the whole point"
+
+
+def test_a_flat_list_of_records_is_read_too():
+    """The endpoint's nesting is one of the things written blind."""
+    counts = etf_flows.parse_ishares(list(screener().values()))
+    assert {c.ticker for c in counts} == {"IWM", "HYG"}
+
+
+def test_formatted_strings_are_read_and_placeholders_are_not():
+    body = screener()
+    body["239710"]["sharesOutstanding"] = "275,000,000"
+    body["239710"]["navAmount"] = "$221.82"
+    body["239726"]["navAmount"] = "--"
+
+    counts = {c.ticker: c for c in etf_flows.parse_ishares(body)}
+    assert counts["IWM"].shares_outstanding == 275_000_000.0
+    assert counts["IWM"].nav == pytest.approx(221.82)
+    assert counts["HYG"].nav is None, "'--' is not a NAV of zero"
+
+
+def test_a_payload_without_the_field_says_what_it_did_have():
+    """The likeliest failure, and the one that decides whether a run was wasted."""
+    body = {"239710": {"localExchangeTicker": "IWM", "fundName": "x", "esgRating": "AA"}}
+    with pytest.raises(etf_flows.FlowSourceError) as exc:
+        etf_flows.parse_ishares(body)
+    assert "IWM" in str(exc.value)
+    assert "esgRating" in str(exc.value), "the error must quote the fields that arrived"
+
+
+def test_a_payload_with_no_funds_at_all_is_a_different_error():
+    with pytest.raises(etf_flows.FlowSourceError, match="no fund records"):
+        etf_flows.parse_ishares({"message": "forbidden"})
+
+
+def test_recording_is_append_only(tmp_path):
+    """A corrected line would reintroduce exactly the revision problem this avoids."""
+    path = tmp_path / "flows.jsonl"
+    etf_flows.append(path, etf_flows.parse_ishares(screener()))
+    etf_flows.append(path, etf_flows.parse_ishares(screener()))
+
+    lines = path.read_text(encoding="utf-8").strip().splitlines()
+    assert len(lines) == 4
+    assert all(json.loads(line)["ticker"] in {"IWM", "HYG"} for line in lines)
+
+
+def test_a_flow_is_a_change_and_the_first_observation_has_none(tmp_path):
+    path = tmp_path / "flows.jsonl"
+    rows = [
+        {"observed_utc": "2026-09-14T00:00:00+00:00", "ticker": "IWM",
+         "shares_outstanding": 275_000_000.0, "total_net_assets": None, "nav": 200.0,
+         "source": "t"},
+        {"observed_utc": "2026-09-15T00:00:00+00:00", "ticker": "IWM",
+         "shares_outstanding": 276_000_000.0, "total_net_assets": None, "nav": 200.0,
+         "source": "t"},
+    ]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
+
+    flow = etf_flows.daily_flow(etf_flows.load(path))
+    assert pd.isna(flow["shares_change"].iloc[0]), "day one is unknown, not zero"
+    assert flow["shares_change"].iloc[1] == 1_000_000.0
+    assert flow["flow_usd"].iloc[1] == 200_000_000.0
+
+
+def test_an_empty_record_loads_rather_than_raising(tmp_path):
+    """Everything downstream must cope with collection not having started."""
+    frame = etf_flows.load(tmp_path / "nothing.jsonl")
+    assert frame.empty
+    assert etf_flows.daily_flow(frame).empty

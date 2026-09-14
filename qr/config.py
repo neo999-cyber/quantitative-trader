@@ -54,6 +54,16 @@ class Paths:
     def reports(self) -> Path:
         return self.root / "reports"
 
+    @property
+    def flows(self) -> Path:
+        """Append-only record of ETF share counts, one line per observation.
+
+        Not under `raw/`, which is a mirror of something downloadable. This
+        file cannot be re-fetched: every line is what was true on the day it
+        was written, and that is the entire reason it is worth having.
+        """
+        return self.root / "flows" / "etf_shares_outstanding.jsonl"
+
     def ensure(self) -> "Paths":
         for p in (self.root, self.raw, self.reference, self.features, self.reports):
             p.mkdir(parents=True, exist_ok=True)

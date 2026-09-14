@@ -106,7 +106,15 @@ REGISTRY: dict[str, Feature] = {
         Feature(
             "fund_flows",
             "pension and ETF creation/redemption pressure",
-            needs_dataset="ETF creation baskets / ICI flow data",
+            # Collection has started (`qr data flows-collect`, `docs/17`) and
+            # that is not the same as having the data. There is no free
+            # history: the record begins the day the cron job does, so this
+            # stays blocked until the file is long enough to test anything —
+            # and a year of it is 250 daily observations and twelve month-ends.
+            needs_dataset=(
+                "ETF shares outstanding: no free history exists; `qr data flows-collect` "
+                "records it forward, so this unblocks with time rather than with money"
+            ),
         ),
     ]
 }

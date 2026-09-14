@@ -44,15 +44,19 @@ sums within the UTC day rather than taking a last value, because what a
 position pays over a day is the sum of its three settlements and the
 individual settlements are not separately interesting.
 
-## What is unverified
+## What the first real pull found
 
-The bucket paths and CSV column names below are written from Binance's
-published data-bucket layout and **have not been checked against the live
-bucket** — this repository is developed where that bucket is unreachable. Both
-parsers therefore fail loudly, quoting the header they actually received,
-rather than coercing an unexpected shape into silence. The first real
-`qr data funding-pull` is the verification; if it errors with a column list,
-that list is the answer and the constants here are what to correct.
+The bucket paths and CSV column names were written from Binance's published
+layout without ever meeting the live bucket, and the first real pull (14
+September 2026) confirmed them: 40 symbols, funding and metrics files, no
+missing-column error.
+
+One thing was wrong and it was the timestamps. `fundingRate` carries epoch
+integers like the klines; **`metrics` carries formatted datetimes**, and the
+ingest died on `to_utc` refusing `create_time` as non-numeric. `_timestamps`
+now takes either and still refuses anything else, quoting the value — a
+timestamp coerced to NaT is a row silently dropped from a feature, and a
+feature with undeclared holes is worse than a loader that stops.
 """
 from __future__ import annotations
 
@@ -132,6 +136,35 @@ def _read_csv(payload: bytes, required: tuple[str, ...], what: str) -> pd.DataFr
     return frame
 
 
+def _timestamps(values, what: str) -> pd.DatetimeIndex:
+    """Bucket timestamps, whichever of the two shapes this file uses.
+
+    The kline and fundingRate files carry epoch integers. The **metrics** files
+    do not — `create_time` is a formatted datetime like `2024-01-01 00:00:00`,
+    and the first real ingest died on `to_utc` refusing it as non-numeric. The
+    paths and columns were right; only this was wrong.
+
+    Numeric first, because that is the format with the millisecond/microsecond
+    ambiguity `to_utc` exists to resolve. Strings second. Anything else raises
+    with the offending value quoted, because a timestamp coerced to NaT becomes
+    a row silently dropped from a feature, and a feature with holes nobody
+    declared is worse than a loader that stops.
+    """
+    series = pd.Series(np.asarray(values))
+    numeric = pd.to_numeric(series, errors="coerce")
+    if not numeric.isna().any():
+        return to_utc(series)
+
+    parsed = pd.to_datetime(series, errors="coerce", utc=True, format="mixed")
+    if parsed.isna().any():
+        bad = series[parsed.isna()].iloc[0]
+        raise BucketError(
+            f"{what} file has a timestamp this loader cannot read: {bad!r}. It is neither "
+            f"an epoch integer nor a datetime string."
+        )
+    return pd.DatetimeIndex(parsed)
+
+
 def parse_funding(payload: bytes, symbol: str | None = None) -> pd.DataFrame:
     """One `fundingRate` file -> a UTC-indexed frame with `funding_rate`."""
     frame = _read_csv(payload, FUNDING_COLUMNS, "fundingRate")
@@ -149,7 +182,7 @@ def parse_funding(payload: bytes, symbol: str | None = None) -> pd.DataFrame:
             .astype(float)
             .to_numpy()
         },
-        index=to_utc(frame["calc_time"]),
+        index=_timestamps(frame["calc_time"], "fundingRate"),
     )
     out.index.name = "calc_time"
     if out["funding_rate"].isna().any():
@@ -177,7 +210,7 @@ def parse_metrics(payload: bytes, symbol: str | None = None) -> pd.DataFrame:
             .astype(float)
             .to_numpy(),
         },
-        index=to_utc(frame["create_time"]),
+        index=_timestamps(frame["create_time"], "metrics"),
     )
     out.index.name = "create_time"
     if symbol is not None:

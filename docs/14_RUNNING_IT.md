@@ -93,13 +93,17 @@ The mechanism nights asked for this more than anything else (`docs/15`).
     qr data funding-pull --limit 40
     qr data funding-ingest
 
-`funding-pull` needs network and is the **verification** of paths this
-repository could never check: it is written from Binance's published bucket
-layout and has never met the live bucket. An empty listing means the prefix is
-wrong; a parse error quotes the header that actually arrived, and that header
-is the correction to make. `--limit 40` keeps the first pull small enough to
-find out cheaply. Drop `--metrics` if the daily open-interest files are too
-many to start with.
+**Verified on 14 September 2026.** The paths and columns were right; 40 symbols
+pulled funding and metrics without a missing-column error. One thing was wrong
+and is fixed: `metrics` timestamps are formatted datetimes, not epochs, and the
+ingest refused them.
+
+**Use `--no-metrics` on the ingest unless you need open interest.** A symbol can
+have 3,000+ daily metrics files and nothing consumes `open_interest` yet —
+`FundingTilt` reads `funding_rate` alone, so the metrics pass is ~100,000 file
+reads for a column no strategy uses:
+
+    qr data funding-ingest --no-metrics
 
 Once ingested, `load_panel` joins funding and open interest onto the spot
 panel automatically, and `qr autopilot --asset crypto` can compile a memo to

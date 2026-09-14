@@ -1,11 +1,17 @@
 """Perp funding and open interest: the dataset twelve kills asked for.
 
-The bucket paths and column names are written from Binance's published layout
-and have never met the live bucket, so what is tested here is everything that
-does not depend on that: that a wrong shape fails loudly and quotes what it
-actually received, that the daily aggregation means what it claims, that the
-join cannot smuggle a perp into the tradable universe, and that a strategy
-needing funding refuses a panel without it rather than holding nothing.
+The paths and column names were written from Binance's published layout without
+ever meeting the live bucket, and the first real pull confirmed them. One thing
+was wrong: `fundingRate` carries epoch integers, `metrics` carries formatted
+datetimes, and the ingest died refusing `create_time` as non-numeric. The
+metrics fixture therefore defaults to the *string* shape, so a regression
+cannot pass by using the convenient format instead of the real one.
+
+The rest is what does not depend on the bucket at all: that a wrong shape fails
+loudly quoting what it received, that the daily aggregation means what it
+claims, that the join cannot smuggle a perp into the tradable universe, and
+that a strategy needing funding refuses a panel without it rather than holding
+nothing.
 """
 import io
 import zipfile
@@ -43,13 +49,25 @@ def funding_csv(rows: list[tuple[int, float]]) -> str:
     return "calc_time,funding_interval_hours,last_funding_rate\n" + body
 
 
-def metrics_csv(rows: list[tuple[int, float, float]]) -> str:
+def metrics_csv(rows: list[tuple[int, float, float]], as_text: bool = True) -> str:
+    """Metrics rows. `as_text` is the shape the real bucket actually ships.
+
+    The first live ingest died here: `fundingRate` carries epoch integers like
+    the klines, and `metrics` carries formatted datetimes. The fixture defaults
+    to the real shape so a regression cannot pass by using the convenient one.
+    """
     header = (
         "create_time,symbol,sum_open_interest,sum_open_interest_value,"
         "count_toptrader_long_short_ratio,sum_toptrader_long_short_ratio,"
         "count_long_short_ratio,sum_taker_long_short_vol_ratio\n"
     )
-    body = "\n".join(f"{t},BTCUSDT,{oi},{usd},1,1,1,1" for t, oi, usd in rows)
+
+    def stamp(t):
+        if not as_text:
+            return t
+        return pd.Timestamp(t, unit="ms", tz="UTC").strftime("%Y-%m-%d %H:%M:%S")
+
+    body = "\n".join(f"{stamp(t)},BTCUSDT,{oi},{usd},1,1,1,1" for t, oi, usd in rows)
     return header + body
 
 
@@ -268,3 +286,39 @@ def test_the_bucket_reads_a_mirror_laid_out_the_way_the_puller_writes_it(tmp_pat
 
 def test_a_symbol_with_no_files_loads_empty_rather_than_raising(tmp_path):
     assert FundingBucket(LocalBucket(tmp_path)).load_funding("NOPEUSDT").empty
+
+
+# ----------------------------------------------- the timestamp the bucket ships
+
+
+def test_metrics_timestamps_are_datetime_strings_not_epochs():
+    """The first live ingest died on exactly this.
+
+    The paths and the columns were right; `create_time` is a formatted datetime
+    while `fundingRate`'s `calc_time` is an epoch integer, and `to_utc` refused
+    it as non-numeric.
+    """
+    frame = parse_metrics(zipped(metrics_csv([(DAY, 100.0, 1e6)])))
+    assert len(frame) == 1
+    assert frame.index[0] == pd.Timestamp("1970-01-02", tz="UTC")
+    assert frame["open_interest"].iloc[0] == 100.0
+
+
+def test_an_epoch_metrics_file_still_parses():
+    """Whichever shape arrives, both are legitimate bucket formats."""
+    frame = parse_metrics(zipped(metrics_csv([(DAY, 100.0, 1e6)], as_text=False)))
+    assert frame.index[0] == pd.Timestamp("1970-01-02", tz="UTC")
+
+
+def test_a_timestamp_that_is_neither_is_refused_with_the_value_quoted():
+    """A NaT is a row silently dropped from a feature; stopping is better."""
+    body = metrics_csv([(DAY, 100.0, 1e6)]).replace("1970-01-02 00:00:00", "not-a-date")
+    with pytest.raises(BucketError, match="not-a-date"):
+        parse_metrics(zipped(body))
+
+
+def test_daily_aggregation_survives_the_string_timestamps():
+    frame = parse_metrics(zipped(metrics_csv([(DAY, 100.0, 1e6), (DAY + H8, 140.0, 1.4e6)])))
+    daily = daily_open_interest(frame)
+    assert len(daily) == 1
+    assert daily["open_interest"].iloc[0] == 140.0

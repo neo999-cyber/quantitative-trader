@@ -186,7 +186,7 @@ def test_head_handles_a_file_that_is_one_very_long_record(tmp_path):
 
 
 def test_a_memo_sized_record_round_trips(tmp_path):
-    """The real shape that found this: five prose answers and a triage verdict."""
+    """The real shape that found this: six prose answers and a triage verdict."""
     from qr.research.mechanism import CrudeVersion, MechanismMemo, record, triage
 
     log = TrialLog(tmp_path / "trial.jsonl")
@@ -195,6 +195,7 @@ def test_a_memo_sized_record_round_trips(tmp_path):
         candidate_id="month_end_v1",
         title="Balanced funds rebalance at month end",
         forced_trader=prose,
+        transmission=prose,
         persistence=prose,
         other_side=prose,
         what_breaks_it=prose,

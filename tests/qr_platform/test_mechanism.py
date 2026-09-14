@@ -34,6 +34,8 @@ def memo(**overrides) -> MechanismMemo:
         "title": "Balanced funds must rebalance at month end",
         "forced_trader": "A 60/40 fund whose mandate requires it to sell what rose and buy what "
         "fell on the last business day of the month, in size, regardless of price.",
+        "transmission": "The funds hold these ETFs directly, so the forced trade happens in "
+        "this market: the mandate is executed against the same closing print we trade.",
         "persistence": "The obligation is written into the prospectus and audited; the manager "
         "does not get to skip a month because the trade looks bad.",
         "other_side": "Market makers and anyone willing to warehouse the imbalance overnight. It "
@@ -96,6 +98,47 @@ def test_question_two_answered_with_a_statement_about_prices_is_killed():
     verdict = triage(memo(persistence="Momentum works, and it has worked in the past."))
     assert verdict.verdict == "killed"
     assert "not an obligation" in verdict.reason
+
+
+def test_a_memo_naming_no_transmission_is_killed():
+    """The transfer can be real and still not reach the market being traded."""
+    verdict = triage(memo(transmission="   ", confidence=0.9))
+    assert verdict.verdict == "killed"
+    assert "question 2" in verdict.reason
+
+
+def test_a_transmission_that_only_asserts_two_prices_move_together_is_killed():
+    verdict = triage(
+        memo(
+            transmission="Funding on the perpetual is high, so the market tends to fall in spot "
+            "shortly afterwards."
+        )
+    )
+    assert verdict.verdict == "killed"
+    assert "not an observation that two prices move together" in verdict.reason
+
+
+def test_a_transmission_naming_no_agent_in_this_market_is_killed():
+    """The perp is a different instrument; something has to carry the flow across."""
+    verdict = triage(
+        memo(
+            transmission="Leveraged longs are forced to close on the perpetual, which feeds "
+            "through to the spot price."
+        )
+    )
+    assert verdict.verdict == "killed"
+    assert "names no agent" in verdict.reason
+
+
+def test_a_transmission_that_names_the_arbitrage_proceeds():
+    verdict = triage(
+        memo(
+            transmission="Liquidations force selling on the perpetual. Basis arbitrageurs are "
+            "long spot against short perp; as the basis collapses they sell spot to stay hedged, "
+            "and that selling is the flow this strategy meets."
+        )
+    )
+    assert verdict.proceed
 
 
 def test_a_memo_with_no_payer_is_killed_however_confident_it_is():

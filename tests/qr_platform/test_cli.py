@@ -403,6 +403,7 @@ def test_autopilot_runs_a_night_and_records_every_exit(env, tmp_path, capsys, mo
             candidate_id="killed_v1" if killed else "month_end_v1",
             title="a stub",
             forced_trader="a fund with a mandate",
+            transmission="the mandate is executed in this market, against the same close",
             persistence="momentum works" if killed else "the mandate is audited every month",
             other_side="market makers",
             what_breaks_it="continuous rebalancing",

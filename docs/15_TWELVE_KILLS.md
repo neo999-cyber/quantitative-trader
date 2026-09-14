@@ -148,3 +148,55 @@ this repository is developed where that bucket is unreachable. Both parsers
 fail loudly and quote the header they actually received. The first real pull is
 the verification — if it errors with a column list, that list is the
 correction.
+
+
+---
+
+## Addendum — the bar now has a second half (14 September 2026)
+
+Twenty-six self-kills in, one ambiguity kept coming back. Is *"leveraged longs
+are paying funding on the perpetual"* a mechanism for a **spot** strategy?
+
+The forced trader is real and the payment is real, and neither of those is a
+reason for the spot price to move. The perpetual is a different instrument. A
+memo that steps from one to the other is **asserting** a link rather than
+naming one, and the funding candidates were passing question 1 on the strength
+of that step.
+
+Three ways out were on the table:
+
+* **(a) strict** — only forced flow in the market being traded counts;
+* **(b) loose** — a forced trader anywhere counts;
+* **(c) strict, plus a named transmission** — adopted.
+
+(b) was rejected because of what it admits. "Retail gets margin-called, so buy
+the dip" clears a loose bar, and it compiles to `reversal_v1`, which has
+already been pre-registered and failed with SPA *p* = 0.853. A bar that admits
+a family the project has already rejected is not a bar.
+
+Under **(c)** the memo answers a sixth question, and it is now question 2:
+**which market is the forced trader forced in, and what mechanically carries
+their flow into ours?** Name the arbitrageur or the hedge, or say the forced
+flow is in this market already.
+
+* *"Funding is high, therefore spot falls"* — killed.
+* *"Liquidations force perp selling; basis arbitrageurs are long spot against
+  short perp and sell spot to stay hedged; the spot book is thinner
+  overnight"* — proceeds. It names a trader obliged to act in **spot**, and the
+  claim is checkable.
+
+The strict half is not an empty set, which is what made (c) affordable. Spot
+ETF creations and redemptions, miner treasury selling, token unlocks and
+spot-margin liquidations are all forced flow in the spot book itself and need
+no transmission at all. The briefs that produced ten access-kills were wrong;
+the bar was not.
+
+**In the code.** `MEMO_SCHEMA` and `MechanismMemo` carry a `transmission`
+field, `as_markdown()` renders it as section 2 — so it is inside the document
+gate 0 hashes, not commentary alongside it — and `triage()` kills a memo three
+ways without consulting the model's verdict: an empty transmission, one drawn
+from `NON_MECHANISMS`, or one that names no agent in the market being traded
+(`TRANSMISSION_AGENTS`). That last check is a stem list and it fails closed. A
+memo killed by it can be rewritten to name the agent it meant, and the kill
+reason says so; the alternative is accepting "spot follows the perp", which is
+the sentence this whole addendum exists to refuse.

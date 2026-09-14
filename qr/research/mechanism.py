@@ -3,18 +3,40 @@
 The nine families that failed were all *patterns* — "things that went up keep
 going up". Nobody pays for a pattern. The ideas that survive are transfers:
 someone is **forced to trade** regardless of price, and somebody collects. So
-before anything runs, a one-page memo answers five questions:
+before anything runs, a one-page memo answers six questions:
 
 1. Who is forced to trade, and why?
-2. Why will they keep being forced? *(If the answer is "momentum works", there
+2. Which market are they forced in, and what **mechanically transmits** their
+   flow into the market we actually trade?
+3. Why will they keep being forced? *(If the answer is "momentum works", there
    is no mechanism. Kill it here.)*
-3. Who is on the other side today, and why has the effect not gone?
-4. What would make it stop working?
-5. Crudest possible version, and its gross return before costs.
+4. Who is on the other side today, and why has the effect not gone?
+5. What would make it stop working?
+6. Crudest possible version, and its gross return before costs.
 
-Most candidates die at (2), on paper, for free. That is the point of the stage:
-it is the cheapest filter in the funnel and the only one that looks at *why*
-rather than at a number.
+Most candidates die at (2) or (3), on paper, for free. That is the point of the
+stage: it is the cheapest filter in the funnel and the only one that looks at
+*why* rather than at a number.
+
+## Why question 2 exists
+
+It was added after 26 self-kills (`docs/15`). The kills were right, but the
+runs kept circling one ambiguity: is "leveraged longs pay funding on the perp"
+a mechanism for a *spot* strategy? The forced trader is real and the payment is
+real, and neither of those is a reason for the spot price to move — the perp is
+a different instrument, and a memo that skips from one to the other is asserting
+a link rather than naming one.
+
+So the bar is now a transfer **plus a named transmission**: which market the
+forced trader is forced in, and the arbitrage that carries their flow to ours.
+"Funding is high, therefore spot falls" does not clear it. "Liquidations force
+perp selling; basis arbitrageurs are long spot against short perp and sell spot
+to stay hedged; the spot book is thinner overnight" does — it names a trader who
+must act in *our* market, and it is checkable.
+
+The bar is strict and it is not empty. Spot ETF creations and redemptions,
+miner treasury selling, token unlocks and spot-margin liquidations are all
+forced flow in spot itself, needing no transmission at all.
 
 ## Why the harness does not trust the memo
 
@@ -125,6 +147,25 @@ NON_MECHANISMS = (
     "fear and greed",
 )
 
+#: Stems that name an *agent* in the market being traded. A transmission is a
+#: claim about someone's behaviour — an arbitrageur unwinding a hedge, an
+#: authorised participant creating shares, a miner selling a treasury — and
+#: every honest one names that someone. Two prices moving together does not.
+#:
+#: A stem list is crude and it fails closed, which is the right direction here:
+#: a memo killed for naming no agent can be rewritten to name the agent it
+#: meant, and the kill reason says exactly that. The alternative, accepting
+#: "spot follows the perp", is how the funding candidates kept getting through.
+TRANSMISSION_AGENTS = (
+    "arb", "hedg", "market maker", "market-maker", "dealer", "liquidity provider",
+    "authoris", "authoriz", "creat", "redem", "issuer", "fund must", "index fund",
+    "liquidat", "margin call", "collateral", "mandate", "prospectus",
+    "miner", "treasury", "unlock", "vest", "insider", "borrow", "short seller",
+    "deliver", "settle", "expiry", "expiri", "basis trad", "cash and carry",
+    "cash-and-carry", "in this market", "in spot itself", "forced in spot",
+)
+
+
 def _params_schema() -> dict[str, Any]:
     """The parameter object a crude version may set, built from the real classes.
 
@@ -191,6 +232,17 @@ names who collects the other side. "Momentum works" is not a mechanism; it is th
 would need explaining. If the honest answer to "why will they keep being forced?" is a statement \
 about price behaviour rather than about an obligation, kill the candidate and say so.
 
+The bar has a second half that is just as strict: TRANSMISSION. Name the market the forced \
+trader is forced in, and — if that is not the market being traded here — the arbitrage that \
+mechanically carries their flow into it. Someone must be obliged to trade OUR instrument. \
+"Funding on the perpetual is high, therefore spot falls" does not clear the bar: the perp and \
+the spot are different instruments and the sentence asserts the link instead of naming it. \
+"Liquidations force perp selling; basis arbitrageurs hold long spot against short perp and must \
+sell spot to stay hedged" does clear it, because it names a trader forced in spot and can be \
+checked. If you cannot name the transmission, kill the candidate — that is the honest outcome, \
+and forced flow that happens in our own market (creations and redemptions, treasury selling, \
+vesting unlocks, margin liquidations in the spot book) needs no transmission at all.
+
 Most good screening ends in a kill. A night that kills eight candidates for named reasons is a \
 success. Inventing a mechanism to keep a candidate alive is the failure mode; say "killed" freely.
 
@@ -204,9 +256,19 @@ MEMO_SCHEMA = {
         "candidate_id": {"type": "string", "description": "snake_case, e.g. month_end_rebalance_v1"},
         "title": {"type": "string"},
         "forced_trader": {"type": "string", "description": "Q1: who is forced to trade, and why"},
-        "persistence": {"type": "string", "description": "Q2: why will they KEEP being forced"},
-        "other_side": {"type": "string", "description": "Q3: who collects, and why has it not gone"},
-        "what_breaks_it": {"type": "string", "description": "Q4"},
+        "transmission": {
+            "type": "string",
+            "description": (
+                "Q2: which market is the forced trader forced in, and what mechanically "
+                "carries their flow into the market traded here? Name the arbitrageur or "
+                "the hedge that links the two instruments, or say that the forced flow is "
+                "in this market already. A statement about prices moving together is not a "
+                "transmission."
+            ),
+        },
+        "persistence": {"type": "string", "description": "Q3: why will they KEEP being forced"},
+        "other_side": {"type": "string", "description": "Q4: who collects, and why has it not gone"},
+        "what_breaks_it": {"type": "string", "description": "Q5"},
         "crude_version": {
             "type": "object",
             "properties": {
@@ -232,7 +294,7 @@ MEMO_SCHEMA = {
         },
     },
     "required": [
-        "candidate_id", "title", "forced_trader", "persistence", "other_side",
+        "candidate_id", "title", "forced_trader", "transmission", "persistence", "other_side",
         "what_breaks_it", "crude_version", "required_features", "self_verdict",
         "kill_reason", "confidence",
     ],
@@ -267,11 +329,12 @@ class CrudeVersion:
 
 @dataclass(frozen=True)
 class MechanismMemo:
-    """One page, five questions, and a machine-runnable crude version."""
+    """One page, six questions, and a machine-runnable crude version."""
 
     candidate_id: str
     title: str
     forced_trader: str
+    transmission: str
     persistence: str
     other_side: str
     what_breaks_it: str
@@ -289,6 +352,7 @@ class MechanismMemo:
             candidate_id=raw["candidate_id"],
             title=raw["title"],
             forced_trader=raw["forced_trader"],
+            transmission=raw.get("transmission", ""),
             persistence=raw["persistence"],
             other_side=raw["other_side"],
             what_breaks_it=raw["what_breaks_it"],
@@ -319,13 +383,15 @@ class MechanismMemo:
                 f"\n*Candidate `{self.candidate_id}`. Mechanism memo, Stage 2.*\n",
                 "## 1. Who is forced to trade, and why?\n",
                 self.forced_trader,
-                "\n## 2. Why will they keep being forced?\n",
+                "\n## 2. Which market are they forced in, and what transmits it to ours?\n",
+                self.transmission,
+                "\n## 3. Why will they keep being forced?\n",
                 self.persistence,
-                "\n## 3. Who is on the other side, and why has the effect not gone?\n",
+                "\n## 4. Who is on the other side, and why has the effect not gone?\n",
                 self.other_side,
-                "\n## 4. What would make it stop working?\n",
+                "\n## 5. What would make it stop working?\n",
                 self.what_breaks_it,
-                "\n## 5. Crudest version\n",
+                "\n## 6. Crudest version\n",
                 f"`{self.crude_version.primitive}` with "
                 f"`{json.dumps(self.crude_version.params, sort_keys=True)}`, "
                 f"expected sign **{self.crude_version.expected_sign}**.\n",
@@ -372,6 +438,33 @@ def triage(memo: MechanismMemo, panel=None) -> Triage:
 
     if not memo.forced_trader.strip():
         return Triage("killed", "question 1 is unanswered: no payer is named")
+
+    transmission = memo.transmission.strip()
+    if not transmission:
+        return Triage(
+            "killed",
+            "question 2 is unanswered: the memo does not say which market the forced trader is "
+            "forced in, or what carries their flow into the one traded here",
+        )
+
+    phrase = _reads_as_a_pattern(transmission)
+    if phrase is not None:
+        return Triage(
+            "killed",
+            f"question 2 answers with a statement about prices ({phrase!r}). A transmission is "
+            "an obligation somebody has in this market, not an observation that two prices move "
+            "together.",
+        )
+
+    lowered = " ".join(transmission.lower().split())
+    if not any(stem in lowered for stem in TRANSMISSION_AGENTS):
+        return Triage(
+            "killed",
+            "question 2 names no agent in the market traded here. A transmission has to say who "
+            "is obliged to trade this instrument — the arbitrageur unwinding a hedge, the issuer "
+            "creating or redeeming, the holder being liquidated — or that the forced flow is in "
+            "this market already. An asserted link between two instruments is not one.",
+        )
 
     phrase = _reads_as_a_pattern(memo.persistence)
     if phrase is not None:
@@ -424,7 +517,11 @@ def triage(memo: MechanismMemo, panel=None) -> Triage:
     except Exception as exc:  # the params are the model's; they may not fit
         return Triage("killed", f"crude version does not build: {type(exc).__name__}: {exc}")
 
-    return Triage("proceed", "a named payer, an obligation that persists, and a runnable crude version")
+    return Triage(
+        "proceed",
+        "a named payer, a named transmission into this market, an obligation that persists, "
+        "and a runnable crude version",
+    )
 
 
 # ------------------------------------------------------------------ the call
@@ -457,7 +554,7 @@ def propose(
     )
     user = (
         f"{brief}\n\n"
-        f"Answer the five questions for ONE candidate.\n\n"
+        f"Answer the six questions for ONE candidate.\n\n"
         f"Primitives you may use for the crude version:\n{catalogue}\n\n"
         f"Features available in the lake: {have}\n\n"
         f"Features NOT available (propose one only if the idea genuinely needs it; "

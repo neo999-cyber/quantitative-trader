@@ -150,7 +150,7 @@ Searching wider is not the lever. Choosing better is.
 
 Stages 2 and 3 are the one part of this project shaped for multi-agent
 orchestration: eight mechanism candidates are **independent of each other**,
-each needs the same fixed treatment (write the memo, answer the five
+each needs the same fixed treatment (write the memo, answer the six
 questions, run the kill tests), and the outputs are comparable. One sub-agent
 per candidate, fanned out, then merged and ranked — instead of one at a time.
 The `Workflow` tool does exactly this.

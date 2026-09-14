@@ -73,10 +73,13 @@ a reviewer.)
 ## The rest of the funnel, as built
 
 **Stage 2, the mechanism memo.** `qr/research/mechanism.py`. Claude answers the
-five questions with structured outputs; `triage()` then re-decides from the
+six questions with structured outputs; `triage()` then re-decides from the
 structured fields **without reference to the model's own verdict**, because a
 model asked to generate candidates and judge them will judge its own work
-kindly. A question-2 answer drawn from price behaviour is killed; a crude
+kindly. Question 2 is the transmission — which market the forced trader is
+forced in, and what carries their flow into ours (`docs/15`); a memo that
+names none is killed, and so is one whose answer is that two prices move
+together. A question-3 answer drawn from price behaviour is killed; a crude
 version that compiles to one of the nine already-failed families is killed
 whatever the prose says; an idea needing data the lake lacks is *blocked* with
 the dataset named, not killed. Needs `ANTHROPIC_API_KEY`.

@@ -118,11 +118,13 @@ it", and a memo proposing to collect it should still be killed.
 That is the whole command. It works through the briefs until the briefs run
 out or the policy stops it, and for each one:
 
-1. **Memo.** Claude answers the five questions for one candidate.
+1. **Memo.** Claude answers the six questions for one candidate.
 2. **Triage.** The harness re-decides without reference to the model's own
    verdict — a "mechanism" that turns out to be a statement about prices is
-   killed, a restatement of an already-failed family is killed, an idea needing
-   data the lake lacks is *blocked* rather than killed.
+   killed, a forced trader in another instrument with no named transmission
+   into this one is killed (`docs/15`), a restatement of an already-failed
+   family is killed, an idea needing data the lake lacks is *blocked* rather
+   than killed.
 3. **Kill test**, in the sandbox only. Does the effect exist, in the direction
    the memo committed to? Is it ≥3× costs? Does anything survive the floor?
 4. **Quota**, checked before the memo is even written, so a night cannot spend

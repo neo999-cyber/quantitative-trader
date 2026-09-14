@@ -122,8 +122,12 @@ def test_last_months_promotions_do_not_count_against_this_week(log):
     policy = current(log)
     log.prereg("a", "x")
     log.prereg("b", "x")
-    # Eight days later the weekly window has rolled past both.
-    check_promotion(log, policy, now=NOW + timedelta(days=8))
+    # Eight days later the weekly window has rolled past both. Measured from
+    # when the records were actually written, not from a fixed date: `prereg`
+    # stamps wall-clock time, so a constant here is a test that passes on the
+    # day it is written and fails the next one. It did.
+    written = datetime.now(timezone.utc)
+    check_promotion(log, policy, now=written + timedelta(days=8))
 
 
 def test_the_quarterly_cap_binds_even_when_the_week_is_clear(log):

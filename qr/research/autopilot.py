@@ -149,7 +149,8 @@ def run_night(
     costs: CostModel | None = None,
     universe: pd.DataFrame | None = None,
     equity: float | None = None,
-    propose: Callable[[str], MechanismMemo] | None = None,
+    market: str = "",
+    propose: Callable[..., MechanismMemo] | None = None,
     promote: Callable[[MechanismMemo, KillTestLike], None] | None = None,
     progress: Callable[[str], None] | None = None,
     now: datetime | None = None,
@@ -193,7 +194,7 @@ def run_night(
 
         say(f"memo: {brief[:70]}")
         try:
-            memo = propose(brief)
+            memo = propose(brief, market=market)
         except Exception as exc:
             outcome.stage, outcome.outcome = "memo", "error"
             outcome.reason = f"{type(exc).__name__}: {exc}"

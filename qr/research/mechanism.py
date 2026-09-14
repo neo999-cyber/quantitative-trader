@@ -250,6 +250,11 @@ vesting unlocks, margin liquidations in the spot book) needs no transmission at 
 Most good screening ends in a kill. A night that kills eight candidates for named reasons is a \
 success. Inventing a mechanism to keep a candidate alive is the failure mode; say "killed" freely.
 
+You will be told WHICH MARKET is being traded, with its universe, its costs and its account. \
+Every answer must be about that market and that instrument. A forced trader in another asset \
+class is not a candidate there unless you can name the transmission into the instrument named, \
+and a mechanism that belongs to a different market is a kill, not a candidate to be reworded.
+
 You may only propose a crude version using a primitive from the list you are given. If no \
 primitive fits, or the idea needs data that is not available, say so plainly rather than \
 substituting something that does fit — a candidate that is blocked on data is a useful output."""
@@ -535,16 +540,33 @@ def triage(memo: MechanismMemo, panel=None) -> Triage:
 
 def propose(
     brief: str,
+    market: str = "",
     model: str = DEFAULT_MODEL,
     client=None,
     max_tokens: int = 8_000,
 ) -> MechanismMemo:
     """Ask Claude for one memo, as strict JSON.
 
-    `brief` is the seed — a market, a class of forced trader, a question. The
-    prompt carries the primitive list and the feature registry so the model
-    cannot propose something unrunnable without being told it is doing so.
+    `brief` is the seed — a class of forced trader, a question. `market` says
+    what is actually being traded: the instrument, the universe by name, the
+    costs and the account.
+
+    **`market` is required, and empty raises.** The first ETF night ran without
+    it and every memo came back about crypto — the ETF briefs were right, the
+    traded market was twelve funds, and the model had been told neither. It
+    inferred Binance spot from the feature registry, which talks about
+    perpetual funding and the crypto Fear & Greed index, and then correctly
+    killed month-end rebalancing on the grounds that no 60/40 mandate
+    rebalances into altcoins. Seven memos, all sound, all about the wrong
+    market. A default of "" would let that happen again quietly, so there
+    isn't one.
     """
+    if not market.strip():
+        raise ValueError(
+            "propose() needs to know which market is being traded; a memo written without "
+            "one is about whichever market the model infers, which is how the first ETF "
+            "night produced seven crypto memos"
+        )
     import anthropic
 
     client = client or anthropic.Anthropic()
@@ -559,8 +581,9 @@ def propose(
         if not f.available
     )
     user = (
-        f"{brief}\n\n"
-        f"Answer the six questions for ONE candidate.\n\n"
+        f"## The market you are trading\n\n{market.strip()}\n\n"
+        f"## The brief\n\n{brief}\n\n"
+        f"Answer the six questions for ONE candidate, about the market above.\n\n"
         f"Primitives you may use for the crude version:\n{catalogue}\n\n"
         f"Features available in the lake: {have}\n\n"
         f"Features NOT available (propose one only if the idea genuinely needs it; "

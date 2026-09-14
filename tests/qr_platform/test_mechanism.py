@@ -5,6 +5,8 @@ that decides what happens to what it produces. Triage must reach its verdict
 without reference to the model's own, the kill test must refuse to look at
 validation data, and the loop must exit the same recorded way at every stage.
 """
+import pathlib
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -55,6 +57,67 @@ def memo(**overrides) -> MechanismMemo:
     }
     body.update(overrides)
     return MechanismMemo(**body)
+
+
+# --------------------------------------------------------------- the market
+
+
+def test_a_memo_cannot_be_written_without_knowing_the_market():
+    """The first ETF night produced seven memos about crypto.
+
+    `propose()` was handed the brief and nothing else, and the feature registry
+    it *is* shown talks about perpetual funding and the crypto Fear & Greed
+    index — so the model inferred Binance spot and killed every equity payer
+    for having no route into an altcoin. The memos were sound and about the
+    wrong market. An empty market must raise rather than default.
+    """
+    from qr.research.mechanism import propose
+
+    with pytest.raises(ValueError, match="which market"):
+        propose("month end rebalancing", market="   ")
+
+
+def test_the_market_description_names_the_instrument_and_the_universe():
+    """A prompt that lists SPY and TLT cannot be read as a Binance pair list."""
+    from qr.cli import _market_description
+    from qr.execution.costs import CostModel
+
+    class _Panel:
+        symbols = ["SPY", "QQQ", "TLT", "LQD", "HYG"]
+
+    text = _market_description("etf", _Panel(), CostModel.etf_trial(), 1_000.0)
+    assert "ETF" in text and "SPY" in text and "TLT" in text
+    assert "per-order minimum" in text
+    assert "$1,000" in text
+    assert "perpetual" not in text.lower()
+
+    crypto = _market_description("crypto", _Panel(), CostModel.trial(), None)
+    assert "spot" in crypto and "cannot trade the perpetual" in crypto
+
+
+def test_the_night_passes_the_market_to_every_memo(panel):
+    """The loop is where it would be dropped, so assert it arrives."""
+    from qr.research.autopilot import run_night
+    from qr.validate.trial_log import TrialLog
+    import tempfile
+
+    seen = []
+
+    def fake(brief, market="", **kw):
+        seen.append(market)
+        return memo(self_verdict="killed", kill_reason="not the point of this test")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        log = TrialLog(pathlib.Path(tmp) / "trial.jsonl")
+        from qr.research.policy import declare as declare_policy
+        from qr.data.sandbox import declare as declare_sandbox
+
+        declare_sandbox(log, SANDBOX)
+        declare_policy(log, ResearchPolicy())
+        run_night(["a brief"], log, ResearchPolicy(), SANDBOX, panel,
+                  market="**Instrument.** twelve US ETFs", propose=fake)
+
+    assert seen == ["**Instrument.** twelve US ETFs"]
 
 
 # ------------------------------------------------------------------- registry
@@ -316,7 +379,7 @@ def test_a_night_records_every_exit(tmp_path, panel):
         "c": memo(candidate_id="c_v1"),
     }
     night = run_night(
-        ["a", "b", "c"], log, policy, SANDBOX, panel, propose=lambda brief: memos[brief]
+        ["a", "b", "c"], log, policy, SANDBOX, panel, propose=lambda brief, **kw: memos[brief]
     )
 
     assert [o.outcome for o in night.outcomes] == ["killed", "blocked", "failed"]
@@ -329,7 +392,7 @@ def test_the_quota_stops_the_night_before_it_spends_a_memo(tmp_path, panel):
     log.prereg("already_promoted_v1", "an earlier candidate")
     calls = []
 
-    def spy(brief):
+    def spy(brief, **kw):
         calls.append(brief)
         return memo()
 
@@ -344,7 +407,7 @@ def test_the_stopping_rule_ends_the_night(tmp_path, panel):
         tmp_path, max_candidates=1, max_promotions_per_week=99, max_promotions_per_quarter=99
     )
     log.prereg("mechanism_one_v1", "the only candidate the policy allowed")
-    night = run_night(["a"], log, policy, SANDBOX, panel, propose=lambda b: memo())
+    night = run_night(["a"], log, policy, SANDBOX, panel, propose=lambda b, **kw: memo())
     assert night.stopped_early
     assert "index fund" in night.stopped_early
 
@@ -352,7 +415,7 @@ def test_the_stopping_rule_ends_the_night(tmp_path, panel):
 def test_a_memo_that_fails_to_generate_does_not_stop_the_night(tmp_path, panel):
     log, policy = _log_with_policy(tmp_path)
 
-    def flaky(brief):
+    def flaky(brief, **kw):
         if brief == "a":
             raise RuntimeError("model declined")
         return memo(candidate_id="b_v1")
@@ -369,7 +432,7 @@ def test_a_survivor_is_only_promoted_when_a_promoter_is_wired_up(tmp_path, panel
         "run",
         lambda *a, **k: killtest.KillTest("c_v1", True, "", "passed", {"cost_multiple": 9.0}),
     )
-    night = run_night(["c"], log, policy, SANDBOX, panel, propose=lambda b: memo(candidate_id="c_v1"))
+    night = run_night(["c"], log, policy, SANDBOX, panel, propose=lambda b, **kw: memo(candidate_id="c_v1"))
     assert night.outcomes[0].outcome == "ready"
 
     promoted = []
@@ -379,7 +442,7 @@ def test_a_survivor_is_only_promoted_when_a_promoter_is_wired_up(tmp_path, panel
         policy,
         SANDBOX,
         panel,
-        propose=lambda b: memo(candidate_id="c_v1"),
+        propose=lambda b, **kw: memo(candidate_id="c_v1"),
         promote=lambda m, t: promoted.append(m.candidate_id),
     )
     assert promoted == ["c_v1"]
@@ -544,7 +607,7 @@ def test_a_rejected_request_stops_the_night_instead_of_repeating_itself(tmp_path
     class BadRequest(Exception):
         status_code = 400
 
-    def broken(brief):
+    def broken(brief, **kw):
         calls.append(brief)
         raise BadRequest("additionalProperties: true is not supported")
 
@@ -560,7 +623,7 @@ def test_a_rate_limit_or_server_error_does_not_stop_the_night(tmp_path, panel):
     class Overloaded(Exception):
         status_code = 529
 
-    def flaky(brief):
+    def flaky(brief, **kw):
         calls.append(brief)
         if len(calls) == 1:
             raise Overloaded("overloaded")
@@ -637,7 +700,7 @@ def test_the_shopping_list_counts_datasets_named_by_killed_candidates_too(tmp_pa
         "c": memo(candidate_id="c_v1", required_features=("close", "token_unlocks")),
     }
     night = run_night(["a", "b", "c"], log, policy, SANDBOX, panel,
-                      propose=lambda brief: memos[brief])
+                      propose=lambda brief, **kw: memos[brief])
 
     assert [o.outcome for o in night.outcomes] == ["killed", "killed", "blocked"]
     shopping = night.shopping_list()
@@ -652,7 +715,7 @@ def test_a_killed_candidate_stays_killed_even_when_it_names_missing_data(tmp_pat
     log, policy = _log_with_policy(tmp_path)
     dead = memo(candidate_id="d_v1", self_verdict="killed",
                 kill_reason="nobody is forced", required_features=("liquidations",))
-    night = run_night(["d"], log, policy, SANDBOX, panel, propose=lambda b: dead)
+    night = run_night(["d"], log, policy, SANDBOX, panel, propose=lambda b, **kw: dead)
 
     assert night.outcomes[0].outcome == "killed"
     assert night.blocked() == []

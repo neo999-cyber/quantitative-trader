@@ -1077,6 +1077,66 @@ ETF_BRIEFS = [
 BRIEFS_BY_ASSET = {"crypto": CRYPTO_BRIEFS, "etf": ETF_BRIEFS, "etf-ls": ETF_BRIEFS}
 
 
+def _costs_sentence(costs: CostModel) -> str:
+    """One line a memo can reason about, not the full parameter dump.
+
+    `CostModel.describe()` returns every field, including the ones that are
+    zero for this venue. A prompt is not a manifest: what a mechanism memo has
+    to know is how much a round trip costs and whether a per-order floor
+    punishes small orders.
+    """
+    d = costs.describe()
+    parts = []
+    if d["linear_bps_per_side"]:
+        parts.append(f"{d['linear_bps_per_side']:.1f} bps per side (fee plus half-spread)")
+    if d["per_share_usd"]:
+        parts.append(f"${d['per_share_usd']:.4f} per share")
+    if d["min_commission_usd"]:
+        parts.append(
+            f"a ${d['min_commission_usd']:.2f} per-order minimum, which on this account is the "
+            "cost that decides whether an idea survives"
+        )
+    if costs.borrow_bps_per_year:
+        parts.append(f"{costs.borrow_bps_per_year:.0f} bps/yr borrow on shorts")
+    return f"{d['name']}: " + ", ".join(parts) + ". Impact is not charged."
+
+
+def _market_description(asset: str, panel, costs: CostModel, equity: float | None) -> str:
+    """What the memo generator is trading, in the words it needs to hear.
+
+    Without this the model infers a market from the feature registry, which
+    talks about perpetual funding and the crypto Fear & Greed index — so the
+    first ETF night produced seven memos about crypto, each correctly killing
+    an equity payer for having no route into an altcoin. The universe is listed
+    by name rather than described, because twelve tickers ending in SPY and TLT
+    cannot be mistaken for a Binance pair list.
+    """
+    symbols = list(panel.symbols)
+    shown = ", ".join(symbols[:40]) + (f", … ({len(symbols)} in all)" if len(symbols) > 40 else "")
+    if asset == "crypto":
+        instrument = (
+            "Binance **spot** pairs. Long only, no leverage, no margin, no derivatives. "
+            "You cannot trade the perpetual, collect funding, or short."
+        )
+    elif asset == "etf-ls":
+        instrument = (
+            "US-listed **ETFs** through Interactive Brokers, long and short. "
+            "No options, no futures, no single stocks."
+        )
+    else:
+        instrument = (
+            "US-listed **ETFs** through Interactive Brokers. Long only — the account is too "
+            "small to be allowed a short book. No options, no futures, no single stocks."
+        )
+    account = f"${equity:,.0f}" if equity else "$1,000"
+    return (
+        f"**Instrument.** {instrument}\n\n"
+        f"**Universe.** {shown}\n\n"
+        f"**Costs.** {_costs_sentence(costs)}\n\n"
+        f"**Account.** {account}. Retail, no prime broker, no securities lending revenue."
+    )
+
+
 def cmd_autopilot(args) -> int:
     """The overnight loop: memo, kill test, quota, pre-register, twelve gates.
 
@@ -1153,7 +1213,8 @@ def cmd_autopilot(args) -> int:
         costs=costs,
         universe=universe,
         equity=equity,
-        propose=(lambda brief: mechanism.propose(brief, model=args.model)),
+        market=_market_description(args.asset, panel, costs, equity),
+        propose=(lambda brief, **kw: mechanism.propose(brief, model=args.model, **kw)),
         promote=promote,
         progress=_progress,
     )

@@ -228,3 +228,36 @@ margin call, a mandate. A profit motive is not an obligation.
 motivated is a question about the world, not about the memo's structure; there
 is no keyword for it. This one is enforced in the prompt and by the reader,
 which is worth stating plainly rather than pretending the harness checks it.
+
+### Seven ETF memos about crypto (14 September 2026)
+
+The first ETF night under the transmission bar returned seven kills, and the
+first candidate was called `balanced_fund_month_end_rebalance_crypto_v1`.
+
+`propose()` was handed the brief and nothing else. It was never told what was
+being traded — and the feature registry it *is* shown talks about perpetual
+funding and the crypto Fear & Greed index, so the model inferred Binance spot.
+It then killed month-end rebalancing on the grounds that no 60/40 mandate
+rebalances into altcoins, quarter-end window dressing for having no forced
+actor in crypto, and December tax-loss selling because crypto has no wash-sale
+rule. **Every one of those is correct about crypto and backwards for the market
+the run was actually pointed at**, which is twelve US ETFs including SPY, TLT,
+LQD and HYG — precisely what a 60/40 mandate holds.
+
+It is the same bug as the first crypto night, inverted. Then the briefs named
+payers who trade the wrong market; now the briefs were right and the *market*
+was never named. Both times the memos were sound and the framing was wrong,
+which is the failure mode to expect from a stage that reasons well about
+whatever it is given.
+
+**The fix.** `propose()` now takes a `market` argument and **raises if it is
+empty**, because a default would let this happen again quietly. The CLI builds
+it from the run's own configuration: the instrument and what cannot be traded
+with it, the universe **listed by ticker** (twelve names ending in SPY and TLT
+cannot be read as a Binance pair list), the cost model as one sentence a memo
+can reason about, and the account. `run_night` carries it to every memo, and a
+test asserts it arrives.
+
+**The night is void, not informative.** Those seven candidates say nothing
+about the ETF basket, and the ETF side has still never been asked the question
+under the current bar.

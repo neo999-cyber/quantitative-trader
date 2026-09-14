@@ -1,5 +1,11 @@
 # Gates 10 and 11: the last two, and the only ones that move money
 
+> **Reviewed 14 September 2026 — see `docs/16_GATE_11_SIZING_REVIEW.md` before
+> relying on the sizing numbers below.** The drawdown formula is correct but
+> computes the probability of ever falling 25% below launch equity, not a
+> peak-to-trough drawdown; the four-row table, the "contradiction" framing and
+> the $1,000-account attribution of the 0.2x cap are corrected there.
+
 Gates 0–9 are an argument about history. They can be run again tomorrow and
 they will say the same thing, because the data does not change. These two are
 different: gate 10 reads bars that did not exist when the strategy was

@@ -184,9 +184,18 @@ side is where a small account can genuinely compete — no per-order floor, and
 
 ---
 
-## Pending review — not yet run
+## Pending review — DONE (14 September 2026)
 
-Gates 10 and 11 were written on 13 September 2026 and **their mathematics has
+**Status: run — `docs/16_GATE_11_SIZING_REVIEW.md`.** The algebra is correct
+and the number is mislabelled: the formula gives P(ever 25% below *launch*
+equity), not P(ever draw down 25% from the peak), which over the infinite
+horizon is 100% at every leverage. Half Kelly still fails a 10% budget on every
+reading; quarter Kelly is borderline, not "not close"; the plan's constraints
+were a conjunction, not a contradiction; and the 0.2x single-name result has
+no account-size term. Fixes are listed at the end of that document for a build
+session. The original prompt is kept below for the record.
+
+Gates 10 and 11 were written on 13 September 2026 and **their mathematics had
 not been independently checked.** Per `CLAUDE.md`, that review belongs to
 Fable 5.1 in its own session. It is not urgent — both gates are inert until
 something reaches gate 9 — but one claim from it is already informing
@@ -198,7 +207,7 @@ exactly the arrangement that let the rebalance-phase defect survive three
 write-ups (`docs/08`).
 
 **Trigger it before any real money is sized, and before `docs/09`'s sizing
-claims are relied on in a decision.** The prompt:
+claims are relied on in a decision.** The prompt (as run):
 
 > Audit the mathematics in `qr/portfolio/sizing.py` and
 > `docs/09_INCUBATION_AND_SIZING.md`. Do not fix anything, do not write code

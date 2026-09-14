@@ -266,8 +266,10 @@ def run_night(
                             f"{abs(rung['edge_bps_per_round_trip']):.1f} bps against "
                             f"{rung['round_trip_cost_bps']:.1f} bps — "
                             f"{rung['cost_multiple']:.1f}x"
-                            f"   (vs holding: Sharpe {rung['net_sharpe_vs_hold']:+.2f}, "
-                            f"total {rung['net_total_vs_hold']:+.1%})"
+                            f"   (vs holding: Sharpe {rung['net_sharpe']:.2f} against "
+                            f"{rung['hold_sharpe']:.2f}; $1 becomes "
+                            f"${rung['terminal_wealth']:.2f} against "
+                            f"${rung['hold_terminal_wealth']:.2f})"
                         )
                     if any(r["cost_multiple"] >= policy.min_cost_multiple for r in ladder):
                         say(

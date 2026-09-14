@@ -429,3 +429,49 @@ things about it, in order of importance:
    promotion look less attractive, never more. A check added after a good
    result that *helped* the candidate would be indefensible, and none was
    added.
+
+### And the answer to gate 5's question is no
+
+Three candidates reached the ladder on the next night, and they converged on
+two strategies — the month-end window at 4.8 bps and the quarter-end window at
+3.4 bps, rediscovered under different names. The comparison against holding the
+same basket, at every rung:
+
+| candidate | $1,000 | $10,000 | $100,000 |
+|---|---|---|---|
+| turn of month | −0.84 | −0.14 | −0.10 |
+| turn of quarter | −0.79 | −0.40 | −0.40 |
+
+*(Sharpe of the crude version minus Sharpe of buy-and-hold, discovery side.)*
+
+**Negative everywhere.** At $100,000 the turn-of-month window is 9.5x its
+trading costs and still a worse risk-adjusted way to own the same twelve funds
+than holding them. That is gate 5's question — the one that killed all nine
+pre-registered families — answered on free data before a promotion was spent,
+and answered in the same direction as every other time this project has asked
+it.
+
+It is a point estimate on discovery data and not an SPA test. But gate 5 needs
+the strategy to *beat* buy-and-hold with a reality-check p-value, and a
+candidate that is behind on the point estimate has no route to that.
+
+**So the account was the binding constraint on the cost bar and not on the
+outcome.** Both things are true and only the second one decides anything: at
+$10,000 this candidate can afford to trade, and what it can afford to trade is
+worse than doing nothing.
+
+### One more unreadable number, fixed
+
+The comparison was first printed as `total -645.0%` — the difference of two
+compounded terminal wealths. Arithmetically right, and useless: dominated by
+the benchmark's compounding, impossible to sanity-check, and **not monotonic in
+account size** (−645%, −499%, −601%) even though the strategy's net can only
+improve as costs fall. Whether that non-monotonicity was real or an artefact
+could not be read off the number, which is the problem with it.
+
+It now prints two terminal wealths side by side — *$1 becomes $X against $Y* —
+and the Sharpes likewise. Same information, and a reader can tell at a glance
+whether it is plausible. A number nobody can sanity-check is a number that
+hides its own errors; that is the third time in two days that the most
+encouraging figure in a run turned out to be measuring something other than
+what it said.

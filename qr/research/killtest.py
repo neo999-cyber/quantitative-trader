@@ -133,11 +133,19 @@ def versus_holding(panel, result, costs, universe=None, equity: float | None = N
         sd = float(series.std(ddof=1))
         return float(series.mean() / sd * np.sqrt(periods)) if sd > 0 else float("nan")
 
+    # Terminal wealth, not a difference of compounded returns. The difference
+    # was arithmetically right and unreadable: dominated by the benchmark's
+    # compounding, printed as "-645.0%", and not monotonic in account size even
+    # though the strategy's net can only improve as costs fall. A number nobody
+    # can sanity-check is a number that hides its own errors — two multiples
+    # side by side cannot.
     return {
+        "terminal_wealth": float((1.0 + net).prod()),
+        "hold_terminal_wealth": float((1.0 + hold).prod()),
         "hold_total_return": float((1.0 + hold).prod() - 1.0),
         "hold_sharpe": _sharpe(hold),
+        "net_sharpe": _sharpe(net),
         "net_sharpe_vs_hold": _sharpe(net) - _sharpe(hold),
-        "net_total_vs_hold": float((1.0 + net).prod() - (1.0 + hold).prod()),
     }
 
 

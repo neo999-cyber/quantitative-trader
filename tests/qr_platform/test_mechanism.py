@@ -380,8 +380,15 @@ def test_the_ladder_reports_the_buy_and_hold_comparison_but_never_acts_on_it(dis
     them.
     """
     rung = killtest.cost_ladder(memo(), discovery, "etf")[0]
-    for key in ("hold_total_return", "hold_sharpe", "net_sharpe_vs_hold", "net_total_vs_hold"):
+    for key in ("hold_sharpe", "net_sharpe", "net_sharpe_vs_hold",
+                "terminal_wealth", "hold_terminal_wealth"):
         assert key in rung
+    # Reported as two terminal wealths rather than their difference: the
+    # difference was unreadable and non-monotonic in account size, which is how
+    # a wrong number survives being printed every night.
+    assert rung["net_sharpe_vs_hold"] == pytest.approx(
+        rung["net_sharpe"] - rung["hold_sharpe"], rel=1e-9, nan_ok=True
+    )
 
     # The verdict is the cost bar and the floor, and nothing else.
     verdict = killtest.run(memo(), discovery, ResearchPolicy(min_cost_multiple=1.0))

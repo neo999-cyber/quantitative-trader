@@ -1019,11 +1019,25 @@ def _asset_panel(args, asset: str):
 #: wastes a memo to learn something that was knowable when the list was
 #: written.
 CRYPTO_BRIEFS = [
-    "Perpetual funding is now in the lake. A spot book cannot collect it, but it can read "
-    "which side of the levered book is crowded and what that side is paying to stay there. "
-    "Is extreme funding a tradeable signal about the spot price?",
-    "Open interest says how much leverage is on and funding says which way it leans. Is a "
-    "crowded position that is *growing* different from one that is unwinding?",
+    # These two were killed twice at "no transmission into the traded
+    # instrument" — correctly, because they asked whether funding is a signal
+    # about the spot price, which is the one sentence the bar refuses. They now
+    # name the cash-and-carry arbitrageur, who must BUY spot to put the trade on
+    # and SELL spot to take it off, and let the memo judge that link on the
+    # merits. Naming a transmission is not asserting one; both are still to be
+    # killed if it does not hold.
+    "Cash-and-carry arbitrageurs hold long spot against short perpetual and collect the funding "
+    "the levered longs pay. They are the mechanical link between the two books: putting the trade "
+    "on means buying spot, taking it off means selling spot. When funding collapses from a high "
+    "level the carry stops paying and the inventory is unwound — forced selling in the spot book "
+    "by a trader whose obligation is to their own hedge, not to a view on price. Is that "
+    "unwinding visible in spot, and does a position sized against it survive 7.5bps a side?",
+    "The same link read the other way. Sustained high funding pays the carry trade to exist, so "
+    "the arbitrageurs\' spot inventory is large and growing while it lasts — spot buying that has "
+    "nothing to do with anyone\'s opinion of the asset. The pairs where the carry has paid most "
+    "for longest are the ones where the most spot has been bought for a reason that is not "
+    "conviction. Does a cross-sectional tilt on that carry anything in spot, and is it more than "
+    "three times its round-trip cost?",
     "A leveraged position that hits its maintenance margin is closed by the exchange, not by "
     "its owner — the most literally forced trade there is, and it clusters. Is the aftermath of "
     "a liquidation cascade tradeable?",

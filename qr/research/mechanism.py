@@ -239,7 +239,11 @@ mechanically carries their flow into it. Someone must be obliged to trade OUR in
 the spot are different instruments and the sentence asserts the link instead of naming it. \
 "Liquidations force perp selling; basis arbitrageurs hold long spot against short perp and must \
 sell spot to stay hedged" does clear it, because it names a trader forced in spot and can be \
-checked. If you cannot name the transmission, kill the candidate — that is the honest outcome, \
+checked. And the transmitting agent must itself be OBLIGED — a hedge that must be maintained, a \
+margin call, a mandate. An arbitrageur who unwinds a delta-neutral book when the carry stops \
+paying is not forced: nothing fixes the date, the size or the price, so they transmit nothing. \
+A profit motive is not an obligation. If you cannot name the transmission, kill the candidate \
+— that is the honest outcome, \
 and forced flow that happens in our own market (creations and redemptions, treasury selling, \
 vesting unlocks, margin liquidations in the spot book) needs no transmission at all.
 
@@ -262,8 +266,10 @@ MEMO_SCHEMA = {
                 "Q2: which market is the forced trader forced in, and what mechanically "
                 "carries their flow into the market traded here? Name the arbitrageur or "
                 "the hedge that links the two instruments, or say that the forced flow is "
-                "in this market already. A statement about prices moving together is not a "
-                "transmission."
+                "in this market already. The agent doing the carrying must itself be obliged "
+                "— a hedge to maintain, a margin call, a mandate. A discretionary trader "
+                "acting on a profit motive transmits nothing, and a statement about prices "
+                "moving together is not a transmission."
             ),
         },
         "persistence": {"type": "string", "description": "Q3: why will they KEEP being forced"},

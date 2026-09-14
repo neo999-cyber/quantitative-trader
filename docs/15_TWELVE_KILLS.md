@@ -200,3 +200,31 @@ from `NON_MECHANISMS`, or one that names no agent in the market being traded
 memo killed by it can be rewritten to name the agent it meant, and the kill
 reason says so; the alternative is accepting "spot follows the perp", which is
 the sentence this whole addendum exists to refuse.
+
+### The clause that was missing (14 September 2026, the same day)
+
+The transmission bar was tested the night it shipped, on briefs that **named
+the transmission for the model** — cash-and-carry arbitrageurs must buy spot to
+put the trade on and sell spot to take it off — precisely so the memo could not
+dodge the question by phrasing.
+
+Both were killed, on a ground the bar did not contain:
+
+> "No forced trader: a delta-neutral carry book facing low funding…"
+> "The cash-and-carry arbitrageur's spot buying is discretionary."
+
+Which is correct, and it is the more useful half of the idea. Question 2 asked
+for an agent in the market being traded. It did not ask whether **that agent is
+itself forced**. A carry arbitrageur is delta-neutral and profit-seeking:
+nothing fixes the date, the size or the price at which they unwind. They will
+exit when it pays them to, which is the definition of not being forced. A
+transmission whose transmitter is discretionary transmits nothing.
+
+So the clause, now in `SYSTEM_PROMPT` and in the schema: **the transmitting
+agent must itself be under an obligation** — a hedge that must be maintained, a
+margin call, a mandate. A profit motive is not an obligation.
+
+`triage()` is not changed, and cannot be. Whether an agent is obliged or merely
+motivated is a question about the world, not about the memo's structure; there
+is no keyword for it. This one is enforced in the prompt and by the reader,
+which is worth stating plainly rather than pretending the harness checks it.

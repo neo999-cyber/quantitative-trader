@@ -120,6 +120,26 @@ def test_the_night_passes_the_market_to_every_memo(panel):
     assert seen == ["**Instrument.** twelve US ETFs"]
 
 
+def test_the_catalogue_only_offers_events_the_class_accepts():
+    """Two ETF memos died asking for `turn_of_month`, which the catalogue
+    advertised and `EVENTS` has never contained. Every value the prompt names
+    must build, and the one the model reached for must be explicitly denied."""
+    import re
+
+    from qr.research.mechanism import primitive_catalogue
+    from qr.strategies.calendar import EVENTS, CalendarEvent
+
+    text = primitive_catalogue()
+    for event in EVENTS:
+        assert f"`{event}`" in text, f"the prompt does not offer {event}"
+        CalendarEvent(event=event)  # raises if the vocabulary has drifted
+
+    named = set(re.findall(r"`([a-z_]+)`", text))
+    offered = named & {"turn_of_month", "quarter_start", "year_start", "turn_of_quarter"}
+    assert offered == {"turn_of_month"}, f"the prompt offers events that do not exist: {offered}"
+    assert "There is no `turn_of_month`" in text
+
+
 # ------------------------------------------------------------------- registry
 
 

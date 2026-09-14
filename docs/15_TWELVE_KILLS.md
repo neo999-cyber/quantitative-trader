@@ -261,3 +261,53 @@ test asserts it arrives.
 **The night is void, not informative.** Those seven candidates say nothing
 about the ETF basket, and the ETF side has still never been asked the question
 under the current bar.
+
+---
+
+## The first kill test (14 September 2026)
+
+Forty-six candidates in, one reached Stage 3.
+
+`turn_of_quarter_long_spy_v1` — mandated quarterly rebalancing, expressed as
+long the basket across the quarter boundary — passed triage, ran on the
+discovery side of the ETF panel, and **failed on costs**:
+
+> 3.2 bps per round trip against 2.0 bps of cost — 1.6x, and the bar is 3x.
+
+Read what that says. The effect **exists**, and in the direction the memo
+committed to before it ran; the first of the kill test's three checks passed.
+It is simply not three times its own costs, which is the bar the research
+policy fixed in advance, and 1.6x is not close enough that the gap is noise.
+
+**The bar does not move.** A 1.6x result is exactly the observation that makes
+a 2x bar tempting, which is why the multiple was pre-committed with the policy
+and why `qr policy show` reads it back from the chain rather than from a
+config file. Lowering it now would be choosing the threshold after seeing the
+number, and every gate downstream is built on the assumption that nobody did
+that.
+
+What the run did prove is that the funnel works end to end: a brief became a
+memo, the memo committed to a sign, triage let it through, the sandbox
+measured it, and the measurement killed it — without spending a
+pre-registration or touching validation data. That path had never been walked
+before.
+
+### The bug in the same night
+
+Two of the six were killed by `crude version does not build: unknown event
+'turn_of_month'`. The brief says "turn of month"; the primitive catalogue
+advertised *"month/quarter end, turn of month, year end"*; and `EVENTS` has
+never contained `turn_of_month`. The model asked for the word it was offered.
+
+Triage was right to kill them — silently dropping a parameter the memo meant
+is how a backtest comes to be run on something other than the idea — but the
+defect was upstream, in the question. The catalogue now renders its vocabulary
+**from `EVENTS` itself** and says what the idiom is: the turn of the month is
+`month_end` with `after` > 0, which straddles the boundary. A test asserts
+every value the prompt offers constructs, and that the missing one is named
+only to be denied.
+
+No new event was added, deliberately. `turn_of_month` as an alias for
+`month_end` would be a second way to say the same thing, and a grid sweeping
+both would run identical variants twice — paying gate 4's deflation for
+nothing.

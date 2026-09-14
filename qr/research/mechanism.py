@@ -98,7 +98,18 @@ PRIMITIVES: dict[str, dict[str, Any]] = {
         "class": "CalendarEvent",
         "module": "qr.strategies.calendar",
         "already_failed": False,
-        "expresses": "a forced trade on a knowable date: month/quarter end, turn of month, year end",
+        # The vocabulary is read off the class, not described. This line used
+        # to promise "turn of month", which `EVENTS` has never contained, and
+        # two ETF memos were killed for asking for the word they had been
+        # offered. A catalogue that advertises a value the constructor rejects
+        # is a defect in the prompt, not in the answer.
+        "expresses": "a forced trade on a knowable date",
+        "vocabulary": (
+            "`event` must be one of {events}. There is no `turn_of_month`: the turn of the "
+            "month is `month_end` with `after` greater than 0, which straddles the boundary, "
+            "and `month_start` is the first bar of the month rather than the boundary itself. "
+            "`weekday` takes the `weekday` parameter, 0 for Monday."
+        ),
     },
     "funding_tilt": {
         "class": "FundingTilt",
@@ -538,6 +549,26 @@ def triage(memo: MechanismMemo, panel=None) -> Triage:
 # ------------------------------------------------------------------ the call
 
 
+def primitive_catalogue() -> str:
+    """The primitive list as the model sees it, with each one's vocabulary.
+
+    A separate function so a test can read the same string the prompt carries.
+    The failure it exists to prevent: the catalogue described `calendar_event`
+    as covering "turn of month", `EVENTS` has never had such a value, and two
+    memos were killed for naming the word they were given. A prompt that
+    advertises what the constructor refuses is a defect in the question.
+    """
+    from qr.strategies.calendar import EVENTS
+
+    lines = []
+    for key, spec in PRIMITIVES.items():
+        lines.append(f"- `{key}`: {spec['expresses']}")
+        vocabulary = spec.get("vocabulary")
+        if vocabulary:
+            lines.append("  " + vocabulary.format(events=", ".join(f"`{e}`" for e in EVENTS)))
+    return "\n".join(lines)
+
+
 def propose(
     brief: str,
     market: str = "",
@@ -570,10 +601,7 @@ def propose(
     import anthropic
 
     client = client or anthropic.Anthropic()
-    catalogue = "\n".join(
-        f"- `{key}`: {spec['expresses']}"
-        for key, spec in PRIMITIVES.items()
-    )
+    catalogue = primitive_catalogue()
     have = ", ".join(f"`{k}`" for k, f in features.REGISTRY.items() if f.available)
     havent = "\n".join(
         f"- `{f.key}`: {f.what} — NOT AVAILABLE, would need {f.needs_dataset}"

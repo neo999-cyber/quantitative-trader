@@ -102,6 +102,45 @@ def _realised_round_trip_cost_bps(result, round_trips: float) -> float:
     return total_cost / round_trips * 1e4
 
 
+def versus_holding(panel, result, costs, universe=None, equity: float | None = None) -> dict:
+    """How the crude version compares with simply holding the same universe.
+
+    **Reported, never a verdict.** Gate 5 decides this with an SPA test and a
+    reality-check p-value; what is computed here is two summary numbers on the
+    discovery side, which is a weaker instrument and must not be dressed up as
+    the gate. A candidate is not killed on it.
+
+    It is here because of an asymmetry that is the whole point of Stage 3. A
+    long-only calendar strategy is a *subset* of buy-and-hold exposure, and
+    buy-and-hold beat every one of the nine pre-registered families at gate 5
+    (`docs/06`, `docs/08`). A candidate can clear the 3x cost bar by a factor
+    of three and still be a worse way to own the same basket — and the price of
+    finding that out at gate 5 instead of here is one of two weekly promotions,
+    one of eight candidates on the stopping rule, and a permanent rise in gate
+    4's deflation bar for everything that comes after.
+
+    So this changes no bar and kills nothing. It exists so that spending that
+    price is a decision with the relevant number in front of it, and the number
+    is free.
+    """
+    from qr.validate.spa import buy_and_hold_benchmark
+
+    hold = buy_and_hold_benchmark(panel, universe, costs, equity)
+    net = result.net.reindex(hold.index).fillna(0.0)
+    periods = float(result.periods_per_year)
+
+    def _sharpe(series: pd.Series) -> float:
+        sd = float(series.std(ddof=1))
+        return float(series.mean() / sd * np.sqrt(periods)) if sd > 0 else float("nan")
+
+    return {
+        "hold_total_return": float((1.0 + hold).prod() - 1.0),
+        "hold_sharpe": _sharpe(hold),
+        "net_sharpe_vs_hold": _sharpe(net) - _sharpe(hold),
+        "net_total_vs_hold": float((1.0 + net).prod() - (1.0 + hold).prod()),
+    }
+
+
 def cost_ladder(
     memo: MechanismMemo,
     panel: Panel,
@@ -138,6 +177,8 @@ def cost_ladder(
                 "round_trip_cost_bps": cost,
                 "cost_multiple": abs(edge) / cost if cost else float("nan"),
                 "net_over_gross": stats["net_over_gross"],
+                # Gate 5's question, asked here for free. See `versus_holding`.
+                **versus_holding(panel, result, costs, universe, equity),
             }
         )
     return ladder

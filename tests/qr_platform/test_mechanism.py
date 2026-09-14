@@ -370,6 +370,24 @@ def test_the_cost_ladder_prices_the_same_idea_at_every_account_size(discovery):
     assert len(edges) == 1
 
 
+def test_the_ladder_reports_the_buy_and_hold_comparison_but_never_acts_on_it(discovery):
+    """Gate 5 decides this; the sandbox only reports it.
+
+    A long-only calendar strategy is a subset of buy-and-hold exposure, and
+    buy-and-hold beat all nine pre-registered families at gate 5. Knowing that
+    before spending a promotion is worth a free backtest — but two summary
+    numbers on discovery data are not an SPA test, so nothing may branch on
+    them.
+    """
+    rung = killtest.cost_ladder(memo(), discovery, "etf")[0]
+    for key in ("hold_total_return", "hold_sharpe", "net_sharpe_vs_hold", "net_total_vs_hold"):
+        assert key in rung
+
+    # The verdict is the cost bar and the floor, and nothing else.
+    verdict = killtest.run(memo(), discovery, ResearchPolicy(min_cost_multiple=1.0))
+    assert "hold" not in verdict.reason.lower()
+
+
 def test_a_sign_flip_is_a_refutation_not_a_discovery(discovery):
     """Whichever direction noise drifted, the opposite memo must be refuted."""
     positive = killtest.run(memo(), discovery, ResearchPolicy())

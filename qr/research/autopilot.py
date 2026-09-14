@@ -266,6 +266,14 @@ def run_night(
                             f"{abs(rung['edge_bps_per_round_trip']):.1f} bps against "
                             f"{rung['round_trip_cost_bps']:.1f} bps — "
                             f"{rung['cost_multiple']:.1f}x"
+                            f"   (vs holding: Sharpe {rung['net_sharpe_vs_hold']:+.2f}, "
+                            f"total {rung['net_total_vs_hold']:+.1%})"
+                        )
+                    if any(r["cost_multiple"] >= policy.min_cost_multiple for r in ladder):
+                        say(
+                            "    the cost bar is cleared at a larger account; the 'vs holding' "
+                            "columns are gate 5's question, asked here for free and deciding "
+                            "nothing"
                         )
             continue
 

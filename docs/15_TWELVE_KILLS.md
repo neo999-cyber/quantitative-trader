@@ -383,3 +383,49 @@ Note what the answer cannot be. The gross effect is a property of the panel and
 does not move with the account, so the ladder's numerator is 4.8 bps at every
 rung. Clearing a 3x bar needs the cost below 1.6 bps. Whether the IBKR tiered
 model gets there at $100,000 is now a measurement rather than an argument.
+
+---
+
+## The account was the binding constraint (14 September 2026)
+
+The ladder, on `turn_of_month_payroll_flow_v1`:
+
+    at $  1,000: 4.8 bps against 7.5 bps — 0.6x
+    at $ 10,000: 4.8 bps against 1.2 bps — 3.9x
+    at $100,000: 4.8 bps against 0.5 bps — 9.5x
+
+The $0.35 per-order minimum was doing all of the damage. The same effect, the
+same panel, the same committed sign: **dead at $1,000, clears the pre-committed
+3x bar at $10,000, and is 9.5x its costs at $100,000.**
+
+This is the first time anything in this project has said *the account is the
+constraint rather than the idea*, and it qualifies Step 0's headline. `docs/11`
+tested nine families that had no edge to rescue, and concluded that no deposit
+rescues any of them. That remains true of those nine. It does not generalise to
+a candidate that has an effect: this one is below its cost floor at $1,000 and
+comfortably above it at ten times that.
+
+**What it does not say.** Clearing a cost bar is necessary, not sufficient, and
+the crude version here is *long the basket inside a window, flat outside it* —
+long-only equity exposure whose gate 5 benchmark is buy-and-hold. Buy-and-hold
+beat every one of the nine families (`docs/06`, `docs/08`). A strategy can be
+9.5x its trading costs and still be a worse way to own the same basket, because
+the comparison is not against zero.
+
+So the ladder now also reports, at each rung, the crude version's Sharpe and
+total return **against holding the same universe** — `versus_holding()`. Three
+things about it, in order of importance:
+
+1. **It decides nothing.** No bar moved, no candidate is killed on it, and a
+   test asserts the verdict string never mentions it. Gate 5 settles this with
+   an SPA test and a reality-check p-value; two summary numbers on discovery
+   data are a weaker instrument and must not be dressed up as the gate.
+2. **It is free, and the alternative is not.** Finding this out at gate 5
+   instead costs one of two weekly promotions, one of the eight candidates on
+   the stopping rule, and a permanent rise in gate 4's deflation bar for every
+   family that follows.
+3. **It was added after seeing a candidate clear the bar, which is worth
+   stating plainly.** The asymmetry is the defence: this can only make a
+   promotion look less attractive, never more. A check added after a good
+   result that *helped* the candidate would be indefensible, and none was
+   added.

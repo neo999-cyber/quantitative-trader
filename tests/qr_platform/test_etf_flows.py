@@ -119,3 +119,48 @@ def test_an_empty_record_loads_rather_than_raising(tmp_path):
     frame = etf_flows.load(tmp_path / "nothing.jsonl")
     assert frame.empty
     assert etf_flows.daily_flow(frame).empty
+
+
+# ------------------------------------------------------------------- the CLI
+
+
+def _args(tmp_path, **overrides):
+    import types
+
+    body = {"root": str(tmp_path / "lake"), "url": None, "out": None,
+            "dump": None, "dry_run": False}
+    body.update(overrides)
+    return types.SimpleNamespace(**body)
+
+
+def test_the_dry_run_prints_what_it_would_record(tmp_path, capsys, monkeypatch):
+    """The first live run reached the issuer, parsed seven funds, and then died
+    formatting them: `table()` takes a frame and was handed a list. The fetch
+    and the parse were the risky parts and the printing was the one that broke,
+    so it gets a test of its own."""
+    from qr.cli import cmd_data_flows_collect
+    from qr.data import etf_flows as module
+
+    monkeypatch.setattr(module, "fetch", lambda *a, **k: screener())
+    assert cmd_data_flows_collect(_args(tmp_path, dry_run=True)) == 0
+
+    out = capsys.readouterr().out
+    assert "IWM" in out and "HYG" in out
+    assert "275,000,000" in out or "2.75e+08" in out
+    assert "nothing was written" in out
+    assert not (tmp_path / "lake" / "flows").exists(), "--dry-run wrote to the lake"
+
+
+def test_a_real_run_appends_and_says_how_much_history_there_is(tmp_path, capsys, monkeypatch):
+    from qr.cli import cmd_data_flows_collect
+    from qr.data import etf_flows as module
+
+    monkeypatch.setattr(module, "fetch", lambda *a, **k: screener())
+    assert cmd_data_flows_collect(_args(tmp_path)) == 0
+
+    out = capsys.readouterr().out
+    assert "recorded 2 funds" in out
+    assert "1 day(s)" in out
+    # The warning that matters on day one: a flow is a change between two
+    # observations, so the first run records a level and no flow at all.
+    assert "One day is not a flow" in out

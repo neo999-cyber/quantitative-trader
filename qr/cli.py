@@ -332,7 +332,7 @@ def cmd_data_flows_collect(args) -> int:
         return 2
 
     if args.dry_run:
-        print(table([c.as_dict() for c in counts]))
+        print(table(pd.DataFrame([c.as_dict() for c in counts])))
         print("\n--dry-run: nothing was written")
         return 0
 

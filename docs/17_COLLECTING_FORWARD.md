@@ -73,6 +73,18 @@ run rather than two:
 
     qr data flows-collect --dry-run --dump lake/flows/raw.json
 
+## The first live run
+
+**The endpoint and the field names were right.** The first attempt on a
+networked machine reached the iShares screener, parsed seven funds and their
+share counts, and then crashed formatting them for the screen — `table()` takes
+a frame and was handed a list.
+
+Worth recording because of which part broke. The fetch and the parse were the
+guesses, written against a documented shape nobody could load; the print was
+the part that could have been checked here and was not. Both now have tests,
+and the print has one of its own.
+
 ## What this is worth, stated honestly
 
 Low, and worth doing anyway.

@@ -85,6 +85,30 @@ guesses, written against a documented shape nobody could load; the print was
 the part that could have been checked here and was not. Both now have tests,
 and the print has one of its own.
 
+### What the screener actually publishes
+
+Seven funds, with **net assets and NAV but no share count**. It does not need
+one: net assets are shares times NAV by definition, so the count is their
+quotient — a division, not an estimate. Rows record which of the two they came
+from (`shares_basis`), because the two fail differently.
+
+**And that exposes the question that decides whether any of this is worth
+collecting: precision.** A daily creation is on the order of 0.1% of a fund. If
+the issuer publishes net assets to four significant figures, the flow is
+smaller than the rounding — every day would read as either zero or a step of
+0.05% — and *collecting for a year does not fix it*, because the missing
+information was never published.
+
+So `--dry-run` now prints the raw figures rather than passing them through
+`table()`, whose four-significant-figure formatting is exactly what would hide
+this, and reports the significant digits per fund. `precision_warning()` says
+so in a sentence when the source is too coarse, on the first run rather than in
+six months.
+
+If the warning fires, this dataset is dead as a free source and the honest
+options are a vendor or nothing — which is a much better thing to learn on day
+one than after a year of cron jobs.
+
 ## What this is worth, stated honestly
 
 Low, and worth doing anyway.

@@ -332,9 +332,32 @@ def cmd_data_flows_collect(args) -> int:
         return 2
 
     if args.dry_run:
-        print(table(pd.DataFrame([c.as_dict() for c in counts])))
+        # Printed raw rather than through `table()`, whose 4-significant-figure
+        # formatting is precisely what would hide the question this run exists
+        # to answer: whether the source publishes enough digits for a daily
+        # flow to be visible at all.
+        print(f"{'ticker':<8}{'shares_outstanding':>22}{'total_net_assets':>22}"
+              f"{'nav':>12}  basis  digits")
+        for count in counts:
+            digits = etf_flows.significant_digits(count.total_net_assets)
+            shares = "" if count.shares_outstanding is None else f"{count.shares_outstanding:,.2f}"
+            assets = "" if count.total_net_assets is None else f"{count.total_net_assets:,.2f}"
+            nav = "" if count.nav is None else f"{count.nav:,.4f}"
+            print(f"{count.ticker:<8}{shares:>22}{assets:>22}{nav:>12}"
+                  f"  {count.shares_basis:<7}{digits}")
+        warning = etf_flows.precision_warning(counts)
+        if warning:
+            print(f"\n{warning}")
         print("\n--dry-run: nothing was written")
         return 0
+
+    warning = etf_flows.precision_warning(counts)
+    if warning:
+        # Recorded anyway. The figures are what the issuer published, and a
+        # collector that dropped them would leave no evidence of why the
+        # dataset is thin — but nobody should start a cron job believing this
+        # will work without having read the sentence.
+        print(f"{warning}\n", file=sys.stderr)
 
     written = etf_flows.append(out, counts)
     frame = etf_flows.load(out)

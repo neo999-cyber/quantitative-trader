@@ -81,6 +81,11 @@ class ShareCount:
     total_net_assets: float | None
     nav: float | None
     source: str
+    #: "reported" when the issuer published a share count, "derived" when it
+    #: was computed as net assets / NAV. Recorded rather than assumed, because
+    #: the two have different error behaviour and a later reader must be able
+    #: to tell which one a row is.
+    shares_basis: str = "reported"
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -90,6 +95,7 @@ class ShareCount:
             "total_net_assets": self.total_net_assets,
             "nav": self.nav,
             "source": self.source,
+            "shares_basis": self.shares_basis,
         }
 
 
@@ -184,14 +190,26 @@ def parse_ishares(payload: Any, tickers: Iterable[str] = ISHARES_TICKERS) -> lis
         if ticker is None or ticker in seen:
             continue
         seen.add(ticker)
+        shares = _pick(record, SHARE_KEYS)
+        assets = _pick(record, ASSET_KEYS)
+        nav = _pick(record, NAV_KEYS)
+        basis = "reported"
+        if shares is None and assets is not None and nav:
+            # The screener publishes net assets and NAV but no share count, so
+            # the count is their quotient — which is the same identity the flow
+            # itself rests on, since net assets are shares times NAV by
+            # definition. Nothing is being estimated; a division is being done.
+            shares = assets / nav
+            basis = "derived"
         out.append(
             ShareCount(
                 observed_utc=observed,
                 ticker=ticker,
-                shares_outstanding=_pick(record, SHARE_KEYS),
-                total_net_assets=_pick(record, ASSET_KEYS),
-                nav=_pick(record, NAV_KEYS),
+                shares_outstanding=shares,
+                total_net_assets=assets,
+                nav=nav,
                 source="ishares_product_screener",
+                shares_basis=basis,
             )
         )
 
@@ -284,3 +302,41 @@ def fetch(url: str = ISHARES_SCREENER, timeout: int = 60, dump: Path | None = No
         raise FlowSourceError(
             f"the screener did not return JSON ({exc}). First 300 characters:\n{text[:300]}"
         ) from exc
+
+
+def significant_digits(value: float | None) -> int:
+    """How many digits the source actually committed to.
+
+    The number that decides whether this dataset is usable at all. A daily
+    creation is on the order of 0.1% of a fund's shares, so a net-asset figure
+    published to four significant figures cannot express one: the flow is
+    smaller than the rounding, and every day would read as either zero or a
+    step of 0.05%. Four digits means the record is worthless no matter how long
+    it is collected, and it is much better to know that on day one.
+    """
+    if value is None or value != value or value == 0:
+        return 0
+    text = f"{abs(float(value)):.17g}"
+    if "e" in text or "E" in text:
+        text = text.split("e")[0].split("E")[0]
+    digits = text.replace(".", "").replace("-", "").lstrip("0")
+    return len(digits.rstrip("0")) or 1
+
+
+def precision_warning(counts: Sequence[ShareCount], needed: int = 6) -> str:
+    """A sentence to print when the source is too rounded to show a flow, else ""."""
+    worst = [
+        (c.ticker, c.total_net_assets, significant_digits(c.total_net_assets))
+        for c in counts
+        if significant_digits(c.total_net_assets) < needed
+    ]
+    if not worst:
+        return ""
+    listed = ", ".join(f"{t} ({d} digits)" for t, _, d in worst[:5])
+    return (
+        f"WARNING: net assets are published to fewer than {needed} significant figures for "
+        f"{listed}.\n"
+        "A daily creation is about 0.1% of a fund, so a flow computed from figures this "
+        "rounded is rounding noise, not flow. Collecting for a year would not fix it — the "
+        "source has to publish more precision, or the figure has to come from somewhere else."
+    )

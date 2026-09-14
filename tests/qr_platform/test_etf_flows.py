@@ -133,6 +133,43 @@ def _args(tmp_path, **overrides):
     return types.SimpleNamespace(**body)
 
 
+def test_a_missing_share_count_is_derived_from_net_assets_over_nav():
+    """What the live screener actually returns: net assets and NAV, no count.
+
+    It does not need one. Net assets *are* shares times NAV by definition, so
+    the count is a division rather than an estimate — and which of the two a
+    row came from is recorded, because they fail differently.
+    """
+    body = screener()
+    for record in body.values():
+        record.pop("sharesOutstanding", None)
+    body["239710"]["totalNetAssets"] = {"r": 61_000_000_000.0}
+    body["239710"]["navAmount"] = {"r": 200.0}
+
+    iwm = next(c for c in etf_flows.parse_ishares(body) if c.ticker == "IWM")
+    assert iwm.shares_outstanding == pytest.approx(305_000_000.0)
+    assert iwm.shares_basis == "derived"
+
+
+def test_a_rounded_source_is_called_out_on_day_one():
+    """The question that decides whether collecting is worth starting.
+
+    A daily creation is ~0.1% of a fund. Net assets published to four
+    significant figures cannot express that, and no amount of patience fixes a
+    source that does not publish the digits.
+    """
+    assert etf_flows.significant_digits(7.876e10) == 4
+    assert etf_flows.significant_digits(78_762_345_678.0) == 11
+
+    rounded = [etf_flows.ShareCount("t", "IWM", None, 7.876e10, 289.0, "s")]
+    warning = etf_flows.precision_warning(rounded)
+    assert "IWM (4 digits)" in warning
+    assert "would not fix it" in warning
+
+    precise = [etf_flows.ShareCount("t", "IWM", None, 78_762_345_678.0, 289.0, "s")]
+    assert etf_flows.precision_warning(precise) == ""
+
+
 def test_the_dry_run_prints_what_it_would_record(tmp_path, capsys, monkeypatch):
     """The first live run reached the issuer, parsed seven funds, and then died
     formatting them: `table()` takes a frame and was handed a list. The fetch
@@ -146,7 +183,7 @@ def test_the_dry_run_prints_what_it_would_record(tmp_path, capsys, monkeypatch):
 
     out = capsys.readouterr().out
     assert "IWM" in out and "HYG" in out
-    assert "275,000,000" in out or "2.75e+08" in out
+    assert "275,000,000.00" in out, "full precision, not the 4-sig-fig table format"
     assert "nothing was written" in out
     assert not (tmp_path / "lake" / "flows").exists(), "--dry-run wrote to the lake"
 

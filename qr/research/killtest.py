@@ -71,6 +71,10 @@ class KillTest:
 def _per_trade_edge_bps(gross_return: float, round_trips: float) -> float:
     """Gross return per round trip, in basis points.
 
+    The argument is the *simple sum* of the per-bar gross returns, matching
+    the per-bar sum on the cost side. Mixing a compounded return with a summed
+    cost was worth a large multiple on its own over a sixteen-year panel.
+
     This is the number the 3x bar is applied to, and it is the right one:
     costs are paid per trade, so an effect worth 40 bps a year is a different
     proposition when it comes from four trades than from four hundred. Dividing
@@ -81,6 +85,20 @@ def _per_trade_edge_bps(gross_return: float, round_trips: float) -> float:
     if round_trips <= 0:
         return float("nan")
     return (gross_return / round_trips) / 1e-4
+
+
+def _realised_round_trip_cost_bps(result, round_trips: float) -> float:
+    """What one round trip actually cost, in basis points of deployed capital.
+
+    Read off the backtest rather than recomputed from the cost model, so every
+    term the model charges — commission, spread, the per-order floor, borrow —
+    is in it. `costs` is a per-bar drag in return units; summing it and
+    dividing by the number of round trips gives the average cost of one.
+    """
+    if round_trips <= 0:
+        return float("nan")
+    total_cost = float(np.nansum(result.costs.to_numpy()))
+    return total_cost / round_trips * 1e4
 
 
 def run(
@@ -108,8 +126,23 @@ def run(
 
     gross_total = float((1.0 + result.gross).prod() - 1.0)
     round_trips = float(stats["round_trips"])
-    edge_bps = _per_trade_edge_bps(gross_total, round_trips)
-    round_trip_cost_bps = 2.0 * costs.linear_bps
+    # Simple sum, not the compounded total, because the cost side below is a
+    # sum: over sixteen years compounding inflates the numerator by a large
+    # factor while the denominator gets none of it, and the ratio those two
+    # produce is not a cost multiple. `gross_total` is kept for reporting.
+    gross_simple = float(np.nansum(result.gross.to_numpy()))
+    edge_bps = _per_trade_edge_bps(gross_simple, round_trips)
+    # The cost the backtest actually charged, not the linear component of the
+    # cost model. `2.0 * costs.linear_bps` was 2.0 bps for the IBKR model and
+    # left out the per-share commission and the $0.35 per-order floor — which
+    # at a $1,000 account is not a detail, it is the cost that decides
+    # everything. A candidate was reported at "1.6x, and the bar is 3x" on that
+    # basis; the real multiple was far below it, and the error flattered the
+    # candidate. Check 3 caught the floor separately, which is why this stayed
+    # invisible: the verdict was right and its stated reason was wrong.
+    round_trip_cost_bps = _realised_round_trip_cost_bps(result, round_trips)
+    if not np.isfinite(round_trip_cost_bps) or round_trip_cost_bps <= 0:
+        round_trip_cost_bps = 2.0 * costs.linear_bps
     expected_positive = memo.crude_version.expected_sign == "positive"
 
     common = {

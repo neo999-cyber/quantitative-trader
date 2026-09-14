@@ -311,3 +311,40 @@ No new event was added, deliberately. `turn_of_month` as an alias for
 `month_end` would be a second way to say the same thing, and a grid sweeping
 both would run identical variants twice — paying gate 4's deflation for
 nothing.
+
+### And the kill test was measuring against the wrong cost
+
+The event fix worked: both turn-of-month candidates reached Stage 3 on the
+next night, and both died at the floor — *"costs take the whole gross return at
+this account size"*. Three kill tests now, and they agree that the calendar
+effect is present in this basket and cannot pay for itself at $1,000.
+
+Reading the code that produced them turned up a defect that flattered the
+closest candidate:
+
+    round_trip_cost_bps = 2.0 * costs.linear_bps
+
+For the IBKR model `linear_bps` is 1.0, so every candidate was scored against
+**2.0 bps** — which omits the per-share commission and the $0.35 per-order
+minimum. On a $1,000 account a single order at the floor is 35 bps. So
+*"3.2 bps per round trip against 2.0 bps of cost — 1.6x, and the bar is 3x"*
+measured a real effect against a cost that left out the term that decides
+whether it is tradeable.
+
+It stayed invisible because check 3 catches the floor separately: the verdicts
+were right and the stated reason was wrong, which is the hardest kind of error
+to notice and the same shape as the one `docs/16` found in the sizing
+mathematics — a number that was correct for a quantity nobody meant.
+
+Two fixes, both narrowing:
+
+* **The cost is read off the backtest**, not recomputed from the cost model,
+  so commission, spread, the per-order floor and borrow are all in it.
+* **The gross side is a simple sum**, matching the per-bar sum on the cost
+  side. It was the compounded total return over a sixteen-year panel divided
+  by a per-trade cost — a numerator with sixteen years of compounding in it and
+  a denominator with none. That ratio was not a cost multiple.
+
+Both make the bar harder, which is the direction an unverified cost assumption
+should err in. **The 1.6x figure should not be quoted**; the corrected run has
+not been done.

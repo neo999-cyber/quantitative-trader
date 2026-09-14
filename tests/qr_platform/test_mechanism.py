@@ -338,6 +338,22 @@ def test_noise_dies_at_the_cost_bar(discovery):
     assert result.stats["round_trip_cost_bps"] > 0
 
 
+def test_the_cost_bar_charges_the_per_order_floor_not_just_the_spread(discovery):
+    """The reported multiple used `2 * costs.linear_bps`, which for the IBKR
+    model is 2.0 bps and leaves out the per-share commission and the $0.35
+    per-order minimum — the cost that decides everything on a $1,000 account.
+    A candidate was reported as "1.6x against a 3x bar" on that basis. The
+    multiple must now be measured against what the backtest actually charged.
+    """
+    ibkr = CostModel.etf_trial()
+    result = killtest.run(memo(), discovery, ResearchPolicy(), costs=ibkr, equity=1_000.0)
+    charged = result.stats["round_trip_cost_bps"]
+    assert charged > 2.0 * ibkr.linear_bps, "the floor and the commission are not being charged"
+    assert result.stats["cost_multiple"] == pytest.approx(
+        result.stats["edge_bps_per_round_trip"] / charged, rel=1e-9
+    )
+
+
 def test_a_sign_flip_is_a_refutation_not_a_discovery(discovery):
     """Whichever direction noise drifted, the opposite memo must be refuted."""
     positive = killtest.run(memo(), discovery, ResearchPolicy())

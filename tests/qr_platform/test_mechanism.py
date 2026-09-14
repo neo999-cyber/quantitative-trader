@@ -354,6 +354,22 @@ def test_the_cost_bar_charges_the_per_order_floor_not_just_the_spread(discovery)
     )
 
 
+def test_the_cost_ladder_prices_the_same_idea_at_every_account_size(discovery):
+    """Why a cost death is ambiguous without it: at $1,000 a $0.35 per-order
+    minimum is 35 bps, and at $100,000 it is 0.35 bps. The strategy, the panel
+    and the committed sign do not move — only the account does."""
+    ladder = killtest.cost_ladder(memo(), discovery, "etf")
+
+    assert [r["equity"] for r in ladder] == [1_000.0, 10_000.0, 100_000.0]
+    costs_by_size = [r["round_trip_cost_bps"] for r in ladder]
+    assert costs_by_size == sorted(costs_by_size, reverse=True), (
+        "the per-order floor must get cheaper with size, not dearer"
+    )
+    # The gross effect is a property of the panel, not of the account.
+    edges = {round(abs(r["edge_bps_per_round_trip"]), 6) for r in ladder}
+    assert len(edges) == 1
+
+
 def test_a_sign_flip_is_a_refutation_not_a_discovery(discovery):
     """Whichever direction noise drifted, the opposite memo must be refuted."""
     positive = killtest.run(memo(), discovery, ResearchPolicy())

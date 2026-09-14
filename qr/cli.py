@@ -1214,6 +1214,7 @@ def cmd_autopilot(args) -> int:
         universe=universe,
         equity=equity,
         market=_market_description(args.asset, panel, costs, equity),
+        asset=args.asset,
         propose=(lambda brief, **kw: mechanism.propose(brief, model=args.model, **kw)),
         promote=promote,
         progress=_progress,

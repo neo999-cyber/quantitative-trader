@@ -348,3 +348,38 @@ Two fixes, both narrowing:
 Both make the bar harder, which is the direction an unverified cost assumption
 should err in. **The 1.6x figure should not be quoted**; the corrected run has
 not been done.
+
+### The corrected number, and the only question it leaves
+
+With the real cost charged:
+
+> `turn_of_month_payroll_bid_v1` — **4.8 bps per round trip against 7.5 bps of
+> cost — 0.6x**, and the bar is 3x.
+
+Not 1.6x. **0.6x**: the effect is smaller than the cost of capturing it, and it
+would have to be five times larger to clear the bar. The old figure flattered
+it by about a factor of three, which is roughly what the compounded-numerator
+error produces on its own over a sixteen-year panel.
+
+So the ETF calendar is, at $1,000, a real effect that costs more to harvest
+than it pays. That is a finding with a name, and it is much more useful than
+"nothing worked".
+
+**One question is left, and it is the only one that could change the
+decision.** The 7.5 bps is dominated by the $0.35 per-order minimum, which is
+35 bps of a $1,000 order and 0.35 bps of a $100,000 one. A cost death
+therefore has two diagnoses that call for opposite actions:
+
+* the effect is too small to be worth anything, at any size; or
+* the effect is fine and **this account** cannot reach it.
+
+`killtest.cost_ladder()` now answers that directly: the same crude version, the
+same panel, the same committed sign, re-costed at $1,000 / $10,000 / $100,000,
+printed by the night whenever a candidate dies at `costs` or `floor`. It is a
+sensitivity read in the sense `docs/11` fixed — nothing is written, no trial is
+counted, because nothing is being searched.
+
+Note what the answer cannot be. The gross effect is a property of the panel and
+does not move with the account, so the ladder's numerator is 4.8 bps at every
+rung. Clearing a 3x bar needs the cost below 1.6 bps. Whether the IBKR tiered
+model gets there at $100,000 is now a measurement rather than an argument.

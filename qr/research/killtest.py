@@ -35,7 +35,7 @@ for a few seconds of compute is strictly cheaper than finding out later.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from typing import Any
+from typing import Any, Sequence
 
 import numpy as np
 import pandas as pd
@@ -43,6 +43,7 @@ import pandas as pd
 from qr.data.panel import Panel
 from qr.data.sandbox import sandbox_side
 from qr.execution.costs import CostModel
+from qr.research.account_size import ACCOUNT_SIZES, costs_for
 from qr.research.mechanism import MechanismMemo
 from qr.research.policy import ResearchPolicy
 from qr.research.runner import run_backtest
@@ -99,6 +100,47 @@ def _realised_round_trip_cost_bps(result, round_trips: float) -> float:
         return float("nan")
     total_cost = float(np.nansum(result.costs.to_numpy()))
     return total_cost / round_trips * 1e4
+
+
+def cost_ladder(
+    memo: MechanismMemo,
+    panel: Panel,
+    asset: str,
+    universe: pd.DataFrame | None = None,
+    sizes: Sequence[float] = ACCOUNT_SIZES,
+) -> list[dict]:
+    """The same crude version, re-costed at each account size.
+
+    A candidate that dies at the cost bar has two possible diagnoses and they
+    call for opposite decisions: the effect is too small to be worth anything,
+    or the effect is fine and **this account** cannot reach it. The per-order
+    floor is the whole difference — $0.35 is 35 bps of a $1,000 order and 0.35
+    bps of a $100,000 one — so the same idea can be hopeless at one size and
+    tradeable at another.
+
+    This is a sensitivity read, in the sense `docs/11` fixed: the strategy, the
+    panel and the sign are unchanged, only the account the orders are priced
+    against moves. Nothing is written and no trial is counted, because nothing
+    is being searched.
+    """
+    ladder = []
+    for equity in sizes:
+        costs = costs_for(asset, equity)
+        result = run_backtest(panel, memo.crude_version.build(), costs, universe, equity=equity)
+        stats = result.stats()
+        round_trips = float(stats["round_trips"])
+        edge = _per_trade_edge_bps(float(np.nansum(result.gross.to_numpy())), round_trips)
+        cost = _realised_round_trip_cost_bps(result, round_trips)
+        ladder.append(
+            {
+                "equity": equity,
+                "edge_bps_per_round_trip": edge,
+                "round_trip_cost_bps": cost,
+                "cost_multiple": abs(edge) / cost if cost else float("nan"),
+                "net_over_gross": stats["net_over_gross"],
+            }
+        )
+    return ladder
 
 
 def run(

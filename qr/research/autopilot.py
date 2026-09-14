@@ -150,6 +150,7 @@ def run_night(
     universe: pd.DataFrame | None = None,
     equity: float | None = None,
     market: str = "",
+    asset: str = "",
     propose: Callable[..., MechanismMemo] | None = None,
     promote: Callable[[MechanismMemo, KillTestLike], None] | None = None,
     progress: Callable[[str], None] | None = None,
@@ -247,6 +248,25 @@ def run_night(
             outcome.outcome = "failed"
             outcome.reason = f"{test.failed_at}: {test.reason}"
             say(f"  {memo.candidate_id}: died at {test.failed_at}")
+            # A death on cost has two diagnoses that call for opposite
+            # decisions — the effect is worthless, or this account cannot
+            # reach it — and the per-order floor is the whole difference.
+            # Reading the ladder here costs three backtests and answers it;
+            # not reading it leaves the night's most useful output unsaid.
+            if asset and test.failed_at in {"costs", "floor"}:
+                try:
+                    ladder = killtest.cost_ladder(memo, discovery, asset, universe)
+                except Exception as exc:  # a sensitivity read must not fail a night
+                    say(f"  (cost ladder unavailable: {type(exc).__name__}: {exc})")
+                else:
+                    outcome.stats = {**outcome.stats, "cost_ladder": ladder}
+                    for rung in ladder:
+                        say(
+                            f"    at ${rung['equity']:>7,.0f}: "
+                            f"{abs(rung['edge_bps_per_round_trip']):.1f} bps against "
+                            f"{rung['round_trip_cost_bps']:.1f} bps — "
+                            f"{rung['cost_multiple']:.1f}x"
+                        )
             continue
 
         outcome.stage = "gates"

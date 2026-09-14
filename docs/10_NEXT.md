@@ -193,7 +193,17 @@ horizon is 100% at every leverage. Half Kelly still fails a 10% budget on every
 reading; quarter Kelly is borderline, not "not close"; the plan's constraints
 were a conjunction, not a contradiction; and the 0.2x single-name result has
 no account-size term. Fixes are listed at the end of that document for a build
-session. The original prompt is kept below for the record.
+session, **and were applied the same day**: the quantity is renamed
+(`prob_ever_below_launch`, `SizingPolicy.loss_from_launch` /
+`loss_tolerance`) in `qr/portfolio/sizing.py`, the gate 11 verdict string and
+`docs/09`; the tautological test is joined by a second published anchor (half
+Kelly, ⅛) and a Monte Carlo that shares no algebra with the formula; the
+Kelly ceiling moved from 0.25, where it could never bind, to 0.5, where it
+binds if the loss budget is loosened; and a malformed policy is now refused at
+construction. Item 5 — whether gate 11 should also report a finite-horizon
+peak-to-trough estimate with the Sharpe standard error carried into the
+verdict — is a design decision and is **still open**. The original prompt is
+kept below for the record.
 
 Gates 10 and 11 were written on 13 September 2026 and **their mathematics had
 not been independently checked.** Per `CLAUDE.md`, that review belongs to

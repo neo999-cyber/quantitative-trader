@@ -271,3 +271,51 @@ Listed for a Sonnet or Opus session; not done here.
    estimate from the out-of-sample return distribution at the strategy's
    review horizon. If it does, carry the Sharpe standard error into the
    verdict text so the leverage is reported as a range, not a point.
+
+---
+
+## What the build session changed (14 September 2026, same day)
+
+Items 1–4 are done. Item 5 is a design decision and is left open.
+
+**1. Renamed, everywhere.** `drawdown_probability` → `prob_ever_below_launch`;
+`SizingPolicy.max_drawdown` / `drawdown_tolerance` →
+`loss_from_launch` / `loss_tolerance`; the `drawdown` cap key →
+`below_launch`; `Sizing.drawdown_probability` and its `as_dict` key likewise;
+and the gate 11 verdict now reads *"P(ever 25% below launch equity) is X%"*.
+The reading chosen as primary is **P(the account ever shows the loss against
+the deposit)**, with the time-under-water reading given alongside it in the
+docstring, since they are the same expression and the second is the more
+vivid sentence.
+
+The rename also removes a collision worth naming: `max_drawdown` elsewhere in
+this codebase (`runner`, `forward`, the tear sheets) *is* a realised
+peak-to-trough drawdown. Two different quantities under one name in one repo
+is how the mislabelling survived being read.
+
+**2. `docs/09` corrected.** The table heading, a second column giving the
+time-under-water reading, "borderline" in place of "not close", the
+conjunction framing in place of the contradiction, and the single-name cap no
+longer attributed to the $1,000 account — it has no equity term, and `docs/11`
+is where account size is actually answered.
+
+**3. The tests no longer share the formula's provenance.** The full-Kelly
+halving anchor is kept and labelled as insufficient alone. Added: the
+half-Kelly ⅛ anchor, which pins the exponent rather than just the level, and a
+Monte Carlo — 20,000 geometric random walks, forty years of daily steps,
+counting paths that ever closed 25% below launch — asserted against the closed
+form to ±0.02. The simulation is biased slightly low because discrete steps
+miss crossings between closes, so that assertion is also made one-sided.
+
+**4. `kelly_fraction` moved to where it can bind, and the policy validates.**
+It was 0.25, and the launch-loss cap lands at 0.222 of full Kelly under the
+default budget, so it was decoration. It is now 0.5 — the ceiling this
+module's prose always claimed — and binds when the loss budget is loosened
+past 0.75³ = 0.4219, which a test asserts. `SizingPolicy.__post_init__` now
+refuses a depth or tolerance outside (0, 1) and a non-positive Kelly fraction;
+previously a malformed policy became a leverage.
+
+**5. Still open.** Whether gate 11 should add a finite-horizon peak-to-trough
+estimate at the strategy's review horizon, and report leverage as a range by
+carrying the Sharpe standard error into the verdict. Both gates remain inert
+until something reaches gate 9, and nothing has.

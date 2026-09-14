@@ -1176,8 +1176,8 @@ def gate_11_sizing(ctx: GateContext) -> GateResult:
     money = f", ${plan.notional:,.0f} on ${ctx.equity:,.0f}" if ctx.equity else ""
     detail = (
         f"{plan.leverage:.2f}x from {basis}{money}; the {plan.binding.replace('_', ' ')} "
-        f"cap binds, and P(drawdown > {int(sizing.SizingPolicy().max_drawdown * 100)}% ever) "
-        f"is {plan.drawdown_probability:.1%}"
+        f"cap binds, and P(ever {int(sizing.SizingPolicy().loss_from_launch * 100)}% below "
+        f"launch equity) is {plan.prob_ever_below_launch:.1%}"
     )
     if plan.leverage < ctx.thresholds.min_leverage:
         return GateResult(11, "sizing", WARN, f"{detail} — too small to be worth trading", stats)

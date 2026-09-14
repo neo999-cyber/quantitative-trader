@@ -1,10 +1,12 @@
 # Gates 10 and 11: the last two, and the only ones that move money
 
-> **Reviewed 14 September 2026 — see `docs/16_GATE_11_SIZING_REVIEW.md` before
-> relying on the sizing numbers below.** The drawdown formula is correct but
-> computes the probability of ever falling 25% below launch equity, not a
-> peak-to-trough drawdown; the four-row table, the "contradiction" framing and
-> the $1,000-account attribution of the 0.2x cap are corrected there.
+> **Reviewed 14 September 2026 — `docs/16_GATE_11_SIZING_REVIEW.md`** found the
+> formula correct and the label wrong: it computes the probability of ever
+> falling 25% below *launch equity*, not a peak-to-trough drawdown. **This page
+> has since been corrected** and the code renamed (`prob_ever_below_launch`,
+> `SizingPolicy.loss_from_launch`); read `docs/16` for the derivation, the
+> Monte Carlo tables and the finite-horizon numbers, which are not repeated
+> here.
 
 Gates 0–9 are an argument about history. They can be run again tomorrow and
 they will say the same thing, because the data does not change. These two are
@@ -81,40 +83,61 @@ constraint binds, not the edge" is a direction.
 | cap | what it is |
 |---|---|
 | Fractional Kelly | ¼ of full Kelly `SR/σ` |
-| Drawdown | the largest leverage keeping P(ever draw down > 25%) ≤ 10% |
+| Loss from launch | the largest leverage keeping P(ever 25% below launch equity) ≤ 10% |
 | Volatility target | 15% annualised on the book |
 | Single-name gap | no one position may cost more than 1% of equity on a 20% adverse gap |
 
-The drawdown cap uses `P(ever DD > D) = (1 − D) ** (2m/s²)`. The test for it
-is a known answer rather than a plausible one: a full-Kelly book has exactly
-a 50% chance of ever halving, and any expression that does not reproduce that
-is the wrong expression.
+The cap uses `P(ever D below launch) = (1 − D) ** (2m/s²)`, the classical
+barrier-crossing probability. Two published anchors pin it — a full-Kelly book
+has exactly a 50% chance of ever halving, a half-Kelly book exactly ⅛ — and a
+simulation that shares no algebra with the formula reproduces it to Monte
+Carlo tolerance. The single anchor this page used to cite was drawn from the
+same literature as the formula, which is why it passed while the quantity was
+mislabelled; `docs/16` made that point and the test file now says so.
+
+**What it is not.** The peak-to-trough drawdown is a different random
+variable: measured from the running peak, reflected at zero, and positive
+recurrent. Over the infinite horizon the cap is solved on, P(peak-to-trough
+drawdown ever exceeds any depth) = 1 at every leverage. The constraint this
+page used to state was therefore unsatisfiable as written, and the code met it
+only by computing something else.
 
 ### What building it turned up
 
-The plan (§4, gate 11) specifies *"fractional Kelly (¼–½)"* and *"P(DD >
-25%) ≤ 5–10%"* as if they were two ways of saying the same thing. They are
-not, and the arithmetic is not close:
+The plan (§4, gate 11) specifies *"fractional Kelly (¼–½)"* and a loss budget
+of *"≤ 5–10%"*. Under this engine those are not two ways of saying the same
+thing, and the second is much the tighter:
 
-| Kelly fraction | P(ever draw down > 25%) |
-|---|---|
-| full | 75% (and a 50% chance of ever halving) |
-| ½ | **42%** |
-| ¼ | **13%** |
-| ⅕ | 7.5% |
+| Kelly fraction | P(ever 25% below launch) | equivalently, share of life spent >25% under water |
+|---|---|---|
+| full | 75% | 73% |
+| ½ | **42%** | 40% |
+| ¼ | **13%** | 13% |
+| 0.222 (where the cap lands) | 10% | 9% |
+| ⅕ | 7.5% | 7% |
 
 Half Kelly — the conventional "safe" fraction, the one that gets recommended
-casually — carries a better-than-even chance of a drawdown deep enough that
-most people would abandon the strategy. Even quarter Kelly misses the plan's
-own 10% budget.
+casually — fails a 10% budget by a factor of four on any reading. Quarter
+Kelly is *borderline* rather than clearly out: 13% against a 10% budget, which
+is why the cap lands just below it at 0.222.
 
-So the two constraints disagree, and under this engine the **drawdown
-constraint is the binding one, not the Kelly fraction**. That is why sizing
-is a minimum over caps rather than a single formula: the plan's numbers were
-each defensible and their conjunction was not, which is exactly the kind of
-thing that stays invisible until someone writes it down as code.
+The second column is the same number read as time rather than probability, and
+it is the more useful sentence: **at half Kelly you spend 40% of your life
+more than a quarter below your high-water mark.** `docs/16` also gives the
+finite-horizon peak-to-trough numbers, which are worse again.
 
-In practice a fifth cap usually binds before any of these. At a $1,000
-account the single-name gap rule holds leverage near 0.2x, which is a
-restatement of the ETF trial's finding: at this account size the constraint
-is the account, and the interesting design variable is turnover.
+**This is a conjunction, not a contradiction.** An earlier version of this
+page said the plan's two constraints disagreed and that the code had caught
+something; the review was right that this overstated it. "Fractional Kelly
+*and* a loss budget" is what the plan always meant, and the answer is simply
+the tighter of the two. That is why sizing is a minimum over caps: not because
+the numbers conflict, but because which one binds is information, and it is
+reported.
+
+In practice a fifth cap usually binds before any of these: the single-name gap
+rule holds leverage near 0.2x. **That is not an account-size result** — the
+cap is `1% / (max_weight x 20% gap)` and has no equity term in it at all. An
+earlier version of this page attributed it to the $1,000 account because that
+matched the ETF trial's story. It does not; it is a statement about position
+concentration, and it would say the same thing at $100,000. Step 0
+(`docs/11`) is where the account-size question is actually answered.

@@ -10,7 +10,7 @@ import pandas as pd
 import pytest
 
 from qr.execution.costs import CostModel
-from qr.portfolio.sizing import Sizing, SizingPolicy, drawdown_probability, size
+from qr.portfolio.sizing import Sizing, SizingPolicy, prob_ever_below_launch, size
 from qr.research.runner import run_backtest
 from qr.strategies.library import TSMOM
 from qr.validate import forward
@@ -185,31 +185,88 @@ def test_a_pass_refuses_to_claim_more_than_the_sample_supports(world, log):
 
 
 def test_full_kelly_halves_your_money_with_probability_one_half():
-    """The known answer that proves the formula, not a plausible-looking one.
+    """A known answer — but not one that could ever have failed alone.
 
-    A full-Kelly book has a 50% chance of ever halving. Any expression that
-    does not reproduce this is the wrong expression.
+    `docs/16` made the point: this was the module's proof of correctness, and
+    it was taken from the same literature as the formula, so it cannot detect
+    the error that was actually present (the expression was right and the
+    *label* was wrong). It is kept because it is true, and joined below by a
+    second known answer and a simulation that does not share its provenance.
     """
     sharpe, vol = 0.8, 0.2
     full_kelly = sharpe / vol
-    assert drawdown_probability(full_kelly, sharpe, vol, 0.5) == pytest.approx(0.5, abs=1e-9)
+    assert prob_ever_below_launch(full_kelly, sharpe, vol, 0.5) == pytest.approx(0.5, abs=1e-9)
 
 
-def test_half_kelly_is_riskier_than_it_sounds():
-    """Worth an assertion because the number surprises people: the
-    conventional 'safe' fraction still carries a 42% chance of a 25% drawdown."""
+def test_half_kelly_halves_your_money_with_probability_one_eighth():
+    """The second published anchor: at c of full Kelly, q = 2/c - 1, so half
+    Kelly gives (1/2)**3. Two points pin the exponent as well as the level."""
     sharpe, vol = 0.8, 0.2
-    p = drawdown_probability(0.5 * sharpe / vol, sharpe, vol, 0.25)
-    assert p == pytest.approx(0.75**3, rel=1e-9)
-    assert 0.40 < p < 0.45
+    p = prob_ever_below_launch(0.5 * sharpe / vol, sharpe, vol, 0.5)
+    assert p == pytest.approx(0.125, abs=1e-9)
 
 
-def test_the_drawdown_cap_actually_hits_its_budget():
+def test_a_simulated_book_reproduces_the_closed_form():
+    """The independent check: no formula, just paths.
+
+    A geometric random walk at quarter Kelly, run for forty years of daily
+    steps, and the fraction of paths that ever closed 25% below where they
+    started. Discrete steps can only miss barrier crossings that happen
+    between closes, so the simulation is biased slightly low and the assertion
+    is one-sided about that; what it cannot do is agree by construction.
+    """
+    sharpe, vol, depth = 0.8, 0.2, 0.25
+    leverage = 0.25 * sharpe / vol
+    closed_form = prob_ever_below_launch(leverage, sharpe, vol, depth)
+
+    steps, paths, per_year = 40 * 252, 20_000, 252
+    m = leverage * sharpe * vol - 0.5 * (leverage * vol) ** 2
+    s = leverage * vol
+    rng = np.random.default_rng(20260914)
+    barrier = np.log(1.0 - depth)
+
+    hit = 0
+    for chunk in range(0, paths, 2_000):
+        n = min(2_000, paths - chunk)
+        steps_arr = rng.normal(m / per_year, s / np.sqrt(per_year), size=(n, steps))
+        log_equity = np.cumsum(steps_arr, axis=1)
+        hit += int((log_equity.min(axis=1) <= barrier).sum())
+    simulated = hit / paths
+
+    assert simulated == pytest.approx(closed_form, abs=0.02)
+    assert simulated <= closed_form + 0.01, "discrete steps cannot cross more often than continuous ones"
+
+
+def test_the_below_launch_cap_actually_hits_its_budget():
     """Solve for the cap, then measure the risk at that cap. They must agree."""
-    policy = SizingPolicy(max_drawdown=0.25, drawdown_tolerance=0.10)
+    policy = SizingPolicy(loss_from_launch=0.25, loss_tolerance=0.10)
     plan = size(0.9, 0.2, max_weight=0.0, policy=policy)
-    at_cap = drawdown_probability(plan.caps["drawdown"], 0.9, 0.2, 0.25)
+    at_cap = prob_ever_below_launch(plan.caps["below_launch"], 0.9, 0.2, 0.25)
     assert at_cap == pytest.approx(0.10, rel=1e-6)
+
+
+def test_a_malformed_policy_is_refused_at_construction():
+    """It used to be accepted and turned into a leverage downstream."""
+    with pytest.raises(ValueError, match="loss_from_launch"):
+        SizingPolicy(loss_from_launch=1.5)
+    with pytest.raises(ValueError, match="loss_tolerance"):
+        SizingPolicy(loss_tolerance=0.0)
+
+
+def test_the_kelly_ceiling_can_actually_bind():
+    """At 0.25 it never could: the launch-loss cap lands at 0.222 of full
+    Kelly under the default budget, so the Kelly cap was decoration. It binds
+    now when the loss budget is loosened, which is the only time it should."""
+    # The volatility ceiling is lifted out of the way so the comparison is
+    # between the two caps under discussion and not a third one.
+    loose = SizingPolicy(loss_tolerance=0.50, volatility_target=10.0)
+    plan = size(1.0, 0.2, max_weight=0.0, policy=loose)
+    assert plan.binding == "kelly"
+    tight = SizingPolicy(volatility_target=10.0)
+    assert size(1.0, 0.2, max_weight=0.0, policy=tight).binding == "below_launch"
+    # And the crossover is where the algebra says: the launch-loss cap passes
+    # the Kelly ceiling when q = 2/kelly_fraction - 1 = 3, i.e. tol = 0.75**3.
+    assert 0.75**3 == pytest.approx(0.4219, abs=1e-4)
 
 
 def test_sizing_is_the_minimum_of_the_caps_and_names_the_one_that_bound():

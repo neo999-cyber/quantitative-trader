@@ -151,23 +151,57 @@ def test_a_missing_share_count_is_derived_from_net_assets_over_nav():
     assert iwm.shares_basis == "derived"
 
 
-def test_a_rounded_source_is_called_out_on_day_one():
-    """The question that decides whether collecting is worth starting.
+def _live(ticker: str, shares: float) -> "etf_flows.ShareCount":
+    return etf_flows.ShareCount("t", ticker, shares, None, None, "s", "derived")
 
-    A daily creation is ~0.1% of a fund. Net assets published to four
-    significant figures cannot express that, and no amount of patience fixes a
-    source that does not publish the digits.
+
+def test_the_live_counts_land_on_the_creation_unit():
+    """The first real payload, and the number that decides the dataset.
+
+    Every fund's derived count is a multiple of 50,000 shares — the iShares
+    creation unit — with a sub-share remainder from dividing net assets by a
+    four-decimal NAV. The source is therefore exactly as precise as the process
+    it describes: creations happen in whole units, and whole units are what it
+    reports.
     """
-    assert etf_flows.significant_digits(7.876e10) == 4
-    assert etf_flows.significant_digits(78_762_345_678.0) == 11
+    counts = [
+        _live("EFA", 739_199_999.43), _live("EEM", 464_850_001.75),
+        _live("IWM", 271_200_000.46), _live("TLT", 586_899_998.83),
+        _live("IEF", 458_700_000.36), _live("LQD", 269_100_001.26),
+        _live("HYG", 184_599_999.59),
+    ]
+    assert etf_flows.share_quantum(counts) == 50_000.0
+    assert etf_flows.precision_warning(counts) == "", "the live source is fine"
 
-    rounded = [etf_flows.ShareCount("t", "IWM", None, 7.876e10, 289.0, "s")]
-    warning = etf_flows.precision_warning(rounded)
-    assert "IWM (4 digits)" in warning
-    assert "would not fix it" in warning
 
-    precise = [etf_flows.ShareCount("t", "IWM", None, 78_762_345_678.0, 289.0, "s")]
-    assert etf_flows.precision_warning(precise) == ""
+def test_a_source_too_coarse_to_show_a_day_is_called_out_on_day_one():
+    """No amount of collecting fixes a step the source never published below."""
+    # Both counts divide by 100,000, so that is the step the source is moving
+    # in — the finder reports the coarsest one consistent with the data, which
+    # is the conservative reading.
+    coarse = [_live("HYG", 184_600_000.0), _live("XYZ", 1_000_000.0)]
+    warning = etf_flows.precision_warning(coarse)
+    assert "XYZ" in warning and "100,000" in warning
+    assert "does not fix" in warning
+    # The big fund in the same list is unaffected: 100,000 of 184.6m is 0.05%.
+    assert "HYG" not in warning
+
+
+def test_significant_digits_on_net_assets_was_the_wrong_question():
+    """It answered 17 on the live payload — an all-clear for a bad reason.
+
+    The screener publishes a share count; net assets are that count times a
+    four-decimal NAV. The trailing digits are arithmetic, not information, so a
+    check reading them is measuring its own multiplication.
+    """
+    shares, nav = 184_600_000.0, 78.7110
+    # Nine digits: a clean pass of any "does the source publish enough
+    # precision" test, on a figure whose last five digits are multiplication.
+    assert etf_flows.significant_digits(shares * nav) > 6
+    # One count divides by 100,000, so on its own it cannot distinguish a
+    # 50,000 step from a 100,000 one — which is why the check reads the whole
+    # set. Either way it is orders of magnitude below the nine digits above.
+    assert etf_flows.share_quantum([_live("HYG", shares)]) == 100_000.0
 
 
 def test_the_dry_run_prints_what_it_would_record(tmp_path, capsys, monkeypatch):

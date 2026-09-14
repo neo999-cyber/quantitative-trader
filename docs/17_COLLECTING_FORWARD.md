@@ -109,6 +109,38 @@ If the warning fires, this dataset is dead as a free source and the honest
 options are a vendor or nothing — which is a much better thing to learn on day
 one than after a year of cron jobs.
 
+### The answer, and a check that was measuring the wrong thing
+
+The live counts:
+
+| | derived shares | rounds to |
+|---|---|---|
+| EFA | 739,199,999.43 | 739,200,000 |
+| EEM | 464,850,001.75 | 464,850,000 |
+| IWM | 271,200,000.46 | 271,200,000 |
+| HYG | 184,599,999.59 | 184,600,000 |
+
+**Every one is a multiple of 50,000 shares — the iShares creation unit** — with
+a sub-share remainder from dividing by a four-decimal NAV. So the source is
+exactly as precise as the process it describes: creations happen in whole
+units, and whole units are what it reports. For HYG, the smallest fund here,
+50,000 shares is 0.027%, comfortably inside a day's flow. **The dataset works.**
+
+The first version of the check would have said so for the wrong reason. It
+counted significant digits in *net assets* and got 13 to 17 — an emphatic
+all-clear. But the screener does not publish net assets and a share count
+independently: it publishes a count, and net assets are that count times the
+NAV. The trailing digits are arithmetic, not information, and the check was
+reading its own multiplication.
+
+`share_quantum()` asks the question that was meant: what step do the published
+counts actually move in? `significant_digits()` is kept, and its docstring now
+says what it is not for.
+
+That is the fourth time in two days that the reassuring number turned out to be
+measuring something other than what it said — and the first time it was caught
+before anything was built on it rather than after.
+
 ## What this is worth, stated honestly
 
 Low, and worth doing anyway.

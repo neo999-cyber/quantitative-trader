@@ -337,14 +337,20 @@ def cmd_data_flows_collect(args) -> int:
         # to answer: whether the source publishes enough digits for a daily
         # flow to be visible at all.
         print(f"{'ticker':<8}{'shares_outstanding':>22}{'total_net_assets':>22}"
-              f"{'nav':>12}  basis  digits")
+              f"{'nav':>12}  basis")
         for count in counts:
-            digits = etf_flows.significant_digits(count.total_net_assets)
             shares = "" if count.shares_outstanding is None else f"{count.shares_outstanding:,.2f}"
             assets = "" if count.total_net_assets is None else f"{count.total_net_assets:,.2f}"
             nav = "" if count.nav is None else f"{count.nav:,.4f}"
-            print(f"{count.ticker:<8}{shares:>22}{assets:>22}{nav:>12}"
-                  f"  {count.shares_basis:<7}{digits}")
+            print(f"{count.ticker:<8}{shares:>22}{assets:>22}{nav:>12}  {count.shares_basis}")
+
+        step = etf_flows.share_quantum(counts)
+        if step:
+            smallest = min(c.shares_outstanding for c in counts if c.shares_outstanding)
+            print(
+                f"\nShare counts move in steps of {step:,.0f} — {step / smallest:.3%} of the "
+                f"smallest fund here. That is the finest flow this source can report."
+            )
         warning = etf_flows.precision_warning(counts)
         if warning:
             print(f"\n{warning}")

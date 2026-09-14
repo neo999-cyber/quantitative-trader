@@ -305,14 +305,16 @@ def fetch(url: str = ISHARES_SCREENER, timeout: int = 60, dump: Path | None = No
 
 
 def significant_digits(value: float | None) -> int:
-    """How many digits the source actually committed to.
+    """How many digits a figure carries. Kept, but it is the wrong question here.
 
-    The number that decides whether this dataset is usable at all. A daily
-    creation is on the order of 0.1% of a fund's shares, so a net-asset figure
-    published to four significant figures cannot express one: the flow is
-    smaller than the rounding, and every day would read as either zero or a
-    step of 0.05%. Four digits means the record is worthless no matter how long
-    it is collected, and it is much better to know that on day one.
+    It was written to ask whether the source publishes enough precision to show
+    a daily flow, and applied to net assets it answered 17 — an all-clear for a
+    bad reason. The screener does not publish net assets and a share count
+    independently: it publishes a share count, and net assets are that count
+    times a four-decimal NAV. The trailing digits are arithmetic, not
+    information, and a check reading them is measuring its own multiplication.
+
+    `share_quantum` asks the question this was meant to ask.
     """
     if value is None or value != value or value == 0:
         return 0
@@ -323,20 +325,57 @@ def significant_digits(value: float | None) -> int:
     return len(digits.rstrip("0")) or 1
 
 
-def precision_warning(counts: Sequence[ShareCount], needed: int = 6) -> str:
-    """A sentence to print when the source is too rounded to show a flow, else ""."""
-    worst = [
-        (c.ticker, c.total_net_assets, significant_digits(c.total_net_assets))
-        for c in counts
-        if significant_digits(c.total_net_assets) < needed
-    ]
-    if not worst:
+#: Steps to test for, largest first. Stops at a thousand shares: finer than
+#: that and the granularity cannot bind on a fund of this size anyway.
+QUANTA: tuple[float, ...] = (1e6, 5e5, 1e5, 5e4, 1e4, 5e3, 1e3)
+
+
+def share_quantum(counts: Sequence[ShareCount], tolerance: float = 5.0) -> float | None:
+    """The step the published share counts actually move in.
+
+    The number that decides whether this dataset can show a flow. A count
+    quantised to 50,000 shares can only report creations in multiples of
+    50,000 — which is fine if that is the size of a creation unit and useless
+    if it is a rounding convention.
+
+    `tolerance` is in shares and absorbs the float error from dividing net
+    assets by a four-decimal NAV; that error is a couple of shares in several
+    hundred million, so anything larger is real structure.
+    """
+    shares = [c.shares_outstanding for c in counts if c.shares_outstanding]
+    if not shares:
+        return None
+    for step in QUANTA:
+        if all(abs(v - round(v / step) * step) <= tolerance for v in shares):
+            return step
+    return None
+
+
+def precision_warning(counts: Sequence[ShareCount], flow_fraction: float = 0.001) -> str:
+    """A sentence when the published counts are too coarse to show a day's flow.
+
+    `flow_fraction` is what a daily creation plausibly is as a share of a fund:
+    a tenth of a percent. If the step the source moves in is larger than that,
+    ordinary days read as zero and busy ones as a jump, and **no amount of
+    collecting fixes it** — the information was never published. Better known
+    on day one than after a year of cron jobs.
+    """
+    step = share_quantum(counts)
+    if step is None:
         return ""
-    listed = ", ".join(f"{t} ({d} digits)" for t, _, d in worst[:5])
+    tight = [
+        (c.ticker, c.shares_outstanding)
+        for c in counts
+        if c.shares_outstanding and step > c.shares_outstanding * flow_fraction
+    ]
+    if not tight:
+        return ""
+    listed = ", ".join(
+        f"{t} ({step:,.0f} of {v:,.0f} shares = {step / v:.2%})" for t, v in tight[:5]
+    )
     return (
-        f"WARNING: net assets are published to fewer than {needed} significant figures for "
-        f"{listed}.\n"
-        "A daily creation is about 0.1% of a fund, so a flow computed from figures this "
-        "rounded is rounding noise, not flow. Collecting for a year would not fix it — the "
-        "source has to publish more precision, or the figure has to come from somewhere else."
+        f"WARNING: share counts move in steps of {step:,.0f}, which is larger than a "
+        f"plausible day's creation ({flow_fraction:.1%}) for {listed}.\n"
+        "Most days would read as zero flow and the rest as a jump. Collecting for longer "
+        "does not fix a step the source never published below."
     )

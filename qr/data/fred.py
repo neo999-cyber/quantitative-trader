@@ -1,4 +1,4 @@
-"""FRED series, for the cash benchmark (`docs/19_PROGRAMME_2.md`, §10).
+"""FRED series, for the cash benchmark (`docs/20_PROGRAMME_2.md`, §10).
 
 Gate 5 asks whether the best variant beats a benchmark once the search is paid
 for. For a long-only spot book that benchmark is holding the universe; for a

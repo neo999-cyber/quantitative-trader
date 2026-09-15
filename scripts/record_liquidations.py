@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Record perpetual-futures liquidations forward: one line per event, never rewritten.
 
-Programme 2 (`docs/19_PROGRAMME_2.md`, §4.3, family C3). No public archive of
+Programme 2 (`docs/20_PROGRAMME_2.md`, §4.3, family C3). No public archive of
 liquidations exists on any venue; the streams are live-only, so the history
 has to be recorded, and data you record yourself is point-in-time by
 construction (`docs/17`).

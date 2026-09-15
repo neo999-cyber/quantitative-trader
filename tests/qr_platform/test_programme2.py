@@ -1,4 +1,4 @@
-"""Programme 2, week 1 (`docs/19_PROGRAMME_2.md` §10): the cash comparator for
+"""Programme 2, week 1 (`docs/20_PROGRAMME_2.md` §10): the cash comparator for
 gate 5, the perpetual cost model with funding as gross, and the FRED loader.
 
 Synthetic data throughout; no network. The claims are the wiring and the sign

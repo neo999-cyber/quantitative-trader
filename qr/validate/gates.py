@@ -196,7 +196,7 @@ class GateContext:
     #: such a book is not a subset of the market's exposure and a rising
     #: market is not what it claims to beat. "cash" compounds `risk_free`
     #: per bar instead. Programme 1 ran nine families against "buyhold"; the
-    #: construction guaranteed the answer (`docs/19_PROGRAMME_2.md`, §1).
+    #: construction guaranteed the answer (`docs/20_PROGRAMME_2.md`, §1).
     #: The choice is part of the pre-registration, not a knob to turn after
     #: seeing which comparator a family beats.
     benchmark: str = "buyhold"

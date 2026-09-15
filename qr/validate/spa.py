@@ -188,7 +188,7 @@ def cash_benchmark(
     rising market on risk-adjusted return is asking a different question from
     the one its mechanism makes. Programme 1 asked that question of every
     family it ran and got the answer the construction guaranteed
-    (`docs/19_PROGRAMME_2.md`, §1). For those books the comparator is the
+    (`docs/20_PROGRAMME_2.md`, §1). For those books the comparator is the
     risk-free rate, compounded per bar.
 
     `risk_free` is an annualised **decimal** rate: one number, or a dated

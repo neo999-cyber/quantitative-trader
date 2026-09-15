@@ -1,6 +1,6 @@
 """The carry unit: long one unit of spot, short one unit of the perpetual.
 
-Programme 2, family C1 (`docs/19_PROGRAMME_2.md` §5). The forced trader is
+Programme 2, family C1 (`docs/20_PROGRAMME_2.md` §5). The forced trader is
 the levered long paying funding; the trade that collects it is delta-neutral,
 long spot against short perp, and it earns three things: the funding the perp
 pays, the change in the basis (perp over spot), and nothing else. Every other

@@ -285,3 +285,16 @@ def test_a_permuted_panel_keeps_cross_symbol_correlation_across_staggered_listin
     assert sorted(out) == list(live)  # every live bar used once
     agree = order[live] == out
     assert agree.mean() > 0.6  # most destinations take their global source
+
+
+def test_the_result_reports_the_share_of_gross_that_was_funding(legs):
+    # A unit whose price never moves earns only its funding: share = 1.
+    spot, perp, funding = legs
+    spot["open"] = spot["close"] = 100.0
+    perp["open"] = perp["close"] = 101.0
+    frame = carry_frames(spot, perp, funding)
+    panel = Panel.from_frames({"XUSDT": frame}, fields=list(frame.columns))
+    result = run_backtest(panel, FundingCarry(entry=-1.0, exit=-2.0, ceiling=1.0, n_max=40, lookback=1), CostModel.carry_pair())
+    assert result.stats()["carry_share_of_gross"] == pytest.approx(1.0)
+    spot_only = run_backtest(panel, FundingCarry(entry=-1.0, exit=-2.0, ceiling=1.0, n_max=40, lookback=1), CostModel(fee_bps=0.0, half_spread_bps=0.0))
+    assert np.isnan(spot_only.stats()["carry_share_of_gross"])

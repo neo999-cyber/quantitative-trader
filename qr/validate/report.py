@@ -228,8 +228,8 @@ def _headline_table(report: GateReport, tear_sheet: dict[str, float] | None) -> 
         ("In-sample net Sharpe (the backtest number)", by_gate.get(2, {}).get("net_sharpe")),
     ]
     if tear_sheet:
-        for key in ("cagr", "ann_vol", "max_drawdown", "ann_turnover", "round_trips", "time_in_market"):
-            if key in tear_sheet:
+        for key in ("cagr", "ann_vol", "max_drawdown", "ann_turnover", "round_trips", "time_in_market", "carry_share_of_gross"):
+            if key in tear_sheet and not (isinstance(tear_sheet[key], float) and np.isnan(tear_sheet[key])):
                 rows.append((key.replace("_", " "), tear_sheet[key]))
     return pd.DataFrame([{"metric": name, "value": _fmt(value)} for name, value in rows])
 

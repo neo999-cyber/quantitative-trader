@@ -95,6 +95,12 @@ class BacktestResult:
             "net_over_gross": _net_over_gross(net, gross, self.periods_per_year),
             "time_in_market": float(active.mean()) if len(active) else np.nan,
             "round_trips": float(_round_trips(self.held)),
+            # The carry family's pre-registration falsifies itself if funding
+            # explains less than 80% of gross; the report has to say what it
+            # was. NaN where the venue settles no funding.
+            "carry_share_of_gross": (
+                float(self.carry.sum() / gross.sum()) if self.carry is not None and float(gross.sum()) != 0.0 else np.nan
+            ),
         }
 
 

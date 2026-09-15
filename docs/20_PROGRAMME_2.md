@@ -126,6 +126,113 @@ is checked, and before any run); the recorders running on a permanent host;
 and the QuantConnect / Alpaca / Databento accounts, which only the owner can
 open.
 
+**15 September 2026, evening (the Opus 5 build session, `docs/21`).** Trial
+log at the end of the session: 1,801 trials, chain verified (`qr trial
+verify`), up from 1,541. Everything below is re-derived from the log and the
+gate JSON.
+
+- **Data finished.** Funding ingested for all 471 both-leg symbols; 471
+  carry units built (`carry-um`, manifest `f2d67332…`). The bucket's monthly
+  funding archive ends with August 2026, so the last carry bar is
+  **2026-08-31**, not 14 September; the C1 amendment records it. No
+  redenomination artefact was found among the 471 units.
+- **Universe read before registration** (C1 amendment §3): `carry_top40`
+  holds 40 members every month from 2021; 194 symbols ever members; no peg,
+  fiat, gold or leveraged token; no member-bar under the 15% spot-vol floor.
+  Mean perp funding of members, annualised: 2020 +23%, 2021 +38%, 2022 −6%,
+  2023 +2%, 2024 +12%, 2025 −1%, 2026 −10%.
+- **Four engine defects found by C1's first runs, fixed the same day, each
+  with a test:** (1) the carry unit's high/low equalled its close while its
+  open did not, so `Panel.tradable()` rejected nearly every bar and the
+  universe read empty — found *before* registration; (2) the unit's `volume`
+  was the thinner leg's coin count, so the QA identity quote = volume × price
+  failed every unit at gate 1; (3) `permute_panel` dropped every field
+  outside OHLC and volume (a permuted carry panel had no funding; gate 6
+  raised) and, worse, aligned the global permutation by rank within each
+  symbol's live window, so symbols with different listing dates lost their
+  cross-section — mean pairwise funding correlation of eight majors fell from
+  0.63 to 0.03 and the always-in control sat at the 0th percentile of its own
+  null (p = 1.000); now by bar, and the control reads p = 0.12; (4) **a
+  one-bar look-ahead in every non-daily-rebalanced book**: `hold_between`
+  grew the book held over bar *t* by bar *t*'s own return (and the runner's
+  turnover drift did the same), tilting toward that bar's winners before it
+  happened — about half the variance per bar. Every Programme 1 monthly and
+  weekly family ran with it; all failed regardless, so no verdict moves, but
+  their gross figures were flattered. The reference loop in the test suite
+  carried the same defect and is corrected. Defects 3 and 4 change gate 6
+  and every scheduled book for every future run; Programme 1 reports predate
+  them.
+- **C1 `p2_funding_carry_v1`: registered (seq 385), run in-sample to
+  2025-09-14, verdict FAIL at gate 1; every other gate shown with
+  `--all-gates`.** Best variant lookback 30, entry 5%, ceiling 1.0, n_max 5.
+  Gate 1: gross Sharpe 9.9 / 9.7 / 9.2 at lags 0 / 1 / 2 — no spike, but
+  above the engine's 8.0 plausibility ceiling. Gates 2–8: 94% of gross
+  survives, Sharpe 7.8 at 2× costs, capacity ~$300M; t = 9.7; DSR 1.00 over
+  64 trials; PBO 0.00, SPA p = 0.008 vs cash with 61 of 64 variants
+  surviving StepM; bar-permutation p = 0.005 (re-optimised), random-entry
+  p = 0.005; gate 7 WARN (WFE 0.47, all 9 paths positive); gate 8 PASS (71
+  round trips, profitable every year, Sharpe 8.1 without the best year).
+  Tear sheet: CAGR 15.8%, vol 1.7%, max drawdown −1.6%, net Sharpe 8.85,
+  turnover 6.7×/yr, 91% time in market. **The leak hunt found no leak:**
+  funding settlements floor to their UTC day and are credited to the book
+  held over that day; the three lags agree; the 9 member-bars in 71,383 with
+  |basis| > 5% are real events (OMG Nov 2021, LUNA 12 May 2022, SOL at
+  FTX). The number is arithmetic: a member unit's daily-close return vol is
+  ~1.5%/yr (p90 3.6%) against ~10%/yr median (p90 32%) of persistent
+  funding, and the always-in book with no rule at all reads 3.9 gross. What
+  the daily-close backtest cannot see is intraday basis, liquidation, ADL and
+  venue failure. The pre-registration predicted net 3–8%, vol 3–6%, Sharpe
+  0.8–1.5 and said a Sharpe above 3 means look for a leak; that was done.
+  The gate-1 ceiling was **not** changed after seeing the result. The
+  funding share of gross (falsifier: ≥ 80%) is not in this report; the tear
+  sheet now carries `carry_share_of_gross` for every future run.
+- **Controls.** Always-in carry (`p2_funding_carry_v1_always_in`, seq 392,
+  one variant, hold every eligible unit): gate 1 WARN, gross 5.1 / net 4.8,
+  93% survives, t = 5.8, gate 6 p = 0.12 (fails, as a timing-free control
+  should), gate 8 fails on parameter count by construction. So the entry
+  rule roughly doubles the Sharpe of holding everything, and is what gate 6
+  credits. Hold-T-bill is the benchmark itself (SPA above). The control is
+  being re-run overnight on the committed engine (defect 4 changed
+  turnover slightly).
+- **Holdout not opened.** The pre-registration opens it once, after gates
+  1–8 are complete; a family that failed gate 1 does not spend it.
+- **Engine additions for the stock families (all with tests):**
+  `--benchmark exposure` (buy-and-hold of the eligible universe at the best
+  variant's mean gross exposure, remainder at DTB3; a half-invested tracker
+  passes against cash in a rising world and is nothing against it);
+  `CostModel.alpaca_zero()` ($0, 2 bps half-spread placeholder, 1 bp PFOF
+  slippage, whole shares floored in the runner); the four owed audit cases
+  as hand-computed tests (one leg unfilled; a redenomination hitting the
+  legs on different days, masked, while a persistent LUNA-style basis is
+  not; a Form 4 amendment published after the signal, via
+  `qr/data/pit.py::asof_view`; a funding-interval change, with the interval
+  now kept by the parser).
+- **E5.** Form 4 loader (`qr/data/form4.py`) from the SEC insider-transactions
+  data sets with EDGAR acceptance times from the submissions API as
+  `published_at`. **Labelling audit** (`docs/audit/`): 100 filings from
+  2025 Q1 labelled with no price data; first parser 76% precision, every
+  miss visible in the filing's fields; six mechanical rules added; revised
+  parser **98.6% precision (72/73), 94.7% recall**. `p2_insider_cluster_v1`
+  amended and **registered (seq 427)**. No run: prices need the owner's
+  QuantConnect account and nothing was substituted.
+- **Overnight chain** (`scripts/overnight_2026-09-15.sh`, status in
+  `~/qr/lake/logs/overnight_status.txt`): control re-run; hourly bars for
+  all 864 perps and the 471 both-leg spot pairs; Form 4 history 2006–2026 Q2
+  with acceptance times → `reference/form4_purchases.parquet` and
+  `form4_clusters.parquet`; open-interest metrics for the 471 symbols;
+  `pytest`, `qr trial verify`. Nothing registers, trades, spends or opens a
+  holdout.
+- **For the owner, in the morning:** (a) C1's gate-1 ceiling — a `v2` with
+  the argument written before its run, and better, an hourly carry unit
+  (8-hour funding aligned to the bars, intraday basis visible) once the
+  hourly bars are in, which is the plan's own resolution fix applied to its
+  own family; (b) QuantConnect, Alpaca and Databento accounts (E5 is
+  registered and waiting; E1/E2 queued); (c) C3 waits on weeks of the
+  liquidation recorders (12k events on day one); C5 on the hourly bars and
+  OI now downloading; C2 needs a second venue's funding; C4 needs unlock
+  schedules — none of these was drafted, because their data is not in the
+  lake yet.
+
 ---
 
 ## Reviewed against an independent plan (Codex, 15 September 2026)

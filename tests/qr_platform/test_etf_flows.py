@@ -128,7 +128,7 @@ def _args(tmp_path, **overrides):
     import types
 
     body = {"root": str(tmp_path / "lake"), "url": None, "out": None,
-            "dump": None, "dry_run": False}
+            "dump": None, "dry_run": False, "force": False, "print_launchd": False}
     body.update(overrides)
     return types.SimpleNamespace(**body)
 
@@ -235,3 +235,71 @@ def test_a_real_run_appends_and_says_how_much_history_there_is(tmp_path, capsys,
     # The warning that matters on day one: a flow is a change between two
     # observations, so the first run records a level and no flow at all.
     assert "One day is not a flow" in out
+
+
+def test_a_second_run_the_same_day_does_nothing(tmp_path, capsys, monkeypatch):
+    """Because the schedule cannot be a single daily alarm.
+
+    A laptop asleep at 22:00 never fires one, and a missed day cannot be
+    recovered — nobody publishes a past day's share count. So this is built to
+    be run often and to do nothing most of the time, which is only safe if
+    repetition is harmless.
+    """
+    from qr.cli import cmd_data_flows_collect
+    from qr.data import etf_flows as module
+
+    fetches = []
+
+    def fetch(*a, **k):
+        fetches.append(1)
+        return screener()
+
+    monkeypatch.setattr(module, "fetch", fetch)
+
+    assert cmd_data_flows_collect(_args(tmp_path)) == 0
+    assert cmd_data_flows_collect(_args(tmp_path)) == 0
+    out = capsys.readouterr().out
+    assert "already recorded today" in out
+    assert len(fetches) == 1, "the skip must happen before the request, not after"
+
+    path = tmp_path / "lake" / "flows" / "etf_shares_outstanding.jsonl"
+    assert len(path.read_text(encoding="utf-8").strip().splitlines()) == 2
+
+
+def test_force_records_a_second_reading(tmp_path, monkeypatch):
+    """A second reading in a day is a fact about the day, not a mistake."""
+    from qr.cli import cmd_data_flows_collect
+    from qr.data import etf_flows as module
+
+    monkeypatch.setattr(module, "fetch", lambda *a, **k: screener())
+    assert cmd_data_flows_collect(_args(tmp_path)) == 0
+    assert cmd_data_flows_collect(_args(tmp_path, force=True)) == 0
+
+    path = tmp_path / "lake" / "flows" / "etf_shares_outstanding.jsonl"
+    assert len(path.read_text(encoding="utf-8").strip().splitlines()) == 4
+
+
+def test_a_malformed_line_does_not_stop_the_collector(tmp_path):
+    """The record is append-only and read on every attempt; one bad line from a
+    half-written run must not make the whole file unreadable."""
+    path = tmp_path / "flows.jsonl"
+    path.write_text('{"observed_utc": "2026-09-14T00:00:00+00:00"}\nnot json\n', encoding="utf-8")
+    assert etf_flows.recorded_dates(path) == {"2026-09-14"}
+
+
+def test_the_launchd_agent_repeats_rather_than_firing_once_a_day(tmp_path, capsys):
+    """The whole reason it is launchd and not cron.
+
+    cron fires at a wall-clock time and skips a slot the machine slept through;
+    a daily entry on a laptop shut at 22:00 records nothing, ever. StartInterval
+    runs at the next wake, so a closed lid delays a reading instead of losing
+    one — and a lost day cannot be recovered at any price.
+    """
+    from qr.cli import cmd_data_flows_collect
+
+    assert cmd_data_flows_collect(_args(tmp_path, print_launchd=True)) == 0
+    plist = capsys.readouterr().out
+    assert "<key>StartInterval</key><integer>1800</integer>" in plist
+    assert "StartCalendarInterval" not in plist, "a daily alarm is the thing being avoided"
+    assert "flows-collect" in plist
+    assert str(tmp_path / "lake") in plist, "the agent must know where the lake is"

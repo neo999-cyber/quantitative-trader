@@ -141,6 +141,50 @@ That is the fourth time in two days that the reassuring number turned out to be
 measuring something other than what it said — and the first time it was caught
 before anything was built on it rather than after.
 
+## Scheduling it, which is the part that actually went wrong
+
+The first attempt was `crontab -e` and a line of instructions with a `#`
+comment. Two failures, both avoidable:
+
+* `crontab -e` opens an editor. Quitting it saves nothing, and `no crontab for
+  anoop — using an empty one` followed by `no changes made` means exactly that.
+* The comment line was then pasted into the shell, which answered `command not
+  found: #`. Interactive `zsh` does not treat `#` as a comment — the same trap
+  `docs/14` already documents for `qr data ingest # …`. Twice now.
+
+**And a daily alarm is the wrong shape anyway.** A MacBook Air asleep at 22:00
+never fires one, and a missed day cannot be recovered: nobody publishes a past
+day's share count. That is the difference between this dataset and every other
+one in the project — with Binance klines a gap is a re-download, here a gap is
+permanent.
+
+So the collector is built to be run **often** and to do nothing most of the
+time. `already_recorded_today()` is checked *before* the request, so
+twenty-three of twenty-four hourly attempts cost one file read. `--force`
+overrides it, because a second reading in a day is a fact about the day.
+
+### On the server, which is where it belongs
+
+The Hetzner box is always on, which is the whole argument:
+
+    */30 9-23 * * 1-5  cd ~/quantitative-trader && .venv/bin/qr data flows-collect >> ~/flows.log 2>&1
+
+Install it without an editor:
+
+    (crontab -l 2>/dev/null; echo '*/30 9-23 * * 1-5 cd ~/quantitative-trader && .venv/bin/qr data flows-collect >> ~/flows.log 2>&1') | crontab -
+    crontab -l
+
+Every half hour on weekdays; the first successful one each day records and the
+rest exit immediately.
+
+### On the laptop, if the server is not set up yet
+
+`cron` is the wrong tool on macOS — it does not catch up after sleep. `launchd`
+does: a `StartInterval` job runs at the next wake if its slot was missed.
+
+    qr data flows-collect --print-launchd > ~/Library/LaunchAgents/com.qr.flows.plist
+    launchctl load ~/Library/LaunchAgents/com.qr.flows.plist
+
 ## What this is worth, stated honestly
 
 Low, and worth doing anyway.

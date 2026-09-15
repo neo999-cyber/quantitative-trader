@@ -297,6 +297,46 @@ def cmd_data_ingest(args) -> int:
     return 0 if written else 1
 
 
+def _launchd_plist(out: Path) -> str:
+    """A macOS agent that runs every half hour and catches up after sleep.
+
+    `cron` is the wrong tool here and the reason is specific: it fires at a
+    wall-clock time and does not run a slot the machine slept through. A daily
+    cron entry on a laptop that is shut at 22:00 records nothing, ever, and a
+    missed day is gone — nobody publishes a past day's share count.
+
+    `StartInterval` runs at the next wake instead, so a closed lid delays a
+    reading rather than losing it. The collector skips days it already has, so
+    running every half hour costs a file read and takes the first chance it
+    gets.
+    """
+    import shutil
+    import sys as _sys
+
+    executable = shutil.which("qr") or f"{Path(_sys.executable).parent}/qr"
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.qr.flows</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>{executable}</string>
+    <string>data</string>
+    <string>flows-collect</string>
+  </array>
+  <key>WorkingDirectory</key><string>{Path.cwd()}</string>
+  <key>EnvironmentVariables</key>
+  <dict><key>QR_ROOT</key><string>{out.parent.parent}</string></dict>
+  <key>StartInterval</key><integer>1800</integer>
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>{Path.home()}/flows.log</string>
+  <key>StandardErrorPath</key><string>{Path.home()}/flows.log</string>
+</dict>
+</plist>"""
+
+
 def cmd_data_flows_collect(args) -> int:
     """Record today's ETF share counts. Laptop or server; needs network.
 
@@ -314,6 +354,18 @@ def cmd_data_flows_collect(args) -> int:
 
     out = Path(args.out) if args.out else paths(args.root).flows
     dump = Path(args.dump) if args.dump else None
+
+    if args.print_launchd:
+        print(_launchd_plist(out))
+        return 0
+
+    # Checked before the request, not after: a scheduler that fires hourly
+    # should cost one file read on the twenty-three attempts that do nothing,
+    # not twenty-three fetches of a page that has not changed.
+    if not args.dry_run and not args.force and etf_flows.already_recorded_today(out):
+        print(f"already recorded today in {out}; nothing to do (--force to add another reading)")
+        return 0
+
     try:
         payload = etf_flows.fetch(args.url or etf_flows.ISHARES_SCREENER, dump=dump)
     except Exception as exc:
@@ -1683,6 +1735,16 @@ def build_parser() -> argparse.ArgumentParser:
     flows.add_argument("--out", help="where to append; defaults to the lake")
     flows.add_argument("--dump", help="save the raw response here before parsing")
     flows.add_argument("--dry-run", action="store_true", help="show what would be recorded")
+    flows.add_argument(
+        "--force",
+        action="store_true",
+        help="record even if today already has a reading",
+    )
+    flows.add_argument(
+        "--print-launchd",
+        action="store_true",
+        help="print a macOS launchd agent that runs this every 30 minutes",
+    )
     flows.set_defaults(func=cmd_data_flows_collect)
     fund_pull.add_argument("--symbols", nargs="*")
     fund_pull.add_argument("--limit", type=int, help="first N symbols, alphabetically")

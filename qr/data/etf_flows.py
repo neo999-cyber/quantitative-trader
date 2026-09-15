@@ -224,6 +224,44 @@ def parse_ishares(payload: Any, tickers: Iterable[str] = ISHARES_TICKERS) -> lis
     return out
 
 
+def recorded_dates(path: Path) -> set[str]:
+    """The UTC dates already in the record, read without pandas.
+
+    Read cheaply on purpose: this runs on every scheduled attempt, including
+    the many that will do nothing, and a collector that loads a dataframe to
+    decide whether to skip is a collector that gets removed from cron.
+    """
+    if not path.exists():
+        return set()
+    dates = set()
+    with path.open(encoding="utf-8") as handle:
+        for line in handle:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                dates.add(json.loads(line)["observed_utc"][:10])
+            except (json.JSONDecodeError, KeyError, TypeError):
+                continue
+    return dates
+
+
+def already_recorded_today(path: Path, now: datetime | None = None) -> bool:
+    """Has a row been written for today already?
+
+    The schedule this is meant for cannot be a single daily alarm. A laptop
+    asleep at 22:00 never fires one, and a missed day cannot be recovered
+    later — the share count for a past day is not published anywhere. So the
+    collector is designed to be run *often* and to do nothing most of the time,
+    which is only safe if repetition is harmless.
+
+    Harmless, not forbidden: `--force` still appends, because a second reading
+    in a day is a fact about the day and the file is append-only by design.
+    """
+    today = (now or datetime.now(timezone.utc)).date().isoformat()
+    return today in recorded_dates(path)
+
+
 def append(path: Path, counts: Sequence[ShareCount]) -> int:
     """Append today's observations. Append-only, because a correction is a lie here.
 

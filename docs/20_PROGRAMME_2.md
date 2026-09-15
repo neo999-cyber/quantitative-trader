@@ -12,6 +12,7 @@ on day one follow the plan.*
 | Residence | **Dubai** | Alpaca for US equities — its About page (alpaca.markets/about-us, read 15 Sep 2026) lists the United Arab Emirates among the 40+ countries it operates in, so open the account directly; whether margin/shorting is offered to a non-US account shows in the application. IBKR stays Pro; Bybit, Binance FZE and Hyperliquid for perps; Polymarket international open; Kalshi not |
 | Data budget | **$0** | QuantConnect free tier, Databento's $125 credit, Binance Vision, FRED, FINRA, SEC, EDGAR. Reassess at week 9; the only foreseeable paid item is Alpaca's $99/mo full feed, and only at live time |
 | Funded evaluation | **None yet** | Buy the smallest HyroTrader tier only after a crypto family passes gates 0–9; one Topstep $50k Combine only after an intraday futures family does |
+| Own capital | **Nothing moves until a family has passed every gate, incubation included** (owner, 15 Sep 2026) | Research, registration, backtests and the 63-day incubation all run at $0 at risk. The $1,000 goes to a venue only for a family past gate 10, and then at ≤25% of equity per family. The IBKR balance ($78) stays where it is. |
 
 ## The stopping rule, re-scoped and not loosened
 

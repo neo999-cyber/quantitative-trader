@@ -1,7 +1,7 @@
 # quantitative-trader — context for Claude Code sessions
 
 Read these first, in order:
-0. `docs/10_NEXT.md` — **start here.** Current state, the research plan, the stopping rule, and one pending review that has not been run (gate 10/11 mathematics, for Fable 5.1 in its own session — trigger it before any real money is sized). Then `docs/11` (Step 0's verdict), `docs/12`–`14` (sandbox, autonomy, the laptop guide) and `docs/15` (what the first autopilot nights found).
+0. `docs/18_THE_VERDICT.md` — **start here.** One page: what was asked, what was found, what to do about it. The research is finished; nothing below is a live task. Then `docs/17` for the one thing still running, `docs/16` for the sizing review, and `docs/10_NEXT.md` / `docs/11`–`15` for the workings.
 1. `docs/01_ONE_WEEK_TRIAL.md` — how the trial was framed (a one-week, $0, crypto-spot trial judged by validation gates, not P&L). **Built and run; the verdict is `docs/06` for crypto and `docs/08` for ETFs. Do not start at Day 1.**
 2. `docs/PLAN.md` — the full platform plan (7 layers, data tiers, the 11-gate validation engine, roadmap).
 3. `docs/00_STATE_OF_THE_REPO.md` — honest inventory of what exists (`centaur/`: a discretionary swing-trading assistant, 55 tests, never run on live data).
@@ -14,12 +14,13 @@ Conventions
 - Anthropic model default for code in this repo: `claude-opus-5`; catalyst summariser uses structured outputs and server-side refusal fallbacks.
 - Commit author must use the GitHub noreply address (`neo999-cyber@users.noreply.github.com`); pushes with the private email are rejected.
 
-Where the project actually is (14 September 2026)
-- **The one-week trial is finished and the build below is done.** Nine families ran through gates 0–11; none passed gate 5. Buy-and-hold beat every one across two asset classes.
-- **Step 0 is answered: finding ideas, not finding capital** (`docs/11`). Crypto is size-independent to four significant figures; the ETF families get much cheaper with size and still cannot beat the basket at 100x the account. No deposit rescues any of the nine.
-- **Stages 1–4 are built**: discovery sandbox, research policy, mechanism memos, kill tests, `qr autopilot`.
-- **Three autopilot nights: twelve candidates, twelve self-kills** (`docs/15`). Only two failed because the idea was wrong; ten failed on *access* — the payer trades an instrument this project cannot trade, or the data is not in the lake.
-- **Next, and unverified:** `qr data funding-pull` / `funding-ingest` were written where the Binance bucket is unreachable. The first real pull is their verification; both parsers fail loudly and quote the header that actually arrived.
+Where the project actually is (15 September 2026) — **finished; read `docs/18`**
+- **The research is complete and the answer is an index fund.** Nine pre-registered families failed the gates across two asset classes; forty-six mechanism candidates produced one measurable effect (turn-of-month, 4.8 bps a round trip) that is 0.6x its costs at $1,000 and, at every account size up to $100,000, a worse risk-adjusted way to own the basket than holding it.
+- **Step 0 is answered: finding ideas, not finding capital** (`docs/11`), for those nine. `docs/15` qualifies it for the one candidate that had an effect: there the account bound the *cost bar* and not the *outcome*.
+- **Stages 1–4 are built and were run to exhaustion**: discovery sandbox, research policy, mechanism memos, kill tests, `qr autopilot`. The generator now returns the same two ideas under new titles; the brief space is spent.
+- **Done since:** perp funding and open interest are in the lake and verified; the gate 10/11 sizing review ran (`docs/16`) and its fixes are applied — the quantity was mislabelled, and is now `prob_ever_below_launch`.
+- **The only live thread:** `scripts/collect_flows_standalone.py` records ETF share counts on the Hetzner box every 30 minutes on weekdays (`docs/17`). It needs nothing. `fund_flows` stays `needs_dataset` in the registry until the file is long enough to test with.
+- **Do not start another autopilot night** without a new input. The funnel is gated on data and instruments, not on loop iterations, and re-running re-derives the same answer at API cost.
 
 Build instructions (one-week trial — complete, kept for provenance)
 - Package name: `qr` (placeholder; rename later). Keep `centaur/` untouched.
@@ -31,6 +32,6 @@ Build instructions (one-week trial — complete, kept for provenance)
 - Reviews of repos/sites/guides live in `docs/research/06_repo_reviews.md`, `08_websites_from_socials.md`, `09_hft_stack_vs_ours.md`; two adopted additions: Fear & Greed feature (trial) and DropsTab token-unlock events (Phase 5).
 
 User context
-- MacBook Air M2 16 GB (research), Hetzner CX23 shared with other projects (ops later), budget path first, ~$1,000 available after the trial verdict, no new hardware for now.
+- MacBook Air M2 16 GB (research). Hetzner box at `root@91.98.172.9`, shared with other projects — it runs the flow collector from `~/flows/`, standard library only, deliberately without `qr` installed so nothing else on it can break. Budget path first, ~$1,000 available, no new hardware.
 - Dubai-based; holds Binance and Interactive Brokers accounts. Crypto trial models Binance spot; IBKR for equities later.
 - Model guidance from the user: build sessions on Claude Opus 5; Fable 5.1 only for reviewing the gate mathematics and the final Hypothesis Reports; Sonnet 5 for small fixes. Keep context small: do not paste media into build sessions.

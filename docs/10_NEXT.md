@@ -1,5 +1,12 @@
 # Where this project is, and what happens next
 
+> **Superseded, 15 September 2026 — read `docs/18_THE_VERDICT.md` first.**
+> The plan below was carried out in full. Stages 1–4 were built, the autopilot
+> was run to exhaustion, and the pending gate 10/11 review has been done
+> (`docs/16`). Nothing on this page is an open task; it is kept for the
+> reasoning, which is still the best account of *why* the funnel is shaped the
+> way it is.
+
 *Written 13 September 2026, as a handoff. A new session should be able to
 read this file alone and pick up without re-deriving anything.*
 

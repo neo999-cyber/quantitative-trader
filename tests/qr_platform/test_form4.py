@@ -199,3 +199,10 @@ def test_a_quarter_without_the_10b5_1_column_parses_with_the_flag_off(quarter, t
             z.writestr(name, text)
     frame = parse_quarter(out)
     assert len(frame) == 6 and not frame["plan_10b5_1"].any()
+
+
+def test_a_mistyped_transaction_year_is_missing_not_a_crash():
+    from qr.data.form4 import _sec_date
+
+    out = _sec_date(pd.Series(["03-AUG-0012", "03-AUG-2012", ""]))
+    assert pd.isna(out.iloc[0]) and out.iloc[1] == pd.Timestamp("2012-08-03") and pd.isna(out.iloc[2])

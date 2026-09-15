@@ -141,7 +141,11 @@ def _read(zf: zipfile.ZipFile, name: str, columns: Mapping[str, str]) -> pd.Data
 
 
 def _sec_date(values: pd.Series) -> pd.Series:
-    return pd.to_datetime(values.replace("", pd.NA), format="%d-%b-%Y", errors="coerce")
+    """`DD-MON-YYYY` as the data sets write it; a date the filer mistyped
+    (2012 Q3 carries a transaction dated in the year 12) is missing, not a
+    crash."""
+    out = pd.to_datetime(values.replace("", pd.NA), format="%d-%b-%Y", errors="coerce")
+    return out.where((out >= pd.Timestamp("1990-01-01")) & (out <= pd.Timestamp("2100-01-01")))
 
 
 def parse_quarter(path: str | Path, first_observed_at: pd.Timestamp | None = None) -> pd.DataFrame:
@@ -196,7 +200,10 @@ def parse_quarter(path: str | Path, first_observed_at: pd.Timestamp | None = Non
 
     # Availability. The transaction happened during the session of its date;
     # 16:00 New York is the conservative reading of "that day".
-    frame["event_time"] = frame["trans_date"].dt.tz_localize("America/New_York") + pd.Timedelta(hours=16)
+    frame["event_time"] = (
+        frame["trans_date"].dt.tz_localize("America/New_York", nonexistent="shift_forward", ambiguous="NaT")
+        + pd.Timedelta(hours=16)
+    )
     frame["published_at"] = pd.Series(pd.NaT, index=frame.index, dtype="datetime64[ns, UTC]")
     frame["first_observed_at"] = pd.Timestamp(observed).tz_convert("UTC")
     frame["ingested_at"] = pd.Timestamp.now(tz="UTC")

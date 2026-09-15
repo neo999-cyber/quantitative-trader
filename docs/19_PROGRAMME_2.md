@@ -24,10 +24,23 @@ records the finding. The rule's premise is what Programme 2 changes — the
 instruments, the resolution, the point-in-time data, and the comparator for
 market-neutral books — so it starts its own counter at zero under the same
 numbers: **eight gated mechanism candidates, 3× cost bar, 250 variants a
-family, 2 promotions a week, 5 a quarter.** Gate 4 continues to deflate
-against the cumulative trial count, 1,541 at the start; nothing is reset
-there. This paragraph is the record that the counter was restarted
-deliberately and why, so it cannot be read later as a quiet relaxation.
+family, 2 promotions a week, 5 a quarter.** Gate 4 deflates against each
+hypothesis's own variant count (`GateContext.trial_count`: the sweep, else
+the log's count for that hypothesis id), not against a global total. The
+handover's 1,541 is 492 distinct variants re-run about three times (the
+account-size sweep and the holdout openings); reconciled from the log on
+15 September 2026 after an independent plan asked the question. That
+figure governs the research policy's budget, not any deflation. This
+paragraph is the record that the counter was restarted deliberately and
+why, so it cannot be read later as a quiet relaxation.
+
+Two corrections to the handover's own text, for the record: five of nine
+families stopped at gate 5 (four crypto, `etf_tsmom_v1`), two at gate 3,
+one at gate 2 and the control at gate 6 — not eight at gate 5; and the
+"$0.35 per order = 35 bps at $1,000" sentence means the $83–$100 orders a
+twelve-name basket implies at that equity, where the floor is 35–42 bps per
+leg. The engine charged the floor per order correctly; the sentence was
+loose, and it is stated precisely here.
 
 ## Week 1 log
 
@@ -114,6 +127,44 @@ open.
 
 ---
 
+## Reviewed against an independent plan (Codex, 15 September 2026)
+
+A second plan, written by a different tool from the handover alone, was
+compared with this one. Taken from it: the exposure-matched benchmark for
+long-only stock families (this plan had them against cash, which would have
+passed beta as skill); the trial-inventory reconciliation, which showed gate 4
+is per hypothesis; the precise wording of the per-order floor; incubation of
+at least 63 observations (the repo's own gate 10, which this plan had
+shortened to four weeks); the concrete insider-cluster rule and its
+hand-labelling audit; the always-in carry control, capital-committed sizing
+and stress list for C1; its eight audit cases; odd-lot tenders as a backlog
+family; Quantiacs as a zero-capital route; Norgate's Windows-only interface.
+Not taken: keeping IBKR tiered pricing as the equity venue and building a
+cost ledger around the $0.35 floor (this plan removes the floor); reverting
+the cash benchmark for carry; narrowing C1 to BTC and ETH by hand (the
+engine already runs the breadth); a blocking measurement-audit week (the
+controls found four defects in a day; the docs/16 reviewer pattern stays);
+Darwinex Zero (paid); the income-to-capital table before there is a result
+to size.
+
+## The plan in plain steps
+
+1. Finish the perp funding download; ingest it; build the carry units.
+2. Read the carry universe; register C1; run it through gates 0–8 on data up to 14 September 2025.
+3. Open the holdout once (15 September 2025 onwards); run gates 9–11.
+4. In parallel, hand-label 100 Form 4 filings; register E5; build the exposure-matched benchmark and the Alpaca zero-commission cost model; run E5 on QuantConnect's free data.
+5. Pull the closing-auction imbalance history with Databento's credit; register and run E1 and E2.
+6. Any family that passes gates 0–9 goes into incubation for at least 63 trading days with every decision logged before its outcome.
+7. Owner opens QuantConnect, Alpaca and Databento accounts; buys the first funded evaluation only after a family passes gates 0–9.
+8. Independent review of the week-1 engine changes by a different model before any live order.
+9. Week 12: report per family, capacity, incubation slippage, capital ladder.
+
+## Sessions and models
+
+- **Build and run** (steps 1–5, 9): a new session on **Claude Opus 5**, the repo's default for code; start it by reading this file, export `QR_ROOT=~/qr/lake`, keep responses short.
+- **Independent review** (step 8): a fresh, isolated session on a model that did not write the code — Codex, or Claude Opus 5 if Codex is unavailable — given the raw observations and the questions, not the engine's formulas, per docs/16.
+- **Gate mathematics and the week-12 report**: **Claude Fable 5.1**, as before, and only then.
+
 ## 1. Context
 
 The handover records nine pre-registered families, 1,541 runs, 46 mechanism memos, zero promotions, and ranks the causes. Three were fixed at design time:
@@ -121,7 +172,7 @@ The handover records nine pre-registered families, 1,541 runs, 46 mechanism memo
 | # | Cause (handover §5) | What actually caused it |
 |---|---|---|
 | 5.1 | Benchmark unbeatable | Gate 5 compared long-only timing to buy-and-hold of a rising universe |
-| 5.2 | $0.35/order minimum = 35 bps at $1,000 | IBKR Pro tiered pricing on a $1,000 account |
+| 5.2 | $0.35/order minimum = 35–42 bps per leg on the $83–$100 orders a twelve-name basket implies at $1,000 | IBKR Pro tiered pricing on a $1,000 account |
 | 5.3 | Daily bars cannot see forced flow | Closing auctions, funding, liquidations all resolve intraday |
 
 Five more followed: forced traders sit in instruments not traded (perps, single stocks, primary market); no point-in-time alternative data; twelve-name breadth; idea generator exhausted; no market-impact model.
@@ -136,7 +187,7 @@ Current state: the connected IBKR account holds **$78.34 USD cash, no positions,
 
 | Cause | Fix | Resource (verified today) | Cost |
 |---|---|---|---|
-| 5.1 benchmark | Gate 5 comparator becomes **cash (3-month T-bill)** for market-neutral / carry books; buy-and-hold kept only for long-only books | FRED `DTB3` series; one parameter in `qr/validate/gates.py` | $0 |
+| 5.1 benchmark | Gate 5 comparator becomes **cash (3-month T-bill)** for market-neutral and carry books; **exposure-matched buy-and-hold** (the eligible universe scaled to the strategy's average exposure) for long-only stock selection, so beta in a rising market cannot pass as skill; plain buy-and-hold kept for long-only timing | FRED `DTB3` series; two parameters in `qr/validate/gates.py` | $0 |
 | 5.2 per-order floor | US equities move to a **$0-commission API broker**; crypto moves to **perpetuals** (bps-only fees); futures use micro contracts (~$0.25–0.85/contract) | Alpaca ($0, fractional from $1, MOC/LOC, international); IBKR Lite if US/Singapore resident; Binance/Bybit/Hyperliquid perps 1.5–5.5 bps | $0 |
 | 5.3 resolution | **Minute bars + closing-auction imbalance + 8-hour funding + 5-min OI** | QuantConnect free tier (minute, 1998→); Databento imbalance (Nasdaq 2018→, NYSE 2025→, $125 free credit); Binance Vision `futures/um` klines/metrics/fundingRate; Hyperliquid S3 archive | $0–$50 one-off |
 | 5.4 instrument access | Trade **where the forced trader trades**: perps (liquidations, funding, unlocks), single stocks via fractional shares, closing auction via MOC/LOC | Same venues as above | $0 |
@@ -163,7 +214,7 @@ Current state: the connected IBKR account holds **$78.34 USD cash, no positions,
 - (b) Own capital + one funded-trader evaluation ($59–$150): adds Track 3/4 with a $50k–$100k simulated account once an intraday family passes gates.
 - (c) Own capital + WorldQuant BRAIN: adds income from equity alphas with zero capital; runs in parallel from week 1.
 
-**D3. Data budget** — $0 (QuantConnect free + Databento credit + all free feeds) is sufficient for every family below. Optional upgrades: Alpaca Algo Trader Plus $99/mo (full SIP feed, only needed at live-trading time for Track 2), QuantConnect Researcher $60/mo (only for live nodes/tick data), Norgate Platinum ~$630/yr (only if a Track 2 family passes gate 9 and needs a second independent price source).
+**D3. Data budget** — $0 (QuantConnect free + Databento credit + all free feeds) is sufficient for every family below. Optional upgrades: Alpaca Algo Trader Plus $99/mo (full SIP feed, only needed at live-trading time for Track 2), QuantConnect Researcher $60/mo (only for live nodes/tick data), Norgate Platinum ~$630/yr (only if a Track 2 family passes gate 9 and needs a second independent price source; its Python interface is Windows-only, so on this Mac it needs a Windows VM).
 
 ---
 
@@ -217,13 +268,15 @@ Universe: Binance USDT-M perps with listing dates from Binance Vision (PIT), top
 | C4 | Pre-unlock short | Token unlock recipients (VC/team) sell after cliff dates fixed on-chain at launch | Vesting schedules (DefiLlama unlocks UI / Tokenomist; verify against vesting contracts) + perp availability | cash | Short perp T-3 to T+1 around unlocks > 2% of float; size by ADV; funding-adjusted |
 | C5 | OI-conditioned reversal, mid-caps | Crowded positioning (OI up, funding up) unwinds; the March 2026 SSRN post-mortem shows plain OHLCV/funding sorts on **large caps** carry nothing → this family is restricted to ranks 30–150 and conditions on OI change and taker imbalance | `metrics` (OI, long/short ratio, taker buy/sell) + 1h bars | cash, dollar- and beta-neutral | Weekly long/short deciles on 1h-reversal × OI-change; maker execution; ≤250 variants |
 
-Gate path: sandbox kill-test (3× cost bar) → gates 0–11 with cash benchmark → 4-week paper on Hyperliquid/Binance testnet → live at ≤25% of equity per family.
+Controls for C1: **an always-in carry baseline** (every eligible unit held at equal weight, no entry rule) — the test of whether the entry rule adds anything after its turnover — and hold-T-bill. Capital committed for a unit is spot notional plus perp margin plus an operating reserve, and gate 11 sizes on that, not on notional. Gate 8's stress list for carry: funding reversal, basis widening, one leg filled and the other not, exchange downtime, auto-deleveraging, collateral haircut.
+
+Gate path: sandbox kill-test (3× cost bar) → gates 0–9 with cash benchmark → incubation (gate 10: at least 63 daily observations, about three months, decisions logged before outcomes) → live at ≤25% of equity per family.
 
 ---
 
 ## 6. Track 2 — US single equities at $0 commission (weeks 2–10; research free on QuantConnect)
 
-Broker: Alpaca (or IBKR Lite if eligible). Cost model: commission $0, half-spread from minute quotes (IEX free feed for research; SIP at live), 1 bp PFOF slippage, MOC fills at official close with impact cap. **Shorting requires ≥$2,000 equity (Reg T)**; until then every family runs long-only-vs-cash, and the long/short version is pre-registered for later.
+Broker: Alpaca (or IBKR Lite if eligible). Cost model: commission $0, half-spread from minute quotes (IEX free feed for research; SIP at live), 1 bp PFOF slippage, MOC fills at official close with impact cap. **Shorting requires ≥$2,000 equity (Reg T)**; until then every family runs long-only, benchmarked to **exposure-matched buy-and-hold** of its eligible universe (not to cash: a long-only stock book benchmarked to cash would pass on beta alone), and the long/short version is pre-registered for later.
 
 The pattern-day-trader $25,000 minimum **no longer exists** (FINRA Regulatory Notice 26-10; effective 4 June 2026; replaced by intraday margin monitoring, transition until 20 Oct 2027). Intraday families are therefore open to this account size.
 
@@ -233,9 +286,10 @@ The pattern-day-trader $25,000 minimum **no longer exists** (FINRA Regulatory No
 | E2 | Late-day hedging momentum | Leveraged-ETF and option-market-maker gamma hedging trade with the day's move in the last 30 min | Baltussen, Da, Lammers & Martens, JFE 2021 (60+ futures, 1974–2020; reverts over next days) | SPY/QQQ/IWM minute bars (QC free); LETF AUM from issuer daily files | Position at 15:30 in the sign of the 09:30–15:30 return scaled by LETF AUM × |return|; flat at close via MOC |
 | E3 | Month-end cash settlement reversal | Institutions raise cash before month-end settlement; index returns reverse around the last day that guarantees settlement | Etula, Rinne, Suominen & Vaittinen, RFS 2020 (large liquid stocks strongest) | SPY/large-cap minute bars | Pre-registered T-3…T+1 pattern; long-only-vs-cash version first |
 | E4 | Post-earnings drift, small/mid caps | Under-reaction persists where arbitrage is constrained | 2025 reviews find PEAD alive in small/mid caps, diminished in large caps | EDGAR 8-K acceptance timestamps + QC Morningstar; fractional shares | Buy top-decile surprise (announcement-return proxy) at next open, hold 20–60 days; ≤$100 per name via fractionals |
-| E5 | Opportunistic insider buying | Insiders who do not trade on a calendar routine carry information | Cohen, Malloy & Pomorski, JF 2012 (82 bps/month VW abnormal for opportunistic trades) | EDGAR Form 4 (2-business-day filing) or QC Quiver insider dataset | Classify routine vs opportunistic by 3-year same-month history; buy cluster opportunistic purchases; hold 1–3 months |
+| E5 | Insider cluster purchases | Insiders who do not trade on a calendar routine carry information | Cohen, Malloy & Pomorski, JF 2012 (82 bps/month VW abnormal for opportunistic trades) | SEC insider-transactions data sets + EDGAR Form 4 acceptance times; prices from QC | ≥2 distinct officers/directors, open-market code P, ≥$25k each and ≥$100k combined within 10 trading days; routine insiders (same-month purchases in each of the prior 3 years) excluded; enter at the next regular open after one full session past the filing's acceptance time; hold 60 sessions (20 as the one variant); $1,000 book = 4 positions × 25%; 100 filings hand-labelled before any run, ≥95% precision required. Draft: `docs/prereg/p2_insider_cluster_v1.md` |
 | E6 | Low-turnover anomaly composite | Published signals net ~4 bps/month on average, ~10 bps for the best, ~20 bps for combinations (Chen & Velikov, JFQA) — so only monthly-rebalanced combinations are pre-registered, sized as an overlay | Open Source Asset Pricing signals | QC fundamentals + OSAP | Equal-weight top-quintile composite of 5 lowest-cost signals, monthly, long-only-vs-cash; long/short version once shorting is enabled |
 | E7 | Short-interest / FTD squeeze | Constrained shorts must cover; FTD spikes flag settlement stress | FINRA SI (PIT publication dates), Reg SHO daily short volume, SEC FTD | Long high-days-to-cover names with rising FTDs after publication date; hold 10 days |
+| E8 (backlog) | Odd-lot tender offers | Issuers' tender offers often take odd lots (under 100 shares) in full without proration; only a small account can be all odd lots | Offer documents on EDGAR (SC TO-I, "odd lot" full-text search) | Manual watchlist; reconstruct 20 completed events from their original terms; needs a broker that processes tenders (IBKR does; confirm Alpaca) before any live event |
 
 Not pre-registered (evidence says the flow is already arbitraged): S&P 500 addition/deletion (Greenwood & Sammon, JF 2025: 7.4% in the 1990s → 0.3% last decade; deletions 0.1% 2010–2020). The Russell semi-annual event is recorded forward instead (§4.3).
 
@@ -268,6 +322,7 @@ Capital preconditions stated once: F1 live needs ≥$5,000 for 3–4 contracts; 
 | **FTMO (FX/CFD)** | EAs allowed; from $89, refunded on first payout | Only if a family maps to CFDs; not planned |
 | **WorldQuant BRAIN** | Free; alphas simulated on their PIT data; consultant invitation at 10,000 points + Gold; quarterly payments (Master ≥$2,000, Grandmaster ≥$8,000 as published) | Translate E5/E6/E7 into BRAIN expressions from week 2; 30 minutes/day; this is income without capital |
 | **Numerai** | Stake NMR; payout capped at ±5% of stake per round; $532k paid April 2025 | Optional; only after BRAIN is running |
+| **Quantiacs** | Free data and platform; qualifying strategies receive allocations with a 10% profit share; the Q25 crypto long-only contest closes 30 Sep 2026 | A later round: port a long-only family once one passes gates; the carry unit cannot be ported (two legs) |
 | Regulatory watch | Aug 2026: SEC actions against two prop firms for marketing simulated accounts as live; NFA Notice I-26-12 on affiliate marketing effective 1 Dec 2026 | Treat every evaluation as simulated until the firm states otherwise in writing; withdraw payouts monthly |
 
 ---
@@ -300,6 +355,9 @@ Data: Gamma + CLOB + Data APIs (free); record books from week 1 (§4.3).
 6. **Kill-test fixes carried forward**: the $0.35 minimum bug and the compounded-return-over-per-trade-cost ratio are unit-tested against the new models; drawdown probability in gate 11 is reported as P(≥25% below launch within 12 months) with the horizon in the label.
 7. **Trial log**: new families registered under `p2_` prefix; gate 4 deflation continues to count the cumulative 1,541 runs.
 8. **QuantConnect port**: `gates.py` and the sandbox splitter as project files; results only leave QC.
+9. **Exposure-matched benchmark** (`benchmark=exposure`): buy-and-hold of the eligible universe scaled bar by bar to the strategy's average gross exposure, remainder in cash; the comparator for every long-only stock-selection family.
+10. **Availability columns** on every alternative-data loader (FINRA, EDGAR, SEC FTD): `event_time`, `published_at`, `first_observed_at`, `ingested_at`, `source_hash`; the PIT assertion reads `published_at`.
+11. **Audit cases as tests**: a $1,000 whole-share order's commission; a four-leg carry round trip; funding that reverses sign; one leg filled and the other not; a split on a carry unit; a delisting; a Form 4 amendment published after the signal; a funding-interval change. Four are covered by the week-1 tests; the other four are owed.
 
 ---
 
@@ -320,12 +378,12 @@ Controls per venue: hold-BTC-perp (crypto), hold-T-bill (cash-benchmarked), hold
 | 3 | E1 imbalance pull (Databento credit) + Alpaca paper account wired; E1 pre-registered |
 | 4 | C1 verdict; E2 pre-registered on QC; C3 recorder has 3 weeks of liquidation data |
 | 5 | E1 and E2 verdicts; C5 pre-registered; independent-model review of the new cost models (repeat the `docs/16` pattern) |
-| 6 | Any passer enters 4-week paper; F1 research starts on QC futures |
+| 6 | Any passer enters incubation (gate 10: ≥63 daily observations, decisions logged before outcomes); F1 research starts on QC futures |
 | 7–8 | E5, E4, E7 verdicts; C3 first kill-test on 6 weeks of recorded liquidations |
-| 9 | Paper results for the first passer; funded-evaluation purchase decision (D2b) |
-| 10 | C2, C4, E3, E6 verdicts; live at ≤25% equity for any family past gate 10 |
+| 9 | Incubation half-way check for the first passer; funded-evaluation purchase decision (D2b) |
+| 10 | C2, C4, E3, E6 verdicts |
 | 11 | F1/F2 verdicts; BRAIN points review |
-| 12 | Programme 2 report: per-family verdicts, capacity, paper vs backtest slippage, capital ladder for the next quarter |
+| 12 | Programme 2 report: per-family verdicts, capacity, incubation vs backtest slippage, capital ladder (income target → capital at 5/10/20% net) for the next quarter. Live at ≤25% equity only for a family past gate 10, which is week 19 at the earliest for a week-6 passer |
 
 ---
 
@@ -338,6 +396,7 @@ Controls per venue: hold-BTC-perp (crypto), hold-T-bill (cash-benchmarked), hold
 - **Track 1 paper**: 20 trading days on Hyperliquid/Binance testnet; realised funding received vs modelled within 5%; fills vs modelled within 2 bps.
 - **Track 2 paper**: Alpaca paper fills for MOC/LOC vs official close: exact; PFOF slippage measured.
 - **Independent review**: a separate model session reviews cost models and gate changes before any live order (as `docs/16` did).
+- **Audit cases** (engine change 11): each is a test with a hand-computed expected dollar answer, not a comparison against the engine's own formula.
 - **Reporting rule (handover §8)**: re-derive every figure from the trial log; check flags against the record, not the report.
 
 ---

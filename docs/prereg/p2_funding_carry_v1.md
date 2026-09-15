@@ -104,6 +104,29 @@ is applied to the unverified number, which is the safe direction.
 Funding is settled in gross at the archived daily sum; nothing here assumes
 a rate that was not published.
 
+## Controls
+
+Two, run beside the family and reported in the same table:
+
+- **Always-in carry**: every eligible unit held at equal weight with no
+  entry or exit rule. If the family does not beat this after its extra
+  turnover, the entry rule adds nothing and the finding is "hold the carry,
+  do not time it".
+- **Hold T-bill**: the cash benchmark itself.
+
+## Capital committed and stress
+
+A unit of weight *w* commits *w* × equity to spot, the perp's initial
+margin on the same notional, and an operating reserve of 20% of equity held
+back for margin calls. Gate 11 sizes on that sum, so gross unit weight
+cannot exceed roughly 0.6 at 5× perp margin. Gate 8 replays: funding
+reversal (the rate flips sign for 14 days), basis widening (perp − spot moves
++3% in a day against the short), one leg filled and the other not (the
+unmatched leg held for one bar at the coin's realised volatility), exchange
+downtime (no exit for 3 days), auto-deleveraging (the short closed at mark
+with no exit choice). Exchange failure is a named, unmodelled risk sized
+outside the backtest: no more than 50% of equity on one venue.
+
 ## Benchmark
 
 **Cash**: `--benchmark cash --risk-free fred`, the FRED DTB3 series
@@ -129,8 +152,9 @@ on the perp, so the in-sample period is roughly five to six years.
 - Funding received below 80% of gross → the mechanism is not the one named,
   whatever the Sharpe says; recorded as a fail of the prediction.
 - Holdout Sharpe negative or below half the deflated Sharpe → gate 9.
-- Forward incubation (gate 10) realised funding more than 5% below modelled,
-  or fills more than 2 bps worse → the cost model was fiction.
+- Incubation (gate 10, at least 63 daily observations): realised funding more
+  than 5% below modelled, or fills more than 2 bps worse → the cost model was
+  fiction.
 
 ## Prior
 

@@ -198,3 +198,19 @@ def test_the_universe_volatility_floor_can_read_the_spot_leg():
     on_spot = membership(panel, UniverseSpec(n=2, min_history=30, vol_field="spot_close"))
     assert not on_unit.iloc[-1].any()  # the ratio never moves: everything excluded
     assert bool(on_spot.iloc[-1]["COINUSDT"]) and not bool(on_spot.iloc[-1]["PEGUSDT"])
+
+
+def test_a_unit_whose_open_differs_from_its_close_is_still_a_tradable_bar():
+    # Found 2026-09-15: high == low == close made every bar with open != close
+    # fail the bracket check in Panel.tradable(), and the universe read empty.
+    index = pd.date_range("2024-01-01", periods=4, freq="D", tz="UTC")
+    index.name = "open_time"
+    spot = _bars(index, np.array([100.0, 102, 99, 101]))
+    spot["open"] = np.array([99.0, 103, 100, 100])
+    perp = _bars(index, np.array([101.0, 102, 100, 101.5]))
+    perp["open"] = np.array([101.0, 102, 101, 100])
+    frame = carry_frames(spot, perp, None)
+    assert (frame["high"] >= frame[["open", "close"]].max(axis=1)).all()
+    assert (frame["low"] <= frame[["open", "close"]].min(axis=1)).all()
+    panel = Panel.from_frames({"XUSDT": frame})
+    assert panel.tradable().all().all()

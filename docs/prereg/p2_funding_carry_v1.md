@@ -163,3 +163,34 @@ the return is smaller than the paper's** — the paper's average carry
 includes 2021, and the sample in the lake is dominated by years when funding
 sat near its floor. A pass with a 3% net return is the expected result, and
 the next question would be capacity and the exchange risk, not the edge.
+
+## Amendment, 15 September 2026 — before registration, before any run
+
+Recorded after `qr data carry-build` and the universe read, and before the
+hypothesis was registered or run. Three facts were found; none changes the
+rule, the ranges, the cost model or the benchmark.
+
+1. **The sample ends on 31 August 2026, not 14 September 2026.** The
+   bucket's funding archive is monthly, and its last complete month is
+   August 2026, so the carry unit's last bar is 2026-08-31. The holdout is
+   therefore 15 September 2025 to 31 August 2026 (about 11.5 months). The
+   in-sample end (`--end 2025-09-14`) and the holdout start are unchanged.
+2. **A builder defect, fixed before the universe was read.** The first
+   `carry_frames` wrote the unit's `high` and `low` equal to its close while
+   its `open` was spot-open / perp-open, so `Panel.tradable()`'s bracket
+   check rejected nearly every bar and `carry_top40` read empty (median 0
+   members a bar). The high and low are now the bracket of the unit's open
+   and close, which are the only two prices of the unit that are observed.
+   Test: `test_a_unit_whose_open_differs_from_its_close_is_still_a_tradable_bar`.
+   The units were rebuilt (manifest hash `b96ecbb9…`) and read again.
+3. **The universe read.** 471 units, bars from 2020-01-01. `carry_top40`
+   holds 40 members every month from 2021 on (31 on 2021-01-04; 3 median in
+   2020, when few perps had 180 bars); 194 symbols were ever members; no
+   member-bar had spot volatility under the 15% floor; no peg, fiat,
+   tokenised-gold or leveraged token appears. Mean perp funding of members,
+   annualised (longs pay when positive): 2020 +23%, 2021 +38%, 2022 −6%,
+   2023 +2%, 2024 +12%, 2025 −1%, 2026 (to August) −10%. The in-sample
+   period contains both regimes, which is what the entry floor and the exit
+   are for; the prior above stands.
+
+No exclusion was added.

@@ -65,11 +65,18 @@ def carry_frames(spot: pd.DataFrame, perp: pd.DataFrame, funding: pd.DataFrame |
     s = spot.reindex(index)
     p = perp.reindex(index)
     ratio = s["close"] / p["close"]
+    open_ratio = s["open"] / p["open"]
+    # The unit's intraday extremes are not observed (the legs' highs and lows
+    # need not coincide), so its high and low are the bracket of what *is*
+    # observed: its open and its close. Setting both to the close, as the
+    # first version did, made `Panel.tradable()` reject every bar whose open
+    # differed from its close — which is nearly all of them — and the
+    # carry_top40 universe read empty on 2026-09-15 before any run.
     out = pd.DataFrame(
         {
-            "open": s["open"] / p["open"],
-            "high": ratio,
-            "low": ratio,
+            "open": open_ratio,
+            "high": pd.concat([open_ratio, ratio], axis=1).max(axis=1),
+            "low": pd.concat([open_ratio, ratio], axis=1).min(axis=1),
             "close": ratio,
             "volume": pd.concat([s["volume"], p["volume"]], axis=1).min(axis=1),
             "quote_volume": pd.concat([s["quote_volume"], p["quote_volume"]], axis=1).min(axis=1),

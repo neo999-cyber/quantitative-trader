@@ -290,10 +290,15 @@ def cmd_data_ingest(args) -> int:
         if frame.empty:
             print(f"  {symbol}: no bars in the mirror", file=sys.stderr)
             continue
-        lake.write_klines(symbol, frame, args.interval)
+        # Under the market it came from. The first perp ingest (2026-09-15)
+        # omitted this and wrote 864 perpetual series over the spot market,
+        # replacing 471 spot histories and the instruments table; the mirror
+        # was untouched, so a full spot re-ingest restored them.
+        lake.write_klines(symbol, frame, args.interval, market=args.market)
         written.append({"symbol": symbol, "bars": len(frame), "start": frame.index[0], "end": frame.index[-1]})
     if written:
-        lake.write_reference("instruments", bucket.instruments(symbols, args.interval))
+        reference = "instruments" if args.market == "spot" else f"instruments_{args.market.replace('/', '_')}"
+        lake.write_reference(reference, bucket.instruments(symbols, args.interval))
     print(table(pd.DataFrame(written)))
     print(f"manifest hash: {lake.manifest_hash()}")
     return 0 if written else 1
@@ -1009,15 +1014,16 @@ def cmd_gates(args) -> int:
     from qr.validate.report import headline_verdict, write_report
 
     lake = _lake(args)
-    panel = _load_panel(lake, args.interval, args.start, args.end)
-    spec = UniverseSpec(n=args.n, lookback=args.lookback, min_history=args.min_history)
+    market = getattr(args, "market", "spot") or "spot"
+    panel = _load_panel(lake, args.interval, args.start, args.end, market=market)
+    spec = _universe_spec(args, market)
     universe = membership(panel, spec)
     if not args.no_restrict_universe:
         panel, universe = _restrict_to_universe(panel, universe)
     costs = _costs(args)
     log = TrialLog(paths(args.root).ensure().trial_log)
 
-    cls = getattr(library, FAMILIES[args.family])
+    cls = _family_class(args.family)
     grid = cls.grid(**_parse_grid(args.grid)) if args.grid else [cls(**_parse_params(args.param))]
     hypothesis_id = args.hypothesis or args.family
 
@@ -1037,7 +1043,7 @@ def cmd_gates(args) -> int:
     best = sweep.best()
     holdout_panel = holdout_universe = None
     if args.holdout_start:
-        holdout_panel = _load_panel(lake, args.interval, args.holdout_start, args.holdout_end)
+        holdout_panel = _load_panel(lake, args.interval, args.holdout_start, args.holdout_end, market=market)
         holdout_universe = membership(holdout_panel, spec)
         if not args.no_restrict_universe:
             holdout_panel, holdout_universe = _restrict_to_universe(
@@ -1694,7 +1700,7 @@ def cmd_backtest(args) -> int:
     panel = _load_panel(lake, args.interval, args.start, args.end)
     spec = UniverseSpec(n=args.n, lookback=args.lookback, min_history=args.min_history)
     universe = membership(panel, spec)
-    strategy = getattr(library, FAMILIES[args.family])(**_parse_params(args.param))
+    strategy = _family_class(args.family)(**_parse_params(args.param))
     costs = _costs(args)
 
     result = run_backtest(panel, strategy, costs, universe, charge_impact=args.impact)
@@ -1729,11 +1735,52 @@ def cmd_backtest(args) -> int:
     return 0
 
 
+def _family_class(name: str):
+    """The strategy class behind a `FAMILIES` entry.
+
+    Programme 1's families all live in `qr.strategies.library`; Programme 2's
+    carry family lives beside the carry unit in `qr.strategies.carry`, which
+    imports helpers from the library and so cannot be imported *by* it.
+    """
+    from qr.strategies import carry, library
+
+    cls_name = FAMILIES[name]
+    for module in (library, carry):
+        if hasattr(module, cls_name):
+            return getattr(module, cls_name)
+    raise KeyError(f"no strategy class {cls_name!r} for family {name!r}")
+
+
 def _costs(args) -> CostModel:
-    """The trial's verified model unless the tier or the BNB switch is overridden."""
+    """The trial's verified model unless the tier or the BNB switch is overridden.
+
+    `--costs carry` prices a carry unit: the spot model plus the Binance
+    perp regular-user model, both legs taker (`CostModel.carry_pair`).
+    """
+    if getattr(args, "costs", "spot") == "carry":
+        spot = CostModel.trial(half_spread_bps=args.spread)
+        return CostModel.carry_pair(spot, CostModel.binance_perp())
     if args.tier.upper() == TRIAL_FEE_TIER and args.bnb == TRIAL_BNB_DISCOUNT:
         return CostModel.trial(half_spread_bps=args.spread)
     return CostModel.binance_spot(tier=args.tier, bnb_discount=args.bnb, half_spread_bps=args.spread)
+
+
+def _universe_spec(args, market: str) -> UniverseSpec:
+    """The universe for the market the panel came from.
+
+    The carry-unit panel's volatility floor reads the spot leg, and its name
+    says what it is so the trial log never records a carry run under the
+    spot universe's name.
+    """
+    if market == "carry-um":
+        return UniverseSpec(
+            n=args.n,
+            lookback=args.lookback,
+            min_history=args.min_history,
+            vol_field="spot_close",
+            name=f"carry_top{args.n}",
+        )
+    return UniverseSpec(n=args.n, lookback=args.lookback, min_history=args.min_history)
 
 
 def _parse_params(pairs: list[str] | None) -> dict:
@@ -1996,9 +2043,20 @@ def build_parser() -> argparse.ArgumentParser:
     gt.add_argument("--holdout-start", dest="holdout_start", help="gate 9 period, opened exactly once")
     gt.add_argument("--holdout-end", dest="holdout_end")
     add_universe_args(gt)
+    gt.add_argument(
+        "--market",
+        default="spot",
+        help="which lake market the panel comes from: spot (default), or carry-um for the carry unit",
+    )
     gt.add_argument("--tier", default=TRIAL_FEE_TIER)
     gt.add_argument("--bnb", action=argparse.BooleanOptionalAction, default=TRIAL_BNB_DISCOUNT)
     gt.add_argument("--spread", type=float, default=2.0)
+    gt.add_argument(
+        "--costs",
+        choices=("spot", "carry"),
+        default="spot",
+        help="spot: the trial's Binance spot model; carry: spot plus Binance perp, both legs taker",
+    )
     gt.add_argument("--permutations", type=int, default=200)
     gt.add_argument(
         "--vol-permutations",

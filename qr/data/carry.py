@@ -23,6 +23,10 @@ bar, negative when it is being paid — and the perp's own rate untouched in
 `perp_funding_rate`, which is the signal. Two fields with two names, so
 neither is ever read with the other's sign.
 
+**The spot leg's close is carried as `spot_close`** so a universe can apply
+its volatility floor to the coin rather than to the basis, which is what the
+floor is for (pegs out, speculable coins in).
+
 **Liquidity is the thinner leg.** `quote_volume` is the smaller of the two
 markets' quote volumes: a pair trades only as easily as its illiquid side.
 
@@ -70,6 +74,8 @@ def carry_frames(spot: pd.DataFrame, perp: pd.DataFrame, funding: pd.DataFrame |
             "volume": pd.concat([s["volume"], p["volume"]], axis=1).min(axis=1),
             "quote_volume": pd.concat([s["quote_volume"], p["quote_volume"]], axis=1).min(axis=1),
             "basis": p["close"] / s["close"] - 1.0,
+            # the spot leg's own price, for a universe that filters on the coin's volatility
+            "spot_close": s["close"],
         },
         index=index,
     )

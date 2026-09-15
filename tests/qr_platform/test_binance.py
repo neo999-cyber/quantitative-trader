@@ -100,3 +100,20 @@ def test_period_parsing_covers_monthly_and_daily_keys():
     assert period_of("data/spot/daily/klines/BTCUSDT/1d/BTCUSDT-1d-2024-03-05.zip") == "2024-03-05"
     with pytest.raises(BucketError):
         period_of("data/spot/monthly/klines/BTCUSDT/1d/index.html")
+
+
+def test_a_futures_kline_header_is_read_under_the_spot_names():
+    """`futures/um` files carry a header with `count`, `taker_buy_volume`,
+    `taker_buy_quote_volume`; the fields are the spot fields under other names."""
+    from qr.data.binance import parse_klines
+
+    body = (
+        b"open_time,open,high,low,close,volume,close_time,quote_volume,count,taker_buy_volume,taker_buy_quote_volume,ignore\n"
+        b"1785542400000,62859.90,63126.60,62228.80,62792.30,54738.143,1785628799999,3435251324.17280,1084259,26052.710,1635229029.00870,0\n"
+    )
+    frame = parse_klines(body, "BTCUSDT")
+    assert len(frame) == 1
+    assert frame["trades"].iloc[0] == 1084259
+    assert frame["taker_buy_base"].iloc[0] == pytest.approx(26052.710)
+    assert frame["taker_buy_quote"].iloc[0] == pytest.approx(1635229029.0087)
+    assert str(frame.index[0]) == "2026-08-01 00:00:00+00:00"

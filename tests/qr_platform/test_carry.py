@@ -138,6 +138,7 @@ def test_the_crash_filter_refuses_to_open_in_the_top_tail():
 def test_parameters_that_cannot_be_a_hypothesis_are_refused():
     with pytest.raises(ValueError, match="exit"):
         FundingCarry(entry=0.05, exit=0.10)
+    assert FundingCarry(entry=0.15).params["exit"] == pytest.approx(0.05)  # tied by default
     with pytest.raises(ValueError, match="percentile"):
         FundingCarry(ceiling=1.5)
 
@@ -174,3 +175,26 @@ def test_build_carry_lake_writes_only_symbols_with_both_legs(tmp_path, legs):
     panel = lake.load_panel(interval="1d", market=CARRY_MARKET)
     assert "perp_funding_rate" in panel.fields and "basis" in panel.fields
     assert panel["funding_rate"].iloc[0, 0] == pytest.approx(-0.001)
+
+
+def test_the_universe_volatility_floor_can_read_the_spot_leg():
+    """On a carry panel the unit's own close barely moves; the floor must see the coin."""
+    from qr.data.universe import UniverseSpec, membership
+
+    days = 200
+    index = pd.date_range("2023-01-01", periods=days, freq="D", tz="UTC")
+    index.name = "open_time"
+    rng = np.random.default_rng(0)
+    coin = 100.0 * np.cumprod(1 + rng.normal(0, 0.04, days))  # a volatile coin
+    peg = np.full(days, 1.0) + rng.normal(0, 0.0002, days)  # a stablecoin
+    frames = {}
+    for name, spot_px in (("COINUSDT", coin), ("PEGUSDT", peg)):
+        spot = _bars(index, spot_px)
+        perp = _bars(index, spot_px * 1.001)
+        frames[name] = carry_frames(spot, perp, pd.DataFrame({"funding_rate": np.full(days, 1e-4)}, index=index))
+    panel = Panel.from_frames(frames)
+    assert "spot_close" in panel.fields
+    on_unit = membership(panel, UniverseSpec(n=2, min_history=30, vol_field="close"))
+    on_spot = membership(panel, UniverseSpec(n=2, min_history=30, vol_field="spot_close"))
+    assert not on_unit.iloc[-1].any()  # the ratio never moves: everything excluded
+    assert bool(on_spot.iloc[-1]["COINUSDT"]) and not bool(on_spot.iloc[-1]["PEGUSDT"])

@@ -45,11 +45,27 @@ celebrate.
 ## Universe
 
 `carry_top40`: the carry units — symbols with both a Binance USDT spot pair
-and a Binance USDⓈ-M perpetual — ranked point-in-time by trailing 30-bar
+and a Binance USDⓈ-M perpetual (471 such symbols in the lake on 15 September
+2026, delisted ones included) — ranked point-in-time by trailing 30-bar
 median of the **thinner leg's** quote volume, top 40, rebalanced monthly,
-180-bar minimum history, with the stablecoin, fiat, tokenised-gold and
-leveraged-token exclusions of `tsmom_v1`'s amendment applied unchanged. A
-unit whose perp is delisted leaves the book at its last close.
+180-bar minimum history. The exclusions of `tsmom_v1`'s amendment apply
+unchanged, with one stated adaptation: the 15% annualised volatility floor
+over 90 bars is measured on the **spot leg's price** (`spot_close`), not on
+the unit's price, because the unit is spot / perp and never moves — the floor
+exists to keep pegs and fiat out, which is a property of the coin. Tokenised
+gold and leveraged tokens are excluded by name as before. A unit whose perp
+is delisted leaves the book at its last close.
+
+The exact invocation, in-sample:
+
+    qr gates --family funding_carry --hypothesis p2_funding_carry_v1 \
+      --market carry-um --costs carry --n 40 --min-history 180 \
+      --benchmark cash --risk-free fred --end 2025-09-14 \
+      --grid 'lookback=[3,7,14,30]' --grid 'entry=[0.05,0.10,0.15,0.20]' \
+      --grid 'ceiling=[0.95,1.0]' --grid 'n_max=[5,10]' --upto 8
+
+then once, with `--holdout-start 2025-09-15 --upto 11`. The universe name
+the trial log records is `carry_top40`.
 
 Fixed before the run. Not to be narrowed after seeing which coins paid.
 
@@ -97,9 +113,12 @@ and is not the claim here.
 
 ## Out-of-sample period
 
-**The final 12 months of the available sample**, opened exactly once, after
+**From 15 September 2025 to the end of the sample** (the lake's last full
+bar is 14 September 2026): in-sample is everything up to `--end 2025-09-14`,
+the holdout is `--holdout-start 2025-09-15`, opened exactly once, after
 gates 1–8 are complete. The trial log records the opening; a second open is
-refused.
+refused. Funding history on Binance's bucket begins in 2019–2020 depending
+on the perp, so the in-sample period is roughly five to six years.
 
 ## What would falsify this
 

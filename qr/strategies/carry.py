@@ -20,7 +20,10 @@ Parameters, all pre-registered before any run:
   The pre-registration ties it to the frozen cost model: three round trips
   of cost per year is the floor the sandbox already enforces.
 * `exit` — annualised funding below which a unit is closed. Below entry, so
-  a unit is not flipped daily by noise around the threshold.
+  a unit is not flipped daily by noise around the threshold. `None` ties it
+  to a third of `entry`, which is how the pre-registered grid states it: a
+  Cartesian sweep cannot express "a third of the other parameter", and a
+  tied exit is one fewer free parameter for gate 8 to count.
 * `ceiling` — the trailing percentile of the signal above which a unit is
   *not* opened, the paper's crash-risk filter. 1.0 switches it off.
 * `n_max` — at most this many units, the highest funding first.
@@ -45,7 +48,7 @@ class FundingCarry(Strategy):
         self,
         lookback: int = 7,
         entry: float = 0.10,
-        exit: float = 0.03,
+        exit: float | None = None,
         ceiling: float = 0.95,
         n_max: int = 10,
         rebalance: int = 1,
@@ -53,6 +56,8 @@ class FundingCarry(Strategy):
     ) -> None:
         if lookback < 1 or n_max < 1 or rebalance < 1 or percentile_window < 30:
             raise ValueError("lookback, n_max, rebalance are counts >= 1; percentile_window >= 30")
+        if exit is None:
+            exit = round(entry / 3.0, 6)
         if exit >= entry:
             raise ValueError(f"exit ({exit}) must sit below entry ({entry}) or units flip on noise")
         if not 0.0 < ceiling <= 1.0:

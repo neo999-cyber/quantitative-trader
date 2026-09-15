@@ -88,6 +88,23 @@ deliberately and why, so it cannot be read later as a quiet relaxation.
   was right and the panel in memory was wrong. It now leaves a panel's own
   `funding_rate` alone. No Programme 1 result touched this path.
 
+- **Perp bars into the lake, with two ingest defects on the way.** The
+  futures bucket writes a header row with `count`, `taker_buy_volume`,
+  `taker_buy_quote_volume` where spot has `trades`, `taker_buy_base`,
+  `taker_buy_quote`; the parser now maps them (test added). Worse: `qr data
+  ingest` never passed `--market` through to the lake, so the first perp
+  ingest wrote 864 perpetual series **over the spot market** and replaced
+  the instruments table. The mirror was untouched; the repair was to purge
+  the 393 perp-only symbols from the spot market, re-ingest all 734 spot
+  series from the mirror, then ingest the perps under `futures/um` with
+  their own `instruments_futures_um` reference. The trial log is a separate
+  file and was never touched; `qr trial verify` is the check. Any Programme
+  1 report cites the manifest hash it was computed on, which the log keeps.
+- `qr gates --market carry-um --costs carry` runs a family on the carry
+  panel with the two-leg cost model; the universe's volatility floor reads
+  the spot leg there (`UniverseSpec.vol_field`), because the unit's own
+  price is spot / perp and never moves.
+
 **Not yet done from the week-1 list:** the Polymarket book recorder; the C1
 pre-registration (drafted at `docs/prereg/p2_funding_carry_v1.md`, to be
 registered only after `qr data carry-build` has run and the universe file

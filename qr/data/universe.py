@@ -77,6 +77,12 @@ class UniverseSpec:
     vol_lookback: int = 90
     exclude_leveraged: bool = True
     exclude_symbols: frozenset[str] = NOT_CRYPTO_ASSETS
+    #: Which price the volatility floor is measured on. `close` for a panel
+    #: of single legs. The carry unit's close is spot / perp, which barely
+    #: moves, so on a `carry-um` panel the floor must read the spot leg
+    #: (`spot_close`) or it excludes every unit — and the floor exists to
+    #: keep pegs out, which is a property of the coin, not of the basis.
+    vol_field: str = "close"
     name: str = "binance_spot_top30"
 
     def describe(self) -> dict[str, object]:
@@ -222,8 +228,13 @@ def membership(panel: Panel, spec: UniverseSpec = UniverseSpec()) -> pd.DataFram
     history = panel.close.notna().cumsum()
     # Trailing annualised volatility over the same window the volume ranking
     # uses, so both filters see exactly the same bars.
+    priced = panel.get(spec.vol_field)
+    if priced is None:
+        raise ValueError(
+            f"the universe's volatility floor reads {spec.vol_field!r}, which this panel does not carry"
+        )
     volatility = (
-        panel.returns().rolling(spec.vol_lookback, min_periods=max(20, spec.vol_lookback // 3)).std()
+        priced.pct_change().rolling(spec.vol_lookback, min_periods=max(20, spec.vol_lookback // 3)).std()
         * np.sqrt(panel.periods_per_year)
     )
     index = panel.index

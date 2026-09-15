@@ -273,6 +273,14 @@ def to_utc(values: pd.Series | np.ndarray) -> pd.DatetimeIndex:
     return pd.DatetimeIndex(pd.to_datetime(np.round(micros).astype("int64"), unit="us", utc=True))
 
 
+#: futures kline header -> the spot names this module has always used
+FUTURES_HEADER_ALIASES = {
+    "count": "trades",
+    "taker_buy_volume": "taker_buy_base",
+    "taker_buy_quote_volume": "taker_buy_quote",
+}
+
+
 def parse_klines(payload: bytes, symbol: str | None = None) -> pd.DataFrame:
     """Parse one kline file (a `.zip` from the bucket, or its bare `.csv`).
 
@@ -292,6 +300,11 @@ def parse_klines(payload: bytes, symbol: str | None = None) -> pd.DataFrame:
         )
     if has_header:
         frame.columns = [str(c).strip().lower() for c in frame.columns]
+        # The futures bucket (`futures/um`, `futures/cm`) writes the same
+        # twelve fields under three different names. Found on the first
+        # real ingest of the perp bars, 2026-09-15: the spot loader refused
+        # every file for "missing" columns it was looking at.
+        frame = frame.rename(columns=FUTURES_HEADER_ALIASES)
         missing = [c for c in KLINE_COLUMNS if c not in frame.columns]
         if missing:
             raise BucketError(f"kline file is missing columns {missing}")

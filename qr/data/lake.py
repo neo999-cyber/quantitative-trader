@@ -220,6 +220,14 @@ class Lake:
 
         if market == MARKET or source != "binance":
             return panel
+        # A panel that already carries `funding_rate` is one that defined it
+        # itself — the carry unit (`qr/data/carry.py`) stores the rate with
+        # the short leg's sign, and joining the raw perp feature over it
+        # would flip a receipt back into a payment. Found by the carry
+        # round-trip test on 2026-09-15: the file on disk was right and the
+        # loaded panel was wrong.
+        if "funding_rate" in panel.fields:
+            return panel
         available = set(self.symbols("1d", source, MARKET))
         wanted = [s for s in panel.symbols if s in available]
         if not wanted:

@@ -28,6 +28,8 @@ import pandas as pd
 FIELDS = (
     "open", "high", "low", "close", "close_unadjusted", "volume", "quote_volume", "trades",
     "funding_rate", "open_interest", "open_interest_usd",
+    # the carry unit (qr/data/carry.py): the perp's own rate, and perp/spot - 1
+    "perp_funding_rate", "basis",
 )
 
 

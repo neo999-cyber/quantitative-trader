@@ -12,8 +12,18 @@ A trade pays three things, all expressed in basis points of traded notional:
   a book moves it, superlinearly in participation. At the sizes this platform
   trades it is small, and it is the term that decides capacity.
 
-Nothing here charges funding: this is a **spot** model. Perps add a funding leg
-and get their own model (`PerpCostModel`) when Phase 4 needs it.
+A perpetual is the same three things plus **funding**, which is not a cost
+in this model's sense at all: it is a transfer between the two sides of the
+book, paid or received on what is *held* rather than on what is traded, and
+it can be income. It therefore enters the backtest's **gross** return
+(`qr.research.runner.funding_pnl`), not its cost drag — a carry family earns
+nothing else, and a "cost" that is the whole of the return would make gate
+2's net-over-gross ratio meaningless. What this model records is whether the
+venue settles funding at all (`funding=True`), so the runner knows to look
+for the `funding_rate` feature, and the venue's maker/taker schedule, which
+for a perp is a fraction of spot's: Binance USDⓈ-M charges a regular user
+2.0 / 5.0 bps, Hyperliquid 1.5 / 4.5. See `binance_perp` and
+`hyperliquid_perp`.
 
 The fee schedule below is a snapshot and must be re-verified against
 <https://www.binance.com/en/fee/schedule> before a cost model is frozen for a
@@ -74,6 +84,33 @@ class BinanceSpotFees:
         return cls(maker, taker, key, bnb_discount, verified_on)
 
 
+@dataclass(frozen=True)
+class PerpFees:
+    """A perpetual-futures venue's schedule, in basis points per side."""
+
+    maker_bps: float
+    taker_bps: float
+    venue: str
+    tier: str = "base"
+    verified_on: str = "unverified"
+
+
+#: Binance USDⓈ-M perpetuals, "regular user" (under $15M 30-day volume and
+#: under 25 BNB): 0.020% maker / 0.050% taker, 10% off when fees are paid in
+#: BNB. Binance's fee page shows the schedule only to a logged-in account, so
+#: this snapshot is from the public schedule as several fee trackers reported
+#: it on 2026-09-15 and stays **unverified** until read off the account's own
+#: fee panel, exactly as the spot tier was before it was frozen.
+BINANCE_PERP_REGULAR = PerpFees(2.0, 5.0, "binance_perp", "regular", "unverified")
+BINANCE_PERP_BNB_DISCOUNT = 0.10
+
+#: Hyperliquid perps, base tier (14-day volume under $5M): 0.015% maker /
+#: 0.045% taker; maker rebates begin at 0.5% of 14-day maker volume share.
+#: Read from https://hyperliquid.gitbook.io/hyperliquid-docs/trading/fees on
+#: 2026-09-15.
+HYPERLIQUID_PERP_BASE = PerpFees(1.5, 4.5, "hyperliquid_perp", "base", "2026-09-15")
+
+
 #: The account's own fee panel, read on this date: 30-day volume 0.00 USD, so
 #: VIP0, with the BNB fee discount switched on -> 0.07500% maker and taker.
 TRIAL_FEE_TIER = "VIP0"
@@ -125,6 +162,12 @@ class CostModel:
     #: unmodified square-root law, which double-counts.
     net_impact_against_spread: bool = True
     use_maker: bool = False
+    #: Whether the venue settles funding on held positions. True for a
+    #: perpetual; False for spot, where nothing is paid for holding. The
+    #: runner reads this to decide whether the panel's `funding_rate` feature
+    #: is a cash flow (perp) or merely a feature (spot). Funding is **not**
+    #: charged by `charge()` — see the module docstring for why it is gross.
+    funding: bool = False
     multiplier: float = 1.0
     name: str = "binance_spot_vip0_taker"
     verified_on: str = "unverified"
@@ -146,6 +189,91 @@ class CostModel:
             impact_coef=impact_coef,
             name=f"binance_spot_{fees.tier.lower()}{suffix}_taker",
             verified_on=verified_on,
+        )
+
+    @classmethod
+    def binance_perp(
+        cls,
+        bnb_discount: bool = True,
+        half_spread_bps: float = 1.0,
+        use_maker: bool = False,
+        impact_coef: float = 1.0,
+        verified_on: str | None = None,
+    ) -> "CostModel":
+        """Binance USDⓈ-M perpetuals for a regular user. **Verify before freezing.**
+
+        Taker by default: a maker order that rests is cheaper and earns the
+        spread back, but a backtest that assumes every order rests is
+        assuming fills it was never promised. `use_maker=True` is the
+        pre-registered exception for a family whose entries are limit orders
+        by construction and whose gate 10 forward record will show its actual
+        fill rate.
+
+        1 bp of half-spread is the top-30 USDT perps, which quote inside that
+        most of the day; it is pessimistic for BTC and ETH and about right for
+        rank 30. Funding is settled (`funding=True`) and enters gross.
+        """
+        fees = BINANCE_PERP_REGULAR
+        maker, taker = fees.maker_bps, fees.taker_bps
+        if bnb_discount:
+            maker, taker = maker * (1 - BINANCE_PERP_BNB_DISCOUNT), taker * (1 - BINANCE_PERP_BNB_DISCOUNT)
+        suffix = "_bnb" if bnb_discount else ""
+        side = "maker" if use_maker else "taker"
+        return cls(
+            fee_bps=maker if use_maker else taker,
+            half_spread_bps=half_spread_bps,
+            impact_coef=impact_coef,
+            use_maker=use_maker,
+            funding=True,
+            name=f"binance_perp_{fees.tier}{suffix}_{side}",
+            verified_on=verified_on or fees.verified_on,
+        )
+
+    @classmethod
+    def hyperliquid_perp(
+        cls,
+        half_spread_bps: float = 1.0,
+        use_maker: bool = False,
+        impact_coef: float = 1.0,
+        verified_on: str | None = None,
+    ) -> "CostModel":
+        """Hyperliquid perps at the base tier, taker by default. Funding enters gross."""
+        fees = HYPERLIQUID_PERP_BASE
+        side = "maker" if use_maker else "taker"
+        return cls(
+            fee_bps=fees.maker_bps if use_maker else fees.taker_bps,
+            half_spread_bps=half_spread_bps,
+            impact_coef=impact_coef,
+            use_maker=use_maker,
+            funding=True,
+            name=f"hyperliquid_perp_{fees.tier}_{side}",
+            verified_on=verified_on or fees.verified_on,
+        )
+
+    @classmethod
+    def carry_pair(cls, spot: "CostModel | None" = None, perp: "CostModel | None" = None) -> "CostModel":
+        """One unit of long spot / short perp (`qr/data/carry.py`).
+
+        A unit's turnover trades both legs for the same notional, so its
+        proportional cost is the two legs' costs added: fee plus fee, half-
+        spread plus half-spread. The perp leg settles funding, the spot leg
+        does not, and the unit's panel already carries the rate with the
+        short leg's sign, so `funding=True` here means "settle what the
+        panel says". Impact is charged once, on the thinner leg's volume,
+        which is what the unit panel's `quote_volume` is.
+        """
+        spot = spot or cls.trial()
+        perp = perp or cls.binance_perp()
+        if spot.per_share_usd or perp.per_share_usd:
+            raise ValueError("a carry unit is priced on two proportional venues, not per share")
+        return cls(
+            fee_bps=spot.fee_bps + perp.fee_bps,
+            half_spread_bps=spot.half_spread_bps + perp.half_spread_bps,
+            impact_coef=max(spot.impact_coef, perp.impact_coef),
+            use_maker=False,
+            funding=True,
+            name=f"carry[{spot.name}+{perp.name}]",
+            verified_on=min(spot.verified_on, perp.verified_on, key=lambda v: (v != "unverified", v)),
         )
 
     @classmethod
@@ -465,6 +593,7 @@ class CostModel:
             "max_commission_pct": self.max_commission_pct,
             "net_impact_against_spread": self.net_impact_against_spread,
             "use_maker": self.use_maker,
+            "settles_funding": self.funding,
             "multiplier": self.multiplier,
             "linear_bps_per_side": self.linear_bps,
             "fees_verified_on": self.verified_on,

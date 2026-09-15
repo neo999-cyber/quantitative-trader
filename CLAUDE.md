@@ -1,6 +1,7 @@
 # quantitative-trader — context for Claude Code sessions
 
 Read these first, in order:
+00. `docs/20_PROGRAMME_2.md` — **start here from 15 September 2026.** Programme 1 (below) is finished; its one-page verdict is `docs/18` and its clinical handover is `docs/19`. Programme 2 changes the instruments (perpetuals, single stocks at $0 commission, micro futures), the resolution (minute bars, funding, auction imbalance), the point-in-time data, and gate 5's comparator (`--benchmark cash` for market-neutral and carry books, exposure-matched for long-only stock selection). Owner's decisions (Dubai, $0 data, no funded evaluation yet), the stopping-rule re-scope, the plain-steps plan, the session/model plan and the week-by-week log are in that file. The real lake is `$QR_ROOT=~/qr/lake` (set in `~/.zshrc`, not inherited by a tool's shell); the checkout's `lake/` is empty and `qr doctor` shows which one a shell is using.
 0. `docs/18_THE_VERDICT.md` — **start here.** One page: what was asked, what was found, what to do about it. The research is finished; nothing below is a live task. Then `docs/19_HANDOVER.md` — the clinical version for an outside reader: failure root-cause analysis, what a successor must not redo, and what a serious attempt would require. Then `docs/17` for the one thing still running, `docs/16` for the sizing review, and `docs/10_NEXT.md` / `docs/11`–`15` for the workings.
 1. `docs/01_ONE_WEEK_TRIAL.md` — how the trial was framed (a one-week, $0, crypto-spot trial judged by validation gates, not P&L). **Built and run; the verdict is `docs/06` for crypto and `docs/08` for ETFs. Do not start at Day 1.**
 2. `docs/PLAN.md` — the full platform plan (7 layers, data tiers, the 11-gate validation engine, roadmap).
@@ -14,7 +15,11 @@ Conventions
 - Anthropic model default for code in this repo: `claude-opus-5`; catalyst summariser uses structured outputs and server-side refusal fallbacks.
 - Commit author must use the GitHub noreply address (`neo999-cyber@users.noreply.github.com`); pushes with the private email are rejected.
 
-Where the project actually is (15 September 2026) — **finished; read `docs/18`**
+Where the project actually is (15 September 2026, Programme 2 week 1) — **read `docs/20`**
+- Gate 5 can be pre-registered against cash (`qr gates --benchmark cash --risk-free fred`); `qr data riskfree-pull` stores FRED DTB3. Perp cost models exist (`CostModel.binance_perp`, `CostModel.hyperliquid_perp`, `CostModel.carry_pair`); funding is **gross**, not a cost (`runner.funding_pnl`). The carry unit (`qr data carry-build`, market `carry-um`) and the `FundingCarry` family exist; `qr gates --market carry-um --costs carry` runs it. Two engine defects and two ingest defects were found by the new controls and closed the same day; see the week-1 log.
+- Every USDT perpetual's daily bars are in the lake under `futures/um`; funding for the 471 both-leg symbols is being mirrored. OKX and Bybit liquidation recorders run on the Hetzner box. Nothing from Programme 2 has been run through the gates yet and nothing is pre-registered yet.
+
+Where Programme 1 ended Where the project actually is (15 September 2026) — **finished; read `docs/18`**
 - **The research is complete and the answer is an index fund.** Nine pre-registered families failed the gates across two asset classes; forty-six mechanism candidates produced one measurable effect (turn-of-month, 4.8 bps a round trip) that is 0.6x its costs at $1,000 and, at every account size up to $100,000, a worse risk-adjusted way to own the basket than holding it.
 - **Step 0 is answered: finding ideas, not finding capital** (`docs/11`), for those nine. `docs/15` qualifies it for the one candidate that had an effect: there the account bound the *cost bar* and not the *outcome*.
 - **Stages 1–4 are built and were run to exhaustion**: discovery sandbox, research policy, mechanism memos, kill tests, `qr autopilot`. The generator now returns the same two ideas under new titles; the brief space is spent.

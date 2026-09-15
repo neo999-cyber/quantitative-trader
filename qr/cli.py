@@ -7,6 +7,7 @@
     qr data etf-ingest            Tiingo mirror -> lake, dividend-adjusted
     qr data funding-pull          perp funding + open interest (needs network)
     qr data funding-ingest        funding mirror -> lake, as daily features
+    qr data riskfree-pull         FRED DTB3 -> lake, the cash benchmark's rate (needs network)
     qr data qa                    QA report over the lake
     qr data universe              the point-in-time top-N, as of today
     qr fng pull | fng show        Fear & Greed index
@@ -57,6 +58,7 @@ FAMILIES = {
     "reversal": "ShortTermReversal",
     "rsi_reversal": "RSIReversal",
     "random_entry": "RandomEntry",
+    "funding_carry": "FundingCarry",
 }
 
 
@@ -428,6 +430,88 @@ def cmd_data_flows_collect(args) -> int:
             "first useful number arrives tomorrow and the first usable sample in months. "
             "Put this in cron now rather than remembering to run it."
         )
+    return 0
+
+
+def _add_benchmark_args(parser) -> None:
+    parser.add_argument(
+        "--benchmark",
+        choices=("buyhold", "cash"),
+        default="buyhold",
+        help="what gate 5 asks the best variant to beat: the costed equal-weight universe "
+        "(long-only books) or the risk-free rate (market-neutral and carry books). "
+        "Part of the pre-registration.",
+    )
+    parser.add_argument(
+        "--risk-free",
+        dest="risk_free",
+        default=None,
+        help="annualised decimal rate for --benchmark cash, or 'fred' for the DTB3 series "
+        "pulled by `qr data riskfree-pull` (the default when it is in the lake)",
+    )
+
+
+def _benchmark_kwargs(args, lake) -> dict:
+    """`--benchmark` and `--risk-free` into what `GateContext` takes.
+
+    `--risk-free` is an annualised decimal ("0.04"), or "fred" to read the
+    DTB3 series pulled by `qr data riskfree-pull`. With `--benchmark cash` and
+    nothing given, the FRED series is used if it is in the lake; if it is not,
+    that is an error rather than a silent zero, because a benchmark that was
+    never chosen is not a pre-registered one.
+    """
+    benchmark = getattr(args, "benchmark", "buyhold") or "buyhold"
+    raw = getattr(args, "risk_free", None)
+    risk_free = None
+    if benchmark == "cash":
+        from qr.data.fred import load_risk_free
+
+        if raw is None or str(raw).lower() == "fred":
+            risk_free = load_risk_free(lake)
+            if risk_free is None:
+                raise SystemExit(
+                    "--benchmark cash needs a risk-free rate: run `qr data riskfree-pull` "
+                    "(FRED DTB3, no key) or pass --risk-free 0.04"
+                )
+        else:
+            risk_free = float(raw)
+    return {"benchmark": benchmark, "risk_free": risk_free}
+
+
+def cmd_data_carry_build(args) -> int:
+    """Spot + futures/um bars + funding -> the carry-unit panel (`carry-um`)."""
+    from qr.data.carry import build_carry_lake
+
+    lake = _lake(args)
+    summary = build_carry_lake(lake, args.symbols, args.interval)
+    if summary.empty:
+        print(
+            "nothing to build: no symbol has both a spot and a futures/um kline series in the lake.\n"
+            "Run `qr data ingest --market futures/um` (after `qr data pull --market futures/um`) "
+            "and `qr data funding-ingest` first.",
+            file=sys.stderr,
+        )
+        return 2
+    print(table(summary))
+    built = int((summary["days"] > 0).sum())
+    print(f"{built} carry units written under market {'carry-um'!r}; manifest hash: {lake.manifest_hash()}")
+    return 0 if built else 1
+
+
+def cmd_data_riskfree_pull(args) -> int:
+    """FRED DTB3 -> lake reference table. Needs the network, no key."""
+    from qr.data.fred import fetch, parse_fred_csv, write_risk_free
+
+    lake = Lake(paths(args.root))
+    text = fetch(args.series)
+    if args.dump:
+        Path(args.dump).write_text(text, encoding="utf-8")
+    rates = parse_fred_csv(text, args.series)
+    path = write_risk_free(lake, rates, args.series)
+    print(
+        f"{args.series}: {len(rates)} observations, {rates.index[0].date()} to "
+        f"{rates.index[-1].date()}, latest {rates.iloc[-1]:.4%} p.a.\nwrote {path}"
+    )
     return 0
 
 
@@ -974,6 +1058,7 @@ def cmd_gates(args) -> int:
         holdout_universe=holdout_universe,
         permutations=args.permutations,
         vol_preserving_permutations=args.vol_permutations,
+        **_benchmark_kwargs(args, lake),
     )
     report = run_gates(
         context, upto=args.upto, stop_on_fail=not args.all_gates, progress=_progress
@@ -1088,6 +1173,7 @@ def cmd_families(args) -> int:
             upto=args.upto,
             stop_on_fail=not args.all_gates,
             progress=_progress,
+            **_benchmark_kwargs(args, lake),
         )
         runs.append(run)
         md, _ = write_report(run.report, paths(args.root).reports, log, run.sweep.results[run.best_variant].stats())
@@ -1759,6 +1845,16 @@ def build_parser() -> argparse.ArgumentParser:
     fund_pull.add_argument("--force", action="store_true", help="re-download files already mirrored")
     fund_pull.set_defaults(func=cmd_data_funding_pull)
 
+    carry = data.add_parser("carry-build", help="spot + futures/um + funding -> carry-unit panel (market carry-um)")
+    carry.add_argument("--symbols", nargs="*")
+    carry.add_argument("--interval", default="1d")
+    carry.set_defaults(func=cmd_data_carry_build)
+
+    rf = data.add_parser("riskfree-pull", help="FRED DTB3 3-month T-bill rate -> lake (needs network, no key)")
+    rf.add_argument("--series", default="DTB3")
+    rf.add_argument("--dump", help="save the raw CSV here before parsing")
+    rf.set_defaults(func=cmd_data_riskfree_pull)
+
     fund_ingest = data.add_parser("funding-ingest", help="funding mirror -> lake, as daily features")
     fund_ingest.add_argument("--symbols", nargs="*")
     fund_ingest.add_argument(
@@ -1919,9 +2015,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     gt.add_argument("--upto", type=int, default=11, help="highest gate to run")
     gt.add_argument("--all-gates", action="store_true", dest="all_gates", help="do not stop at the first FAIL")
+    _add_benchmark_args(gt)
     gt.set_defaults(func=cmd_gates)
 
     fam = sub.add_parser("families", help="run the four registered trial families through the gates")
+    _add_benchmark_args(fam)
     fam.add_argument("--only", nargs="*", help="hypothesis ids to run (default: all four)")
     fam.add_argument("--interval", default="1d")
     fam.add_argument("--start")

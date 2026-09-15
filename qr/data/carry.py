@@ -1,0 +1,126 @@
+"""The carry unit: long one unit of spot, short one unit of the perpetual.
+
+Programme 2, family C1 (`docs/19_PROGRAMME_2.md` §5). The forced trader is
+the levered long paying funding; the trade that collects it is delta-neutral,
+long spot against short perp, and it earns three things: the funding the perp
+pays, the change in the basis (perp over spot), and nothing else. Every other
+family in this repository is a book of single legs; this one is a book of
+pairs, and the cleanest way to run a pair through an engine built for legs is
+to make the pair a synthetic instrument with a price of its own.
+
+**The unit's price is the ratio spot / perp.** Its percentage change is
+exactly the return of a position long one dollar of spot and short one dollar
+of perp, rebalanced each bar: (1 + r_spot) / (1 + r_perp) − 1. No
+approximation, no separate basis leg to account for. The basis itself is
+carried as a feature (`basis` = perp / spot − 1) because a family that enters
+on funding should be able to see what it is paying in basis to get it.
+
+**Funding changes sign.** The runner's convention (`runner.funding_pnl`) is
+the venue's: a long weight pays a positive rate. The unit is *short* the perp,
+so a positive perp rate is a receipt. The panel therefore carries the rate
+already flipped in `funding_rate` — what one unit of the position pays per
+bar, negative when it is being paid — and the perp's own rate untouched in
+`perp_funding_rate`, which is the signal. Two fields with two names, so
+neither is ever read with the other's sign.
+
+**Liquidity is the thinner leg.** `quote_volume` is the smaller of the two
+markets' quote volumes: a pair trades only as easily as its illiquid side.
+
+Reads three things the lake already holds — spot bars (`market="spot"`),
+perp bars (`market="futures/um"`, from `qr data ingest --market futures/um`)
+and the daily funding feature (`market="futures-um"`, from `qr data
+funding-ingest`) — and writes the unit's bars back as klines under
+`market="carry-um"`, so `qr gates --market carry-um` loads it like any other
+panel and the manifest records exactly which bytes it was built from.
+"""
+from __future__ import annotations
+
+import logging
+from typing import Iterable
+
+import pandas as pd
+
+from qr.data.funding import MARKET as FUNDING_MARKET
+
+log = logging.getLogger(__name__)
+
+PERP_MARKET = "futures/um"
+CARRY_MARKET = "carry-um"
+SPOT_MARKET = "spot"
+
+
+def carry_frames(spot: pd.DataFrame, perp: pd.DataFrame, funding: pd.DataFrame | None) -> pd.DataFrame:
+    """One symbol's carry-unit bars from its spot bars, perp bars and funding.
+
+    The index is the intersection of spot and perp dates: a unit needs both
+    legs to exist. Funding is left-joined onto it and, where the bucket is
+    silent, left missing — the runner settles nothing on a missing rate,
+    which is the honest reading of "not published" (`runner.funding_pnl`).
+    """
+    index = spot.index.intersection(perp.index)
+    s = spot.reindex(index)
+    p = perp.reindex(index)
+    ratio = s["close"] / p["close"]
+    out = pd.DataFrame(
+        {
+            "open": s["open"] / p["open"],
+            "high": ratio,
+            "low": ratio,
+            "close": ratio,
+            "volume": pd.concat([s["volume"], p["volume"]], axis=1).min(axis=1),
+            "quote_volume": pd.concat([s["quote_volume"], p["quote_volume"]], axis=1).min(axis=1),
+            "basis": p["close"] / s["close"] - 1.0,
+        },
+        index=index,
+    )
+    if "trades" in s.columns and "trades" in p.columns:
+        out["trades"] = pd.concat([s["trades"], p["trades"]], axis=1).min(axis=1)
+    if funding is not None and not funding.empty and "funding_rate" in funding.columns:
+        rate = funding["funding_rate"].reindex(index)
+        out["perp_funding_rate"] = rate
+        out["funding_rate"] = -rate
+        for extra in ("open_interest", "open_interest_usd"):
+            if extra in funding.columns:
+                out[extra] = funding[extra].reindex(index)
+    else:
+        out["perp_funding_rate"] = float("nan")
+        out["funding_rate"] = float("nan")
+    out.index.name = "open_time"
+    return out
+
+
+def build_carry_lake(lake, symbols: Iterable[str] | None = None, interval: str = "1d") -> pd.DataFrame:
+    """Build and store every symbol that has both legs; returns a summary.
+
+    A symbol with a perp but no spot pair (or the reverse) is skipped and
+    counted, not invented: the unit cannot be held.
+    """
+    spot_names = set(lake.symbols(interval, market=SPOT_MARKET))
+    perp_names = set(lake.symbols(interval, market=PERP_MARKET))
+    funding_names = set(lake.symbols("1d", market=FUNDING_MARKET))
+    wanted = list(symbols) if symbols is not None else sorted(spot_names & perp_names)
+    rows = []
+    for symbol in wanted:
+        if symbol not in spot_names or symbol not in perp_names:
+            rows.append({"symbol": symbol, "days": 0, "note": "missing a leg"})
+            continue
+        spot = lake.read_klines(symbol, interval, market=SPOT_MARKET)
+        perp = lake.read_klines(symbol, interval, market=PERP_MARKET)
+        funding = lake.read_klines(symbol, "1d", market=FUNDING_MARKET) if symbol in funding_names else None
+        frame = carry_frames(spot, perp, funding)
+        if frame.empty:
+            rows.append({"symbol": symbol, "days": 0, "note": "no overlapping dates"})
+            continue
+        lake.write_klines(symbol, frame, interval, market=CARRY_MARKET)
+        rows.append(
+            {
+                "symbol": symbol,
+                "days": len(frame),
+                "start": frame.index[0],
+                "end": frame.index[-1],
+                "funding_days": int(frame["perp_funding_rate"].notna().sum()),
+                "mean_perp_funding_bps_day": round(float(frame["perp_funding_rate"].mean() * 1e4), 3),
+                "note": "",
+            }
+        )
+    return pd.DataFrame(rows)

@@ -45,6 +45,11 @@ class BacktestResult:
     #: do about it; these four have four different remedies — a bigger account,
     #: a more liquid instrument, a smaller order and a cheaper short.
     cost_parts: pd.DataFrame | None = None
+    #: Funding paid (negative) or received (positive) per bar on a perpetual
+    #: book, as a fraction of equity. Already inside `gross`; kept separately
+    #: so a report can say how much of a carry family's return *was* the
+    #: carry. None for a venue that settles no funding.
+    carry: pd.Series | None = None
     meta: dict[str, Any] = field(default_factory=dict)
 
     # -- curves ------------------------------------------------------------
@@ -186,6 +191,16 @@ def run_backtest(
         held = hold_between(held, returns, marks)
     held = held.where(panel.tradable(), 0.0)
     gross = (held * returns.fillna(0.0)).sum(axis=1).rename("gross")
+    # Funding is a cash flow on what is held, and it can be income, so it is
+    # part of the gross return rather than a cost: a carry family earns
+    # nothing else, and gate 2's net-over-gross ratio has to be able to see
+    # it. Only a venue that settles funding gets it; on a spot panel the same
+    # feature is a fact about the perp's crowd, not a payment.
+    carry = None
+    funding = panel.get("funding_rate") if costs.funding else None
+    if funding is not None:
+        carry = funding_pnl(held, funding)
+        gross = (gross + carry).rename("gross")
 
     drifted = drift(held.shift(1).fillna(0.0), returns)
     turnover_matrix = (held - drifted).abs()
@@ -222,6 +237,7 @@ def run_backtest(
         net=net,
         costs=cost,
         cost_parts=parts,
+        carry=carry,
         turnover=turnover,
         weights=targets,
         held=held,
@@ -235,6 +251,26 @@ def run_backtest(
             "end": str(panel.index[-1]) if len(panel) else None,
         },
     )
+
+
+def funding_pnl(held: pd.DataFrame, funding_rate: pd.DataFrame) -> pd.Series:
+    """Per-bar funding flow on a held perpetual book, as a fraction of equity.
+
+    The venue's sign convention: a **positive** rate is paid by longs to
+    shorts, so a long weight loses it and a short weight receives it —
+
+        pnl_t = − Σ_s  w_{s,t} · f_{s,t}
+
+    `funding_rate` is the rate settled over the bar the position was held
+    for. On daily bars that is the day's three settlements summed
+    (`qr.data.funding.daily_funding`), which is complete by 16:00 UTC and so
+    is known before the bar closes; on 8-hour bars it is the single
+    settlement. A bar with no published rate settles nothing, which is the
+    right reading of a bucket that is silent rather than an assumption that
+    it was zero.
+    """
+    rate = funding_rate.reindex_like(held).fillna(0.0)
+    return -(held * rate).sum(axis=1).rename("carry")
 
 
 def volume_adv(panel: Panel, lookback: int = 30) -> pd.DataFrame | None:

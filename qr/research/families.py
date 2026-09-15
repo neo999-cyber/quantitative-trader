@@ -240,6 +240,8 @@ def run_family(
     calendar: str = "continuous",
     upto: int = 11,
     stop_on_fail: bool = True,
+    benchmark: str = "buyhold",
+    risk_free=None,
 ) -> FamilyRun:
     """Sweep one family's registered grid and run it through the gates."""
     costs = costs or CostModel.trial()
@@ -276,6 +278,8 @@ def run_family(
         vol_preserving_permutations=vol_preserving_permutations,
         equity=equity,
         calendar=calendar,
+        benchmark=benchmark,
+        risk_free=risk_free,
     )
     return FamilyRun(spec, sweep, run_gates(context, upto=upto, stop_on_fail=stop_on_fail, progress=progress), best)
 

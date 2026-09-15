@@ -172,3 +172,54 @@ def buy_and_hold_benchmark(
     return run_backtest(
         panel, BuyAndHold(), costs or CostModel.trial(), universe, **kwargs
     ).net.rename("buy_and_hold")
+
+
+def cash_benchmark(
+    index: pd.DatetimeIndex,
+    periods_per_year: float,
+    risk_free: "pd.Series | float | None" = None,
+) -> pd.Series:
+    """The benchmark for a book that holds nothing the market would: cash.
+
+    Buy-and-hold is the right null for a long-only spot book, because the
+    question there is whether timing adds anything to owning the coins. It is
+    the wrong null for a dollar-neutral, beta-neutral or carry book: such a
+    book is not a subset of the market's exposure, and asking it to beat a
+    rising market on risk-adjusted return is asking a different question from
+    the one its mechanism makes. Programme 1 asked that question of every
+    family it ran and got the answer the construction guaranteed
+    (`docs/19_PROGRAMME_2.md`, §1). For those books the comparator is the
+    risk-free rate, compounded per bar.
+
+    `risk_free` is an annualised **decimal** rate: one number, or a dated
+    series (FRED DTB3 through `qr data riskfree-pull`) carried forward to each
+    bar. A series that starts after the panel does is extended backwards with
+    its first value, and that is stated rather than hidden: a benchmark is not
+    a signal, so the fill is not lookahead, but a rate assumed for a period
+    before it was observed is an assumption and the report says so through the
+    series' `attrs["backfilled_bars"]`.
+    """
+    if risk_free is None:
+        risk_free = 0.0
+    backfilled = 0
+    if np.isscalar(risk_free):
+        annual = pd.Series(float(risk_free), index=index)
+    else:
+        series = pd.Series(risk_free).dropna().sort_index()
+        if series.empty:
+            raise ValueError("the risk-free series is empty")
+        stamps = pd.DatetimeIndex(series.index)
+        if stamps.tz is None and index.tz is not None:
+            stamps = stamps.tz_localize(index.tz)
+        elif stamps.tz is not None and index.tz is None:
+            stamps = stamps.tz_convert("UTC").tz_localize(None)
+        elif stamps.tz is not None and index.tz is not None:
+            stamps = stamps.tz_convert(index.tz)
+        series.index = stamps
+        aligned = series.reindex(index.union(stamps)).sort_index().ffill().reindex(index)
+        backfilled = int(aligned.isna().sum())
+        annual = aligned.bfill()
+    per_bar = (1.0 + annual.astype(float)) ** (1.0 / float(periods_per_year)) - 1.0
+    out = per_bar.rename("cash")
+    out.attrs["backfilled_bars"] = backfilled
+    return out

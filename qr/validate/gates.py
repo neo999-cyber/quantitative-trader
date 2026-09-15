@@ -47,7 +47,7 @@ from qr.validate.permutation import (
     shuffled_ticker_test,
 )
 from qr.data.sandbox import sandbox_side
-from qr.validate.spa import buy_and_hold_benchmark, superior_predictive_ability
+from qr.validate.spa import buy_and_hold_benchmark, cash_benchmark, superior_predictive_ability
 from qr.portfolio import sizing
 from qr.validate import forward
 from qr.validate.trial_log import TrialLog, content_hash
@@ -188,6 +188,23 @@ class GateContext:
     #: against a 365-day calendar reports one "gap" for every weekend it ever
     #: had.
     calendar: str = "continuous"
+    #: What gate 5 asks the best variant to beat, once the search is paid for.
+    #: "buyhold" — equal-weight the same universe, costed with the same model
+    #: — is the right null for a long-only spot book: the question is whether
+    #: timing adds anything to owning the coins. It is the wrong null for a
+    #: book that is dollar-neutral, beta-neutral or a carry trade, because
+    #: such a book is not a subset of the market's exposure and a rising
+    #: market is not what it claims to beat. "cash" compounds `risk_free`
+    #: per bar instead. Programme 1 ran nine families against "buyhold"; the
+    #: construction guaranteed the answer (`docs/19_PROGRAMME_2.md`, §1).
+    #: The choice is part of the pre-registration, not a knob to turn after
+    #: seeing which comparator a family beats.
+    benchmark: str = "buyhold"
+    #: The annualised **decimal** risk-free rate the "cash" benchmark
+    #: compounds at: one number, or a dated series (FRED DTB3 via
+    #: `qr data riskfree-pull`). None means zero, which is the pessimistic
+    #: direction for the strategy only when rates are negative.
+    risk_free: "pd.Series | float | None" = None
     seed: int = 0
 
     @property
@@ -621,6 +638,22 @@ def gate_4_deflation(ctx: GateContext) -> GateResult:
     )
 
 
+BENCHMARKS = ("buyhold", "cash")
+
+
+def benchmark_series(ctx: GateContext) -> pd.Series:
+    """The comparator gate 5 tests against, chosen by `ctx.benchmark`.
+
+    Both are costed or compounded on the panel's own index so that SPA
+    aligns them with the variants without dropping bars.
+    """
+    if ctx.benchmark == "buyhold":
+        return buy_and_hold_benchmark(ctx.panel, ctx.universe, ctx.costs, ctx.equity)
+    if ctx.benchmark == "cash":
+        return cash_benchmark(ctx.panel.index, ctx.periods_per_year, ctx.risk_free)
+    raise ValueError(f"unknown benchmark {ctx.benchmark!r}; known: {', '.join(BENCHMARKS)}")
+
+
 def gate_5_selection(ctx: GateContext) -> GateResult:
     """PBO over the whole variant matrix, plus IS/OOS degradation."""
     if ctx.sweep is None or len(ctx.sweep) < 2:
@@ -642,8 +675,9 @@ def gate_5_selection(ctx: GateContext) -> GateResult:
     # market has a low PBO — the same variant does win every time — and nothing
     # worth trading. Only SPA says so.
     spa_verdict = None
+    stats["benchmark"] = ctx.benchmark
     try:
-        benchmark = buy_and_hold_benchmark(ctx.panel, ctx.universe, ctx.costs, ctx.equity)
+        benchmark = benchmark_series(ctx)
         spa_result = superior_predictive_ability(
             matrix, benchmark, ctx.periods_per_year, reps=ctx.spa_reps, seed=ctx.seed
         )
@@ -655,6 +689,20 @@ def gate_5_selection(ctx: GateContext) -> GateResult:
         ctx.thresholds.fail_pbo, ctx.thresholds.max_pbo, ctx.thresholds.max_prob_oos_loss
     )
     detail = f"PBO = {result.pbo:.2f} over {result.n_splits} splits of {len(ctx.sweep)} variants"
+    if spa_verdict is None and "spa_error" in stats:
+        # Half the gate did not run. PBO alone cannot pass a family: a set of
+        # variants that never took a position has a PBO of zero — the same
+        # variant "wins" every split — and no return to speak of. Found by
+        # the Programme 2 control (a flat book against cash) on 2026-09-15;
+        # before this, the report read PASS with the error tucked in stats.
+        never_traded = "non-zero variance" in stats["spa_error"]
+        verdict = FAIL if never_traded else (WARN if verdict == PASS else verdict)
+        detail += (
+            "; SPA could not run — no variant ever took a position"
+            if never_traded
+            else f"; SPA could not run ({stats['spa_error']}), so this gate cannot pass"
+        )
+        return GateResult(5, "selection overfitting", verdict, detail, stats)
     if verdict == FAIL:
         detail += (
             f"; the in-sample winner loses out of sample {result.prob_oos_loss:.0%} of the time"
@@ -667,10 +715,15 @@ def gate_5_selection(ctx: GateContext) -> GateResult:
 
     if spa_verdict is not None:
         p = stats["spa_p_consistent"]
-        detail += f"; SPA p = {p:.3f} vs buy-and-hold"
+        against = "cash" if ctx.benchmark == "cash" else "buy-and-hold"
+        detail += f"; SPA p = {p:.3f} vs {against}"
         if spa_verdict == FAIL:
             verdict = FAIL
-            detail += " — no variant beats simply holding the universe"
+            detail += (
+                " — no variant beats simply holding cash"
+                if ctx.benchmark == "cash"
+                else " — no variant beats simply holding the universe"
+            )
         elif spa_verdict == WARN and verdict == PASS:
             verdict = WARN
         survivors = int(stats.get("stepm_survivors", 0))

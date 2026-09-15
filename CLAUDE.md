@@ -1,7 +1,7 @@
 # quantitative-trader — context for Claude Code sessions
 
 Read these first, in order:
-0. `docs/18_THE_VERDICT.md` — **start here.** One page: what was asked, what was found, what to do about it. The research is finished; nothing below is a live task. Then `docs/17` for the one thing still running, `docs/16` for the sizing review, and `docs/10_NEXT.md` / `docs/11`–`15` for the workings.
+0. `docs/18_THE_VERDICT.md` — **start here.** One page: what was asked, what was found, what to do about it. The research is finished; nothing below is a live task. Then `docs/19_HANDOVER.md` — the clinical version for an outside reader: failure root-cause analysis, what a successor must not redo, and what a serious attempt would require. Then `docs/17` for the one thing still running, `docs/16` for the sizing review, and `docs/10_NEXT.md` / `docs/11`–`15` for the workings.
 1. `docs/01_ONE_WEEK_TRIAL.md` — how the trial was framed (a one-week, $0, crypto-spot trial judged by validation gates, not P&L). **Built and run; the verdict is `docs/06` for crypto and `docs/08` for ETFs. Do not start at Day 1.**
 2. `docs/PLAN.md` — the full platform plan (7 layers, data tiers, the 11-gate validation engine, roadmap).
 3. `docs/00_STATE_OF_THE_REPO.md` — honest inventory of what exists (`centaur/`: a discretionary swing-trading assistant, 55 tests, never run on live data).

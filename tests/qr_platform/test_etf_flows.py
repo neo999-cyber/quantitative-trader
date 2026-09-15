@@ -303,3 +303,43 @@ def test_the_launchd_agent_repeats_rather_than_firing_once_a_day(tmp_path, capsy
     assert "StartCalendarInterval" not in plist, "a daily alarm is the thing being avoided"
     assert "flows-collect" in plist
     assert str(tmp_path / "lake") in plist, "the agent must know where the lake is"
+
+
+def test_the_standalone_collector_agrees_with_the_package():
+    """The duplication in `scripts/collect_flows_standalone.py`, held in check.
+
+    That file exists because the collector has to live on an always-on box, and
+    installing `qr` there means pandas, duckdb and vectorbt to run a job whose
+    real dependencies are `urllib` and `json`. The cost is a second copy of the
+    parser, and the risk is that the two quietly diverge and the dataset forks.
+
+    So both parse the same fixture and the rows are compared field by field.
+    Timestamps are dropped: they are generated at call time and are the one
+    field that must differ.
+    """
+    import importlib.util
+    from pathlib import Path
+
+    spec = importlib.util.spec_from_file_location(
+        "collect_flows_standalone",
+        Path(__file__).resolve().parents[2] / "scripts" / "collect_flows_standalone.py",
+    )
+    standalone = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(standalone)
+
+    body = screener()
+    for record in body.values():
+        record.pop("sharesOutstanding", None)  # the shape the live site returns
+
+    package = {
+        c.ticker: {k: v for k, v in c.as_dict().items() if k != "observed_utc"}
+        for c in etf_flows.parse_ishares(body)
+    }
+    alone = {
+        r["ticker"]: {k: v for k, v in r.items() if k != "observed_utc"}
+        for r in standalone.parse(body)
+    }
+
+    assert alone == package, "the standalone collector and the package have diverged"
+    assert standalone.TICKERS == etf_flows.ISHARES_TICKERS
+    assert standalone.SCREENER == etf_flows.ISHARES_SCREENER

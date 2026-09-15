@@ -163,21 +163,47 @@ time. `already_recorded_today()` is checked *before* the request, so
 twenty-three of twenty-four hourly attempts cost one file read. `--force`
 overrides it, because a second reading in a day is a fact about the day.
 
-### On the server, which is where it belongs
+### On the server, which is where it belongs — the standalone collector
 
-The Hetzner box is always on, which is the whole argument:
+`scripts/collect_flows_standalone.py` is the file to put there. It uses nothing
+outside the standard library, so the server needs no virtualenv, no `pip
+install`, and cannot have its other projects disturbed by this one. Installing
+`qr` there would mean pandas, duckdb, statsmodels and vectorbt to run a job
+whose real dependencies are `urllib` and `json`.
 
-    */30 9-23 * * 1-5  cd ~/quantitative-trader && .venv/bin/qr data flows-collect >> ~/flows.log 2>&1
+The cost is a second copy of the parser, and it is paid for with a test: both
+parsers run over the same fixture and the rows are compared field by field, so
+a divergence fails `pytest` rather than quietly forking the dataset. The output
+is byte-compatible with `qr data flows-collect`, so the file copies back and
+`etf_flows.load()` reads it with nothing in between.
 
-Install it without an editor:
+One paste, assuming the repository is not on the server:
 
-    (crontab -l 2>/dev/null; echo '*/30 9-23 * * 1-5 cd ~/quantitative-trader && .venv/bin/qr data flows-collect >> ~/flows.log 2>&1') | crontab -
+    mkdir -p ~/flows && cd ~/flows
+    curl -fsSLO https://raw.githubusercontent.com/neo999-cyber/quantitative-trader/claude/funny-faraday-nizzck/scripts/collect_flows_standalone.py
+    python3 collect_flows_standalone.py --out ~/flows/etf_shares_outstanding.jsonl
+    (crontab -l 2>/dev/null; echo '*/30 9-23 * * 1-5 /usr/bin/python3 ~/flows/collect_flows_standalone.py --out ~/flows/etf_shares_outstanding.jsonl --quiet >> ~/flows/collect.log 2>&1') | crontab -
     crontab -l
 
-Every half hour on weekdays; the first successful one each day records and the
-rest exit immediately.
+The third line is the test: it either prints `recorded 7 funds` or fails with
+the reason. `crontab -l` echoing the entry back is the confirmation that was
+missing the first time, when `crontab -e` opened an editor, the editor was
+quit, and nothing was saved.
 
-### On the laptop, if the server is not set up yet
+Bringing the record back to the laptop, whenever it is wanted:
+
+    rsync -av hetzner:~/flows/etf_shares_outstanding.jsonl ~/qr/lake/flows/
+
+#### If the repository is already on the server
+
+Then `qr data flows-collect` works there too and keeps everything in one place:
+
+    (crontab -l 2>/dev/null; echo '*/30 9-23 * * 1-5 cd ~/quantitative-trader && .venv/bin/qr data flows-collect >> ~/flows.log 2>&1') | crontab -
+
+Either way it runs every half hour on weekdays: the first attempt that succeeds
+records the day, and the rest exit on the date check without making a request.
+
+### If the laptop has to do it
 
 `cron` is the wrong tool on macOS — it does not catch up after sleep. `launchd`
 does: a `StartInterval` job runs at the next wake if its slot was missed.

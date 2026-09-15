@@ -9,7 +9,7 @@ on day one follow the plan.*
 
 | Decision | Choice | Consequence |
 |---|---|---|
-| Residence | **Dubai** | Alpaca for US equities (confirm by email); IBKR stays Pro; Bybit, Binance FZE and Hyperliquid for perps; Polymarket international open; Kalshi not |
+| Residence | **Dubai** | Alpaca for US equities — its About page (alpaca.markets/about-us, read 15 Sep 2026) lists the United Arab Emirates among the 40+ countries it operates in, so open the account directly; whether margin/shorting is offered to a non-US account shows in the application. IBKR stays Pro; Bybit, Binance FZE and Hyperliquid for perps; Polymarket international open; Kalshi not |
 | Data budget | **$0** | QuantConnect free tier, Databento's $125 credit, Binance Vision, FRED, FINRA, SEC, EDGAR. Reassess at week 9; the only foreseeable paid item is Alpaca's $99/mo full feed, and only at live time |
 | Funded evaluation | **None yet** | Buy the smallest HyroTrader tier only after a crypto family passes gates 0–9; one Topstep $50k Combine only after an intraday futures family does |
 
@@ -138,7 +138,7 @@ Current state: the connected IBKR account holds **$78.34 USD cash, no positions,
 | Resident of | US equities at $0 | Crypto perps | Prediction markets | Funded accounts |
 |---|---|---|---|---|
 | USA | IBKR Lite (US/SG only) or Alpaca | Binance/Bybit/Hyperliquid **blocked**; Coinbase US perps (verify) | Kalshi; Polymarket US (live since 2 Dec 2025, waitlist removed May 2026) | Topstep, Apex; HyroTrader (verify US) |
-| UAE / India / other non-EU | Alpaca (195+ countries; email support@alpaca.markets to confirm); IBKR Pro | Binance (verify futures enabled in-account), Bybit, Hyperliquid (no KYC, US+Ontario excluded) | Polymarket international | All |
+| UAE / India / other non-EU | Alpaca (195+ countries; the UAE is named on alpaca.markets/about-us); IBKR Pro | Binance (verify futures enabled in-account), Bybit, Hyperliquid (no KYC, US+Ontario excluded) | Polymarket international | All |
 | UK / EEA | Alpaca (EEA passported July 2026); IBKR Pro | Binance/Bybit futures restricted for retail; Hyperliquid open | Polymarket international (check country) | All |
 
 **D2. Capital path** — pick one to start; they stack later.
@@ -154,7 +154,7 @@ Current state: the connected IBKR account holds **$78.34 USD cash, no positions,
 
 ### 4.1 Accounts (all free to open)
 1. **QuantConnect** free plan — `quantconnect.com`. Confirms: unlimited minute/hour/daily backtests, 1 research (Jupyter) node, no live nodes, no data download. This is the research venue for Tracks 2 and 3 and for perps cross-checks.
-2. **Alpaca** paper account + live application — `alpaca.markets`. Confirm by email: country supported, margin/short availability for a non-US account, MOC/LOC live. Facts: $0 commission, fractional from $1, no minimum, all accounts open as margin accounts; `cls` time-in-force orders must be whole shares and submitted before 15:50 ET.
+2. **Alpaca** paper account + live application — `alpaca.markets`. The UAE is on Alpaca's own list of countries served; what the application will show is margin/short availability for a non-US account and MOC/LOC live. Facts: $0 commission, fractional from $1, no minimum, all accounts open as margin accounts; `cls` time-in-force orders must be whole shares and submitted before 15:50 ET.
 3. **Databento** — `databento.com`; $125 credit (6-month expiry). Reserve it for `imbalance` schema pulls (Track 2, E1).
 4. **Binance Futures / Bybit / Hyperliquid** (per D1). Hyperliquid needs only a wallet; fees 0.015% maker / 0.045% taker at base tier.
 5. **WorldQuant BRAIN** — `worldquantbrain.com` (free; consultant invitation at 10,000 points + Gold rank; quarterly payments, Master ≥$2,000/quarter, Grandmaster ≥$8,000/quarter as published).

@@ -196,8 +196,14 @@ def hold_between(
         if stop - start <= 1 or not np.any(base):
             continue
         # Cumulative growth of each asset since the rebalance bar. Row `start`
-        # itself is the freshly set book, so compounding begins at `start + 1`.
-        cumulative = np.cumprod(growth[start + 1 : stop], axis=0)
+        # is the freshly set book, held over bar `start`; the book held over
+        # bar `start + 1` is that one grown by bar `start`'s return, and so
+        # on — each row is grown by the bars it was held *through*, never by
+        # the bar it is held *over*. (Until 2026-09-15 this read
+        # `growth[start + 1 : stop]`, growing row t by row t's own return: a
+        # one-bar look-ahead worth about half the variance per bar to every
+        # scheduled book — every Programme 1 monthly and weekly family.)
+        cumulative = np.cumprod(growth[start : stop - 1], axis=0)
         grown = base * cumulative
         totals = np.abs(grown).sum(axis=1, keepdims=True)
         gross = np.abs(base).sum()

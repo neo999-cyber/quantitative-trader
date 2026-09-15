@@ -45,6 +45,7 @@ from typing import Iterable
 import pandas as pd
 
 from qr.data.funding import MARKET as FUNDING_MARKET
+from qr.execution.audit import redenomination_bars
 
 log = logging.getLogger(__name__)
 
@@ -66,6 +67,15 @@ def carry_frames(spot: pd.DataFrame, perp: pd.DataFrame, funding: pd.DataFrame |
     p = perp.reindex(index)
     ratio = s["close"] / p["close"]
     open_ratio = s["open"] / p["open"]
+    # A redenomination that reaches spot and perp on different days puts the
+    # ratio off by its factor for a few bars and then back. Those bars are
+    # not prices of the unit and are left empty, so the unit is not tradable
+    # on them (`Panel.tradable`) and a book is liquidated at its last real
+    # close rather than credited with a 1000x move. See `redenomination_bars`.
+    artefact = redenomination_bars(ratio)
+    if bool(artefact.any()):
+        ratio = ratio.where(~artefact)
+        open_ratio = open_ratio.where(~artefact)
     quote_volume = pd.concat([s["quote_volume"], p["quote_volume"]], axis=1).min(axis=1)
     # The unit's intraday extremes are not observed (the legs' highs and lows
     # need not coincide), so its high and low are the bracket of what *is*

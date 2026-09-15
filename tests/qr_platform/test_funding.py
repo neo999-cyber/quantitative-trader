@@ -81,7 +81,7 @@ H8 = 8 * 3_600_000
 def test_funding_parses_to_utc_and_keeps_the_rate():
     payload = zipped(funding_csv([(DAY, 0.0001), (DAY + H8, -0.0002)]))
     frame = parse_funding(payload, "BTCUSDT")
-    assert list(frame.columns) == ["funding_rate"]
+    assert list(frame.columns) == ["funding_rate", "funding_interval_hours"]  # the interval is kept since 2026-09-15
     assert frame.index.tz is not None
     assert frame["funding_rate"].tolist() == [0.0001, -0.0002]
 

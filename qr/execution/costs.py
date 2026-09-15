@@ -168,6 +168,18 @@ class CostModel:
     #: is a cash flow (perp) or merely a feature (spot). Funding is **not**
     #: charged by `charge()` — see the module docstring for why it is gross.
     funding: bool = False
+    #: Execution slippage beyond the quoted half-spread, in basis points per
+    #: side: what a payment-for-order-flow wholesaler's fill gives up against
+    #: the NBBO midpoint. Zero everywhere except `alpaca_zero`, where it is the
+    #: only execution cost a $0-commission broker has left. Reported in the
+    #: `spread` component: it is a spread cost by nature, and it stresses
+    #: with it.
+    slippage_bps: float = 0.0
+    #: Whether orders are placed in whole shares. True for a venue whose
+    #: on-close (`cls`) orders must be whole shares (Alpaca); the runner then
+    #: floors every held position to what the account can actually buy at
+    #: that bar's price, so a $250 slice of a $700 share is not held at all.
+    whole_shares: bool = False
     multiplier: float = 1.0
     name: str = "binance_spot_vip0_taker"
     verified_on: str = "unverified"
@@ -277,6 +289,44 @@ class CostModel:
         )
 
     @classmethod
+    def alpaca_zero(
+        cls,
+        half_spread_bps: float = 2.0,
+        slippage_bps: float = 1.0,
+        impact_coef: float = 1.0,
+        verified_on: str | None = None,
+    ) -> "CostModel":
+        """Alpaca for US equities at $0 commission (`docs/20`, §2 and §6).
+
+        No commission, no per-order floor, no per-share charge: the cost that
+        decided Programme 1's ETF families (42 bps a leg on an $83 order) is
+        not there. What remains is the half-spread, 1 bp of PFOF slippage
+        against the midpoint, and impact. The 2 bps half-spread is a stated
+        placeholder for large-cap US stocks until it is measured from quotes
+        (the plan's "half-spread from quotes"); it is pessimistic for SPY and
+        the megacaps and optimistic below the top 500, and every family that
+        runs on it says so in its pre-registration. Whole shares for on-close
+        orders (`cls`, whole shares, before 15:50 ET per Alpaca's order docs,
+        read 2026-09-15); fractional is allowed for other orders but the
+        model takes the whole-share constraint as binding because the stock
+        families trade at the close. Alpaca's fee schedule ($0) and the
+        `cls` rule were read on 2026-09-15; the slippage figure is the
+        plan's, not measured — hence `verified_on` says so.
+        """
+        return cls(
+            fee_bps=0.0,
+            half_spread_bps=half_spread_bps,
+            slippage_bps=slippage_bps,
+            per_share_usd=0.0,
+            min_commission_usd=0.0,
+            max_commission_pct=0.0,
+            impact_coef=impact_coef,
+            whole_shares=True,
+            name="alpaca_us_equity_zero_commission",
+            verified_on=verified_on or "2026-09-15 (commission and cls rule; spread and slippage unmeasured)",
+        )
+
+    @classmethod
     def etf_trial(cls, equity: float = ETF_TRIAL_EQUITY) -> "CostModel":
         """The ETF trial's frozen cost model. Every gate is judged against this.
 
@@ -379,9 +429,9 @@ class CostModel:
 
     @property
     def linear_bps(self) -> float:
-        """Everything that does not depend on size: fee plus the half-spread."""
+        """Everything that does not depend on size: fee, half-spread, slippage."""
         fee = self.fee_bps  # taker; a maker path would net the spread back
-        return self.multiplier * (fee + (0.0 if self.use_maker else self.half_spread_bps))
+        return self.multiplier * (fee + (0.0 if self.use_maker else self.half_spread_bps) + self.slippage_bps)
 
     def stressed(self, multiplier: float) -> "CostModel":
         """Gate 2 asks whether the edge survives 2x costs. This is that knob."""
@@ -535,13 +585,15 @@ class CostModel:
         zero = pd.Series(0.0, index=index)
         traded = turnover.sum(axis=1)
         if self.per_share_usd > 0 and prices is not None and equity is not None:
-            spread = traded * self.multiplier * self.half_spread_bps * BPS
+            spread = traded * self.multiplier * (self.half_spread_bps + self.slippage_bps) * BPS
             commission = (turnover * self.commission_bps(turnover, equity, prices)).sum(axis=1) * BPS
         else:
             # A proportional venue: `linear_bps` is the fee and the half-spread
             # together, and they are separable here only because both are rates.
             fee_bps = self.multiplier * self.fee_bps
-            spread_bps = 0.0 if self.use_maker else self.multiplier * self.half_spread_bps
+            spread_bps = (0.0 if self.use_maker else self.multiplier * self.half_spread_bps) + (
+                self.multiplier * self.slippage_bps
+            )
             commission = traded * fee_bps * BPS
             spread = traded * spread_bps * BPS
 

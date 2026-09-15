@@ -223,3 +223,40 @@ def cash_benchmark(
     out = per_bar.rename("cash")
     out.attrs["backfilled_bars"] = backfilled
     return out
+
+
+def exposure_benchmark(
+    panel,
+    universe: pd.DataFrame | None,
+    costs,
+    equity: float | None,
+    exposure: float,
+    periods_per_year: float,
+    risk_free: "pd.Series | float | None" = None,
+) -> pd.Series:
+    """The comparator for a long-only stock-selection book: the market at the
+    book's own size, the rest in cash.
+
+    A long-only book that averages 40% gross is not a subset of a fully
+    invested buy-and-hold, and it is not cash either. Against buy-and-hold it
+    loses on beta it never held; against cash it wins on beta alone in a
+    rising market, which is what a book benchmarked to cash would have passed
+    as skill (the review in `docs/20_PROGRAMME_2.md` took this comparator
+    from the independent plan for exactly that reason). So the null is the
+    costed equal-weight universe scaled to `exposure` — the strategy's mean
+    gross exposure — plus `1 - exposure` compounding at the risk-free rate,
+    bar by bar. What is left for the strategy to claim is selection.
+
+    `exposure` is read off the book that was actually held, not a target,
+    so a strategy that sits in cash for half the sample is compared with a
+    benchmark that does too.
+    """
+    exposure = float(exposure)
+    if not np.isfinite(exposure) or exposure < 0.0:
+        raise ValueError(f"exposure must be a non-negative number, not {exposure!r}")
+    market = buy_and_hold_benchmark(panel, universe, costs, equity)
+    cash = cash_benchmark(panel.index, periods_per_year, risk_free)
+    out = (exposure * market + (1.0 - exposure) * cash).rename("exposure_matched")
+    out.attrs["exposure"] = exposure
+    out.attrs["backfilled_bars"] = cash.attrs.get("backfilled_bars", 0)
+    return out

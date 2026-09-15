@@ -176,14 +176,18 @@ def parse_funding(payload: bytes, symbol: str | None = None) -> pd.DataFrame:
     # positionally, and since the source index is 0..n and the target is
     # timestamps, every value silently becomes NaN. A test caught it; the
     # parser would otherwise have produced a column of nothing.
-    out = pd.DataFrame(
-        {
-            "funding_rate": pd.to_numeric(frame["last_funding_rate"], errors="coerce")
-            .astype(float)
-            .to_numpy()
-        },
-        index=_timestamps(frame["calc_time"], "fundingRate"),
-    )
+    columns = {
+        "funding_rate": pd.to_numeric(frame["last_funding_rate"], errors="coerce").astype(float).to_numpy()
+    }
+    # The settlement interval, where the bucket states it (8 hours for most
+    # of the archive; several symbols moved to 4 or 1). Kept so that a change
+    # is a recorded fact: `daily_funding` sums whatever settled, and the
+    # audit case for an interval change checks the sum, not the count.
+    if "funding_interval_hours" in frame.columns:
+        columns["funding_interval_hours"] = (
+            pd.to_numeric(frame["funding_interval_hours"], errors="coerce").astype(float).to_numpy()
+        )
+    out = pd.DataFrame(columns, index=_timestamps(frame["calc_time"], "fundingRate"))
     out.index.name = "calc_time"
     if out["funding_rate"].isna().any():
         raise BucketError("fundingRate file contains a non-numeric rate")

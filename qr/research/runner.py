@@ -5,9 +5,11 @@ The accounting, in order, for each bar *t*:
 1. The book held over bar *t* is the target set at *t−1*. That one shift is the
    only place a strategy's signal meets the future, and it lives here so it
    cannot be got wrong per strategy.
-2. Positions drift with prices: a winner's weight grows over the bar. Turnover
-   is measured against the **drifted** book, not the previous target, otherwise
-   a buy-and-hold strategy appears to trade every bar.
+2. Positions drift with prices: a winner's weight grows over the bar it was
+   held through. Turnover at *t* is measured against the book held over *t−1*
+   **drifted by bar *t−1*'s move**, not the previous target, otherwise a
+   buy-and-hold strategy appears to trade every bar — and not by bar *t*'s
+   move, which the book held over *t* has not seen.
 3. Costs are charged on that turnover, at the bar the trade happens.
 
 `gross` is before costs, `net` after — gate 2 compares the two, so both are
@@ -190,6 +192,13 @@ def run_backtest(
     if marks is not None and not bool(marks.all()):
         held = hold_between(held, returns, marks)
     held = held.where(panel.tradable(), 0.0)
+    if costs.whole_shares:
+        # A venue that fills whole shares holds what the account can buy at
+        # the price it traded at, which is the previous bar's close for a
+        # book set at t-1. The unbuyable remainder is cash, not a cost.
+        traded_at = panel.get("close_unadjusted")
+        traded_at = (traded_at if traded_at is not None else panel.close).shift(lag)
+        held = whole_share_weights(held, traded_at, equity)
     gross = (held * returns.fillna(0.0)).sum(axis=1).rename("gross")
     # Funding is a cash flow on what is held, and it can be income, so it is
     # part of the gross return rather than a cost: a carry family earns
@@ -202,7 +211,12 @@ def run_backtest(
         carry = funding_pnl(held, funding)
         gross = (gross + carry).rename("gross")
 
-    drifted = drift(held.shift(1).fillna(0.0), returns)
+    # The book the trade at the close of t-1 starts from: what was held over
+    # bar t-1, grown by bar t-1's move. (Until 2026-09-15 it was grown by bar
+    # t's move — the bar the *new* book is held over — which put turnover
+    # one bar out of phase with `hold_between` once that was corrected, and
+    # matched it only because both looked one bar ahead.)
+    drifted = drift(held.shift(1).fillna(0.0), returns.shift(1))
     turnover_matrix = (held - drifted).abs()
     turnover = turnover_matrix.sum(axis=1).rename("turnover")
 
@@ -251,6 +265,20 @@ def run_backtest(
             "end": str(panel.index[-1]) if len(panel) else None,
         },
     )
+
+
+def whole_share_weights(held: pd.DataFrame, prices: pd.DataFrame, equity: float) -> pd.DataFrame:
+    """Floor each position to the whole shares `equity` buys at `prices`.
+
+    A 25% slice of a $1,000 account is $250; of a $700 share that is 0.36
+    shares and no on-close order can be placed, so the position is zero. Of a
+    $60 share it is 4 shares, $240, 24%. Sign is kept for a short.
+    """
+    price = prices.reindex_like(held)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        shares = (held.abs() * float(equity)).div(price.where(price > 0))
+    shares = np.floor(shares.fillna(0.0))
+    return (shares * price.fillna(0.0) / float(equity)) * np.sign(held)
 
 
 def funding_pnl(held: pd.DataFrame, funding_rate: pd.DataFrame) -> pd.Series:

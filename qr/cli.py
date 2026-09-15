@@ -441,11 +441,12 @@ def cmd_data_flows_collect(args) -> int:
 def _add_benchmark_args(parser) -> None:
     parser.add_argument(
         "--benchmark",
-        choices=("buyhold", "cash"),
+        choices=("buyhold", "cash", "exposure"),
         default="buyhold",
         help="what gate 5 asks the best variant to beat: the costed equal-weight universe "
-        "(long-only books) or the risk-free rate (market-neutral and carry books). "
-        "Part of the pre-registration.",
+        "(long-only timing books), the risk-free rate (market-neutral and carry books), or "
+        "the universe scaled to the book's own mean gross exposure with the rest in cash "
+        "(long-only stock selection). Part of the pre-registration.",
     )
     parser.add_argument(
         "--risk-free",

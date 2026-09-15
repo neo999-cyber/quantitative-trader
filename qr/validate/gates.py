@@ -47,7 +47,12 @@ from qr.validate.permutation import (
     shuffled_ticker_test,
 )
 from qr.data.sandbox import sandbox_side
-from qr.validate.spa import buy_and_hold_benchmark, cash_benchmark, superior_predictive_ability
+from qr.validate.spa import (
+    buy_and_hold_benchmark,
+    cash_benchmark,
+    exposure_benchmark,
+    superior_predictive_ability,
+)
 from qr.portfolio import sizing
 from qr.validate import forward
 from qr.validate.trial_log import TrialLog, content_hash
@@ -198,7 +203,10 @@ class GateContext:
     #: per bar instead. Programme 1 ran nine families against "buyhold"; the
     #: construction guaranteed the answer (`docs/20_PROGRAMME_2.md`, §1).
     #: The choice is part of the pre-registration, not a knob to turn after
-    #: seeing which comparator a family beats.
+    #: seeing which comparator a family beats. "exposure" is for a long-only
+    #: stock-selection book: buy-and-hold of the eligible universe scaled to
+    #: the best variant's mean gross exposure, the remainder in cash, so
+    #: beta at reduced size cannot pass as selection.
     benchmark: str = "buyhold"
     #: The annualised **decimal** risk-free rate the "cash" benchmark
     #: compounds at: one number, or a dated series (FRED DTB3 via
@@ -638,7 +646,13 @@ def gate_4_deflation(ctx: GateContext) -> GateResult:
     )
 
 
-BENCHMARKS = ("buyhold", "cash")
+BENCHMARKS = ("buyhold", "cash", "exposure")
+
+
+def gross_exposure(result) -> float:
+    """Mean gross exposure of the book that was held: what "exposure" scales to."""
+    held = result.held.abs().sum(axis=1)
+    return float(held.mean()) if len(held) else 0.0
 
 
 def benchmark_series(ctx: GateContext) -> pd.Series:
@@ -651,6 +665,16 @@ def benchmark_series(ctx: GateContext) -> pd.Series:
         return buy_and_hold_benchmark(ctx.panel, ctx.universe, ctx.costs, ctx.equity)
     if ctx.benchmark == "cash":
         return cash_benchmark(ctx.panel.index, ctx.periods_per_year, ctx.risk_free)
+    if ctx.benchmark == "exposure":
+        return exposure_benchmark(
+            ctx.panel,
+            ctx.universe,
+            ctx.costs,
+            ctx.equity,
+            gross_exposure(ctx.result),
+            ctx.periods_per_year,
+            ctx.risk_free,
+        )
     raise ValueError(f"unknown benchmark {ctx.benchmark!r}; known: {', '.join(BENCHMARKS)}")
 
 
@@ -678,6 +702,8 @@ def gate_5_selection(ctx: GateContext) -> GateResult:
     stats["benchmark"] = ctx.benchmark
     try:
         benchmark = benchmark_series(ctx)
+        if ctx.benchmark == "exposure":
+            stats["benchmark_exposure"] = float(benchmark.attrs["exposure"])
         spa_result = superior_predictive_ability(
             matrix, benchmark, ctx.periods_per_year, reps=ctx.spa_reps, seed=ctx.seed
         )
@@ -715,15 +741,17 @@ def gate_5_selection(ctx: GateContext) -> GateResult:
 
     if spa_verdict is not None:
         p = stats["spa_p_consistent"]
-        against = "cash" if ctx.benchmark == "cash" else "buy-and-hold"
+        against = {
+            "cash": "cash",
+            "exposure": f"exposure-matched buy-and-hold ({stats.get('benchmark_exposure', float('nan')):.0%} invested)",
+        }.get(ctx.benchmark, "buy-and-hold")
         detail += f"; SPA p = {p:.3f} vs {against}"
         if spa_verdict == FAIL:
             verdict = FAIL
-            detail += (
-                " — no variant beats simply holding cash"
-                if ctx.benchmark == "cash"
-                else " — no variant beats simply holding the universe"
-            )
+            detail += {
+                "cash": " — no variant beats simply holding cash",
+                "exposure": " — no variant beats holding the universe at its own size",
+            }.get(ctx.benchmark, " — no variant beats simply holding the universe")
         elif spa_verdict == WARN and verdict == PASS:
             verdict = WARN
         survivors = int(stats.get("stepm_survivors", 0))

@@ -283,3 +283,24 @@ def test_the_drift_of_a_book_conserves_its_own_value(market):
     drifted = drift(weights, market.returns())
     live = drifted[drifted.abs().sum(axis=1) > 0]
     assert np.allclose(live.sum(axis=1), 1.0, atol=1e-12)
+
+
+def test_the_drifted_book_is_grown_by_the_bars_it_was_held_through_not_the_one_it_is_held_over():
+    """Hand-computed. A 50/50 weekly book; A jumps +20% on the third bar of
+    a block. The book held *over* the jump bar cannot know about the jump, so
+    it is still 50/50 and earns exactly 0.5 x 20% = 10%. The bar after, the
+    drifted book is 0.6 / 1.1 = 54.55% A. Before 2026-09-15 `hold_between`
+    grew row t by row t's own return, so the book held over the jump bar was
+    already 54.55% A and earned 10.91% — a one-bar look-ahead worth about
+    half the variance per bar to every book that did not trade daily.
+    """
+    n = 12
+    a = [100.0] * 9 + [120.0] * 3  # +20% on bar 9 (2024-01-10, inside the block that starts on the 8th)
+    panel = panel_from({"A": a, "B": [100.0] * n}, start="2024-01-01")
+    result = run_backtest(panel, BuyAndHold(rebalance_on="W"), CostModel(fee_bps=0.0, half_spread_bps=0.0))
+    jump = panel.index[9]
+    after = panel.index[10]
+    assert result.held.loc[jump].tolist() == pytest.approx([0.5, 0.5])
+    assert float(result.gross.loc[jump]) == pytest.approx(0.10)
+    assert result.held.loc[after].tolist() == pytest.approx([0.6 / 1.1, 0.5 / 1.1])
+    assert float(result.gross.loc[after]) == 0.0

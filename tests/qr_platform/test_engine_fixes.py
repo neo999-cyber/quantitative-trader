@@ -741,8 +741,12 @@ def _oracle_held(panel, target, freq):
     values = np.zeros_like(target.to_numpy())
     prev = np.zeros(target.shape[1])
     for i in range(len(target)):
-        port = 1.0 + float((prev * rr[i]).sum())
-        drifted = (prev * (1.0 + rr[i]) / port) if port else prev * (1.0 + rr[i])
+        # The book held over bar i is yesterday's book grown by *yesterday's*
+        # move; bar i's move has not happened when it is set. (Until
+        # 2026-09-15 this grew it by rr[i], a one-bar look-ahead.)
+        grow = rr[i - 1] if i > 0 else np.zeros(target.shape[1])
+        port = 1.0 + float((prev * grow).sum())
+        drifted = (prev * (1.0 + grow) / port) if port else prev * (1.0 + grow)
         values[i] = target.to_numpy()[i] if marks[i] else drifted
         prev = values[i]
     return pd.DataFrame(values, index=target.index, columns=target.columns)
@@ -782,8 +786,9 @@ def test_the_engine_agrees_with_a_loop_that_is_the_definition():
 
     target = BuyAndHold().target_weights(panel).shift(1).fillna(0.0)
     held = _oracle_held(panel, target, "MS")
-    expected = (held - drift(held.shift(1).fillna(0.0), panel.returns())).abs().sum().sum()
+    expected = (held - drift(held.shift(1).fillna(0.0), panel.returns().shift(1))).abs().sum().sum()
     assert np.isclose(float(result.turnover.sum()), float(expected), rtol=1e-6)
+    assert np.allclose(result.held.to_numpy(), held.to_numpy(), atol=1e-12)
 
 
 def test_a_strategy_that_trades_every_bar_is_untouched_by_the_schedule():

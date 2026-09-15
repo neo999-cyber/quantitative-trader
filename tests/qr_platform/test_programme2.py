@@ -22,7 +22,7 @@ from qr.research.sweep import run_sweep
 from qr.strategies.library import TSMOM, BuyAndHold
 from qr.validate.gates import BENCHMARKS, GateContext, benchmark_series, gate_5_selection
 from qr.validate.selftest import edge_world, noise_world
-from qr.validate.spa import cash_benchmark
+from qr.validate.spa import cash_benchmark, exposure_benchmark
 
 
 # ------------------------------------------------------------ cash benchmark
@@ -104,7 +104,7 @@ def test_an_unknown_benchmark_is_refused_not_defaulted(edge):
     ctx = _ctx(edge, benchmark="spy")
     with pytest.raises(ValueError, match="unknown benchmark"):
         benchmark_series(ctx)
-    assert BENCHMARKS == ("buyhold", "cash")
+    assert BENCHMARKS == ("buyhold", "cash", "exposure")
 
 
 def test_a_flat_strategy_cannot_beat_cash():
@@ -118,6 +118,56 @@ def test_a_flat_strategy_cannot_beat_cash():
     # the refusal rather than passing a book that never traded
     assert "spa_error" in result.stats
     assert result.verdict != "PASS"
+
+
+# ------------------------------------------------ exposure-matched benchmark
+
+
+def test_exposure_benchmark_is_buy_and_hold_scaled_to_the_books_exposure_plus_cash(edge):
+    """Hand-built: a book at 40% gross must be compared with 40% of the
+    universe and 60% in cash, bar by bar, not with the full market."""
+    free = CostModel(fee_bps=0.0, half_spread_bps=0.0)
+    full = run_backtest(edge, BuyAndHold(), free).net
+    cash = cash_benchmark(edge.index, 365.0, 0.05)
+    series = exposure_benchmark(edge, None, free, None, 0.4, 365.0, 0.05)
+    assert series.name == "exposure_matched"
+    assert series.attrs["exposure"] == pytest.approx(0.4)
+    expected = 0.4 * full + 0.6 * cash
+    assert np.allclose(series.to_numpy(), expected.to_numpy(), atol=1e-12)
+
+
+def test_gate_five_exposure_benchmark_reads_the_best_variants_gross_exposure(edge):
+    ctx = _ctx(edge, benchmark="exposure", risk_free=0.04)
+    series = benchmark_series(ctx)
+    gross = float(ctx.result.held.abs().sum(axis=1).mean())
+    assert 0.0 < gross <= 1.0
+    assert series.attrs["exposure"] == pytest.approx(gross)
+    result = gate_5_selection(ctx)
+    assert result.stats["benchmark"] == "exposure"
+    assert result.stats["benchmark_exposure"] == pytest.approx(gross)
+    assert "vs exposure-matched buy-and-hold" in result.detail
+
+
+def test_a_half_invested_index_tracker_does_not_beat_its_exposure_matched_benchmark():
+    """The control the comparator exists for: beta at half size is not skill.
+    Against plain cash it would pass in a rising market; against half the
+    market plus half cash it has nothing."""
+    from qr.validate.spa import superior_predictive_ability
+
+    # a rising market with no serial dependence, so rebalance frequency is noise
+    panel = noise_world(n_symbols=4, years=3, seed=5, vol=0.02, drift=0.001)
+    free = CostModel(fee_bps=0.0, half_spread_bps=0.0)
+    half = run_backtest(panel, BuyAndHold(gross=0.5, rebalance_on="W"), free).net  # drifts a little off the daily benchmark
+    matrix = pd.DataFrame({"half": half})
+    cash_p = superior_predictive_ability(
+        matrix, cash_benchmark(panel.index, 365.0, 0.0), 365.0, reps=100, seed=0
+    ).summary()["spa_p_consistent"]
+    matched = exposure_benchmark(panel, None, free, None, 0.5, 365.0, 0.0)
+    matched_p = superior_predictive_ability(matrix, matched, 365.0, reps=100, seed=0).summary()[
+        "spa_p_consistent"
+    ]
+    assert cash_p < 0.05  # beta passes as skill against cash in a rising world
+    assert matched_p > 0.05  # and is nothing against its own exposure
 
 
 # ------------------------------------------------------------- perp costs
@@ -237,3 +287,59 @@ def test_risk_free_round_trips_through_the_lake_and_feeds_the_benchmark(tmp_path
     annual = (1 + cash) ** 365 - 1
     assert annual.iloc[1] == pytest.approx(0.0395) and annual.iloc[3] == pytest.approx(0.0397)
     assert lake.manifest_hash()  # the pull is part of what a report is computed on
+
+
+# ---------------------------------------------------------- alpaca at $0
+
+
+def test_alpaca_zero_charges_no_commission_only_half_spread_and_pfof_slippage():
+    """Hand-computed. A $1,000 account rebalances 40% of itself: $400 traded.
+    At Alpaca that is $0 of commission, 2 bps of half-spread ($0.08) and
+    1 bp of PFOF slippage ($0.04): $0.12, or 1.2 bps of equity. The same
+    order at IBKR Tiered pays the $0.35 floor before anything else."""
+    model = CostModel.alpaca_zero()
+    assert model.fee_bps == 0.0 and model.per_share_usd == 0.0 and model.min_commission_usd == 0.0
+    assert model.slippage_bps == 1.0 and model.half_spread_bps == 2.0
+    assert model.linear_bps == 3.0
+    assert model.whole_shares is True
+    index = pd.date_range("2024-01-01", periods=2, freq="D", tz="UTC")
+    turnover = pd.DataFrame({"AAA": [0.0, 0.4]}, index=index)
+    prices = pd.DataFrame({"AAA": [50.0, 50.0]}, index=index)
+    drag = model.charge(turnover, equity=1_000.0, prices=prices)
+    assert float(drag.iloc[1]) == pytest.approx(0.00012)
+    assert float(drag.iloc[1]) * 1_000 == pytest.approx(0.12)
+    ibkr = CostModel.etf_trial().charge(turnover, equity=1_000.0, prices=prices)
+    assert float(ibkr.iloc[1]) * 1_000 >= 0.35
+
+
+def test_stressing_alpaca_zero_scales_the_slippage_with_the_spread():
+    model = CostModel.alpaca_zero().stressed(2.0)
+    assert model.linear_bps == 6.0
+
+
+def test_whole_shares_floor_each_position_to_what_the_account_can_buy():
+    """Hand-computed. $1,000, two names at 25% each: $250 of a $700 share is
+    0.36 shares — no `cls` order can be placed, so nothing is held; $250 of a
+    $60 share is 4.17 shares, so 4 are held ($240 = 24%)."""
+    from qr.research.runner import whole_share_weights
+
+    index = pd.date_range("2024-01-01", periods=1, freq="D", tz="UTC")
+    held = pd.DataFrame({"HI": [0.25], "LO": [0.25]}, index=index)
+    prices = pd.DataFrame({"HI": [700.0], "LO": [60.0]}, index=index)
+    out = whole_share_weights(held, prices, equity=1_000.0)
+    assert out["HI"].iloc[0] == 0.0
+    assert out["LO"].iloc[0] == pytest.approx(0.24)
+
+
+def test_the_runner_honours_whole_shares_when_the_cost_model_says_so():
+    from qr.validate.selftest import noise_world
+
+    panel = noise_world(n_symbols=3, years=1, seed=1)
+    # noise_world prices start at 100; a 30% weight of $1,000 is 3 shares, not 3.33
+    fractional = run_backtest(panel, BuyAndHold(gross=0.9), CostModel(fee_bps=0.0, half_spread_bps=0.0), equity=1_000.0)
+    whole = run_backtest(panel, BuyAndHold(gross=0.9), CostModel.alpaca_zero(), equity=1_000.0)
+    assert (whole.held.abs().sum(axis=1) <= fractional.held.abs().sum(axis=1) + 1e-12).all()
+    assert float(whole.held.abs().sum(axis=1).mean()) < float(fractional.held.abs().sum(axis=1).mean())
+    prices = panel.close.shift(1)  # the book held over t was bought at t-1's close
+    shares = (whole.held * 1_000.0 / prices).fillna(0.0)
+    assert np.allclose(shares.to_numpy(), np.round(shares.to_numpy()), atol=1e-9)

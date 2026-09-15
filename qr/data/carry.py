@@ -66,6 +66,7 @@ def carry_frames(spot: pd.DataFrame, perp: pd.DataFrame, funding: pd.DataFrame |
     p = perp.reindex(index)
     ratio = s["close"] / p["close"]
     open_ratio = s["open"] / p["open"]
+    quote_volume = pd.concat([s["quote_volume"], p["quote_volume"]], axis=1).min(axis=1)
     # The unit's intraday extremes are not observed (the legs' highs and lows
     # need not coincide), so its high and low are the bracket of what *is*
     # observed: its open and its close. Setting both to the close, as the
@@ -78,8 +79,13 @@ def carry_frames(spot: pd.DataFrame, perp: pd.DataFrame, funding: pd.DataFrame |
             "high": pd.concat([open_ratio, ratio], axis=1).max(axis=1),
             "low": pd.concat([open_ratio, ratio], axis=1).min(axis=1),
             "close": ratio,
-            "volume": pd.concat([s["volume"], p["volume"]], axis=1).min(axis=1),
-            "quote_volume": pd.concat([s["quote_volume"], p["quote_volume"]], axis=1).min(axis=1),
+            # Base volume is quote volume in the unit's own price space, so
+            # `quote_volume == volume x price` holds for the unit as it does
+            # for a leg. The first version copied the thinner leg's coin
+            # count, whose price space is the coin's, and the QA check that
+            # tests that identity failed every unit at gate 1 (2026-09-15).
+            "volume": quote_volume / ratio,
+            "quote_volume": quote_volume,
             "basis": p["close"] / s["close"] - 1.0,
             # the spot leg's own price, for a universe that filters on the coin's volatility
             "spot_close": s["close"],

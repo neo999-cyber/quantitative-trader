@@ -214,3 +214,74 @@ def test_a_unit_whose_open_differs_from_its_close_is_still_a_tradable_bar():
     assert (frame["low"] <= frame[["open", "close"]].min(axis=1)).all()
     panel = Panel.from_frames({"XUSDT": frame})
     assert panel.tradable().all().all()
+
+
+def test_a_units_volume_is_its_quote_volume_in_its_own_price_space(legs):
+    # Found at gate 1 on 2026-09-15: the QA identity quote == volume x price
+    # failed every unit because volume was the thinner leg's coin count.
+    from qr.data.qa import check_klines
+
+    spot, perp, funding = legs
+    frame = carry_frames(spot, perp, funding)
+    assert np.allclose(frame["quote_volume"], frame["volume"] * frame["close"])
+    assert (frame["quote_volume"] == 2e6).all()  # still the thinner leg
+    report = check_klines(frame, "XUSDT", "1d")
+    assert not [c.name for c in report.checks if c.verdict == "FAIL"]
+
+
+def test_a_permuted_carry_panel_keeps_its_funding_with_the_bars(legs):
+    # Found at gate 6 on 2026-09-15: permute_panel dropped every field
+    # outside OHLC and volume, so the permuted carry panel had no funding
+    # and FundingCarry.signal raised inside the permutation test.
+    from qr.validate.permutation import permute_panel
+
+    spot, perp, funding = legs
+    funding = funding.assign(funding_rate=[0.001, 0.002, 0.003, 0.004, 0.005, 0.006])
+    frame = carry_frames(spot, perp, funding)
+    panel = Panel.from_frames({"XUSDT": frame}, fields=list(frame.columns))
+    shuffled = permute_panel(panel, seed=3)
+    for name in ("perp_funding_rate", "funding_rate", "basis", "spot_close"):
+        assert name in shuffled.fields
+        # the same multiset of settlements, moved with their bars (first bar fixed)
+        assert sorted(shuffled[name]["XUSDT"].to_numpy()[1:]) == sorted(panel[name]["XUSDT"].to_numpy()[1:])
+    assert (shuffled["funding_rate"] == -shuffled["perp_funding_rate"]).all().all()
+    assert not (shuffled["perp_funding_rate"]["XUSDT"].to_numpy()[1:] == panel["perp_funding_rate"]["XUSDT"].to_numpy()[1:]).all()
+
+
+def test_a_permuted_panel_keeps_cross_symbol_correlation_across_staggered_listings():
+    # Found at gate 6 on 2026-09-15 on the carry panel: filtering one global
+    # order to each symbol's live bars only aligned symbols with identical
+    # windows, so a panel of staggered listings lost its cross-section and
+    # the null's book was better diversified than any real one.
+    from qr.validate.permutation import _live_order, permute_panel
+
+    rng = np.random.default_rng(0)
+    n = 600
+    index = pd.date_range("2022-01-01", periods=n, freq="D", tz="UTC")
+    common = rng.standard_normal(n)
+    frames = {}
+    for k, (sym, start) in enumerate([("AAA", 0), ("BBB", 150), ("CCC", 300)]):
+        r = 0.01 * (0.8 * common + 0.6 * rng.standard_normal(n))
+        close = 100 * np.cumprod(1 + r)
+        f = pd.DataFrame(
+            {"open": close, "high": close, "low": close, "close": close, "volume": 1.0, "quote_volume": 100.0},
+            index=index,
+        )
+        f.iloc[:start] = np.nan
+        frames[sym] = f
+    panel = Panel.from_frames(frames)
+    real = panel.close.pct_change().corr()
+    perm = permute_panel(panel, seed=7).close.pct_change().corr()
+    # Alignment survives on the bars where both source and destination are
+    # live: about three quarters of BBB's window against AAA, half of CCC's.
+    # Full preservation would need within-epoch shuffles, which is no null.
+    assert perm.loc["AAA", "BBB"] > 0.55 * real.loc["AAA", "BBB"]
+    assert perm.loc["AAA", "CCC"] > 0.35 * real.loc["AAA", "CCC"]
+    assert perm.loc["BBB", "CCC"] > 0.35 * real.loc["BBB", "CCC"]
+
+    order = rng.permutation(n - 1)
+    live = np.arange(150, n - 1)
+    out = _live_order(order, live)
+    assert sorted(out) == list(live)  # every live bar used once
+    agree = order[live] == out
+    assert agree.mean() > 0.6  # most destinations take their global source

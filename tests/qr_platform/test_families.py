@@ -247,11 +247,10 @@ def test_the_control_is_mostly_flat(panel, free):
 
 
 def test_every_trial_family_is_reachable_from_the_cli():
-    from qr.cli import FAMILIES
-    from qr.strategies import library
+    from qr.cli import FAMILIES, _family_class
 
-    for name, class_name in FAMILIES.items():
-        cls = getattr(library, class_name)
+    for name in FAMILIES:
+        cls = _family_class(name)
         assert cls.family == name or name == "buy_and_hold"
         assert cls().family == cls.family
 

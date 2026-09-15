@@ -188,13 +188,21 @@ def permute_panel(
     for symbol in close.columns:
         col = returns[symbol].to_numpy()[1:]
         # Permute only within the bars this symbol actually traded, so its
-        # listing window survives. Filtering one global ordering down to each
-        # symbol's live bars keeps the relative ordering consistent across
-        # symbols — two pairs with the same live window get the identical
-        # permutation, which is what preserves their correlation exactly.
+        # listing window survives, and apply the one global ordering *by bar*
+        # so that two symbols live on the same bar draw the same source bar
+        # and keep their correlation. (Filtering the global order down to each
+        # symbol's live bars, as this did before 2026-09-15, only aligned
+        # symbols with identical windows; on a panel of staggered listings it
+        # cut the mean pairwise funding correlation of eight majors from 0.63
+        # to 0.03, and the null's book was diversified in a way no market is.
+        # What survives is partial by necessity: a symbol live for a share f
+        # of the sample keeps its alignment on about f of its bars, since a
+        # global source outside its window has to be replaced. Keeping every
+        # pair aligned would mean shuffling only within listing epochs, which
+        # on a panel of hundreds of staggered listings is no null at all.)
         live = np.flatnonzero(np.isfinite(col))
         source = order if same_permutation else rng.permutation(n - 1)
-        col_order = source[np.isin(source, live)]
+        col_order = _live_order(source, live)
 
         shuffled = np.full(n - 1, np.nan)
         if preserve_volatility and len(live):
@@ -233,19 +241,52 @@ def permute_panel(
     for name, frame in permuted_ratios.items():
         fields[name] = (new_close * frame).where(close.notna())
     live_returns = returns.to_numpy()[1:]
-    for name in ("volume", "quote_volume", "trades"):
+    # Every other field is a per-bar quantity that travels with its bar, as
+    # volume does: a carry unit's `funding_rate` and `perp_funding_rate` are
+    # the flow settled over that bar, `basis` is that bar's premium, and
+    # `spot_close` is only read by the universe, which gate 6 computes on the
+    # real panel. Before 2026-09-15 only volume, quote volume and trades
+    # travelled and the rest were dropped, so a permuted carry panel had no
+    # funding and the family raised inside gate 6. Shuffling funding with the
+    # bars is also the right null for the family's claim: what it says is
+    # that funding persists, and a permutation destroys exactly that.
+    travelling = [name for name in panel.fields if name not in fields and name not in ratios]
+    for name in travelling:
         if name in panel.fields:
             original = panel[name].to_numpy()
             rebuilt = original.copy()
             for j in range(len(close.columns)):
                 live = np.flatnonzero(np.isfinite(live_returns[:, j]))
                 source = order if same_permutation else rng.permutation(n - 1)
-                col_order = source[np.isin(source, live)]
+                col_order = _live_order(source, live)
                 column = original[1:, j].copy()
                 column[live] = original[1:, j][col_order]
                 rebuilt[1:, j] = column
             fields[name] = pd.DataFrame(rebuilt, index=close.index, columns=close.columns)
     return Panel(fields, panel.interval)
+
+
+def _live_order(order: np.ndarray, live: np.ndarray) -> np.ndarray:
+    """A permutation of `live` that agrees with the global `order` wherever it can.
+
+    Destination bar `j` takes source `order[j]` when that source is itself a
+    live bar of this symbol; the destinations whose global source fell
+    outside the window take the unused live sources, in bar order. Every
+    live bar is used exactly once, and two symbols that are both live on `j`
+    and both live on `order[j]` receive the same source bar.
+    """
+    if len(live) == 0:
+        return live
+    src = order[live]
+    live_set = np.zeros(len(order), dtype=bool)
+    live_set[live] = True
+    ok = live_set[src]
+    used = np.zeros(len(order), dtype=bool)
+    used[src[ok]] = True
+    leftover = live[~used[live]]
+    out = src.copy()
+    out[~ok] = leftover
+    return out
 
 
 def shuffle_weights(weights: pd.DataFrame, seed: int = 0) -> pd.DataFrame:

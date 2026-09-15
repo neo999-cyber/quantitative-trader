@@ -38,6 +38,9 @@ import pandas as pd
 from qr.data.pit import AVAILABILITY_COLUMNS
 
 DATASET_URL = "https://www.sec.gov/files/structureddata/data/insider-transactions-data-sets/{period}_form345.zip"
+#: The newest quarter is published under a different prefix (seen for 2026q2
+#: on 2026-09-15); tried second.
+DATASET_URL_ALT = "https://www.sec.gov/files/datastandardsinnovation/data/insider-transactions-data-sets/{period}_form345.zip"
 SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik:0>10}.json"
 SUBMISSIONS_FILE_URL = "https://data.sec.gov/submissions/{name}"
 #: The SEC asks for a descriptive User-Agent with a contact; requests
@@ -309,10 +312,18 @@ def fetch_quarter(period: str, mirror: Path, session=None) -> Path:
     target = mirror / f"{period}_form345.zip"
     if target.exists():
         return target
-    request = urllib.request.Request(DATASET_URL.format(period=period), headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(request, timeout=120) as response:
-        target.write_bytes(response.read())
-    return target
+    last_error: Exception | None = None
+    for url in (DATASET_URL, DATASET_URL_ALT):
+        request = urllib.request.Request(url.format(period=period), headers={"User-Agent": USER_AGENT})
+        try:
+            with urllib.request.urlopen(request, timeout=300) as response:
+                payload = response.read()
+        except Exception as exc:  # noqa: BLE001 — try the other prefix
+            last_error = exc
+            continue
+        target.write_bytes(payload)
+        return target
+    raise RuntimeError(f"{period}: {last_error}")
 
 
 def acceptance_times(ciks: Iterable[str], cache: Path, pause: float = 0.11) -> dict[str, str]:

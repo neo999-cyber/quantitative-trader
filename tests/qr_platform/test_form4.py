@@ -182,3 +182,20 @@ def test_the_audits_exclusion_rules_each_fire_on_their_own_case(tmp_path):
         "", "issuer_not_traded", "10b5-1_flag", "entity_reporting_owner", "ten_percent_owner_indirect",
         "not_open_market_footnote", "plan_purchase", "", "",
     ]
+
+
+def test_a_quarter_without_the_10b5_1_column_parses_with_the_flag_off(quarter, tmp_path):
+    # AFF10B5ONE exists only from 2023; 2006q1 has no such column.
+    import zipfile as _zf
+
+    src = _zf.ZipFile(quarter)
+    out = tmp_path / "2006q1_form345.zip"
+    with _zf.ZipFile(out, "w") as z:
+        for name in src.namelist():
+            text = src.read(name).decode()
+            if name == "SUBMISSION.tsv":
+                lines = [line.rsplit("\t", 1)[0] for line in text.splitlines()]
+                text = "\n".join(lines) + "\n"
+            z.writestr(name, text)
+    frame = parse_quarter(out)
+    assert len(frame) == 6 and not frame["plan_10b5_1"].any()

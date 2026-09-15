@@ -130,7 +130,14 @@ def _read(zf: zipfile.ZipFile, name: str, columns: Mapping[str, str]) -> pd.Data
             keep_default_na=False,
             usecols=lambda c: c in columns,
         )
-    return frame.rename(columns=columns)
+    frame = frame.rename(columns=columns)
+    # Older quarters predate some columns (AFF10B5ONE, the 10b5-1 checkbox,
+    # exists from 2023; the audit's footnote-reference columns vary), so a
+    # missing optional column is empty rather than an error.
+    for name in columns.values():
+        if name not in frame.columns:
+            frame[name] = ""
+    return frame
 
 
 def _sec_date(values: pd.Series) -> pd.Series:

@@ -1028,7 +1028,7 @@ def cmd_gates(args) -> int:
     log = TrialLog(paths(args.root).ensure().trial_log)
 
     cls = _family_class(args.family)
-    grid = cls.grid(**_parse_grid(args.grid)) if args.grid else [cls(**_parse_params(args.param))]
+    grid = _build_grid(cls, args.grid, args.param)
     hypothesis_id = args.hypothesis or args.family
 
     sweep = run_sweep(
@@ -1787,6 +1787,25 @@ def _universe_spec(args, market: str) -> UniverseSpec:
             **extra,
         )
     return UniverseSpec(n=args.n, lookback=args.lookback, min_history=args.min_history, **extra)
+
+
+def _build_grid(cls, grid_args: list[str] | None, param_args: list[str] | None) -> list:
+    """The variants a run sweeps: `--grid` axes crossed with `--param` fixed values.
+
+    Until 2026-09-16 `--param` was silently ignored whenever `--grid` was
+    present, so a pre-registered `--param rebalance=24` beside a grid ran at
+    the class default (1). A fixed parameter is now a one-value axis, and a
+    name given both ways is refused rather than resolved.
+    """
+    fixed = _parse_params(param_args)
+    if not grid_args:
+        return [cls(**fixed)]
+    ranges = _parse_grid(grid_args)
+    clash = sorted(set(ranges) & set(fixed))
+    if clash:
+        raise SystemExit(f"{', '.join(clash)} given both as --grid and --param; choose one")
+    ranges.update({k: [v] for k, v in fixed.items()})
+    return cls.grid(**ranges)
 
 
 def _parse_params(pairs: list[str] | None) -> dict:

@@ -251,6 +251,69 @@ symbols mirrored; it is resumable and its ingest, `pytest` and `qr trial
 verify` follow it in the chain. Owner opened the QuantConnect, Alpaca and
 Databento accounts this morning.
 
+**16 September 2026, midday — C1 on hourly bars (`p2_funding_carry_v2`).**
+Trial log 1,866 trials, chain verified. Built and tested: hourly carry
+units (settlement on the bar it was held for, `bar_funding`), bar-generic
+`FundingCarry` (annualised by the panel's bar count; the ceiling's
+percentile over decision bars), `--vol-lookback`. **A fifth defect** found
+while vectorising the book loop: when fewer than `n_max` units cleared the
+entry floor, the pandas version filled the spare room with the
+alphabetically first *non-qualifying* units (`score.where(candidates)
+.sort_values().index[:room]` keeps the NaN tail). The v1 run carried it;
+v1's report stands as recorded. v2 and its always-in control were
+registered (seq 448, 449) before any run, with predictions: net Sharpe 1–3,
+gross below 8, funding ≥ 80% of gross.
+
+- **v2 control** (hold every eligible hourly unit, decisions daily): gate 1
+  WARN (the 8.0 ceiling no longer binds: gross 2.7), net Sharpe 2.42, 92% of
+  gross survives, t = 11.6, gate 6 p = 0.63 (a timing-free book at its
+  null, as it should be), capacity ~$30M. Against the daily-close control's
+  4.76: hourly resolution halves the Sharpe of the same book.
+- **v2 family, as run — verdict FAIL at gates 6 and 8.** Gate 1 WARN (gross
+  3.54 / 3.56 / 3.55 at lags 0 / 1 / 2 — no spike, below the ceiling);
+  gate 2 PASS (88% survives, Sharpe 2.63 at 2× costs, capacity ~$10M);
+  gate 3 t = 12.9; gate 4 DSR 0.998 over 64 trials, haircut Sharpe 3.10;
+  gate 5 WARN (PBO 0.39 — the variants are interchangeable; SPA p = 0.000
+  vs cash, 63 of 64 survive StepM); **gate 6 FAIL: bar-permutation p =
+  0.49** (null median 4.03 vs observed 3.56; random-entry p = 0.005);
+  gate 7 WARN (median path 81% of in-sample, WFE 0.35); **gate 8 FAIL:
+  neighbours keep 69% of the peak Sharpe (a spike)**. Tear sheet: CAGR
+  14.2%, vol 4.3%, max drawdown −4.5%, net Sharpe 3.10, turnover 12.7×/yr,
+  **funding = 100% of gross** (`carry_share_of_gross` 1.005: the basis
+  contributed slightly less than nothing), so the mechanism named is the
+  one that paid; the predictions on sign, size and funding share held. What
+  gate 6 says is that a world with the same funding and basis values in a
+  shuffled order pays the *timed* book as well as the real one does — the
+  entry rule's timing adds nothing over holding the carry, which is the
+  control's answer too (2.42 without a rule against 3.10 with one, and the
+  difference does not survive the permutation).
+- **But the run did not match the registration, and it is being re-run.**
+  The invocation passed `--param rebalance=24 --param percentile_window=365`
+  beside `--grid`, and the CLI silently dropped `--param` whenever `--grid`
+  was present (a sixth defect, `_build_grid`, fixed with a test): the 64
+  variants decided **hourly** (`rebalance=1`), not daily as registered. The
+  control, run with `--param` alone, was correct. The registered
+  configuration (daily decisions on hourly bars) started at 11:55 and is
+  counted as a further 64 trials; the document is unchanged and needs no
+  re-registration. The run above stands in the log as what it was.
+- **Databento.** Key verified; E1's imbalance history bought for SPY, QQQ,
+  IWM, DIA, 2018-05-01 → 2026-09-01: **$6.27** of the $125 credit, 3.76M
+  messages, hash and time in a sidecar. Only **QQQ** carries a real Nasdaq
+  closing cross (median $122M paired at 15:58); SPY, DIA and IWM are
+  Arca-listed and Nasdaq's secondary cross in them is empty — the plan's own
+  table said Arca imbalance exists from 2025 only, and the scope did not
+  apply it. E1's universe must be Nasdaq-listed names; a ~30-name pull is
+  ~$45 and waits for the owner's yes. Loader `qr/data/imbalance.py` (last
+  message at or before 15:50 / 15:55 / 15:58 ET, `published_at` = receive
+  time, `age_seconds`), 24,132 snapshots in `features/imbalance/`.
+- **QuantConnect.** Free tier confirmed browser-only (no API, no data
+  download). Driven from here through the owner's logged-in Chrome: a probe
+  project built and ran on the free node. Facts: the algorithm's working
+  directory is `/QuantConnect/backtesting` and project data files are not
+  readable with `open()`; Python files are importable, so E5's signals go in
+  as a `.py` module; the IDE's Return copies the previous line's indent
+  (`qc/monaco_type.py` types code accordingly).
+
 ---
 
 ## Reviewed against an independent plan (Codex, 15 September 2026)

@@ -259,3 +259,21 @@ def test_the_four_trial_families_are_registered():
     from qr.cli import FAMILIES
 
     assert {"tsmom", "xsmom", "reversal", "rsi_reversal"} <= set(FAMILIES)
+
+
+def test_fixed_params_apply_to_every_grid_variant_and_a_clash_is_refused():
+    # Found 2026-09-16: `--param rebalance=24` beside `--grid` was silently
+    # dropped and the C1 v2 run decided hourly instead of daily.
+    import pytest
+
+    from qr.cli import _build_grid, _family_class
+
+    cls = _family_class("funding_carry")
+    grid = _build_grid(cls, ["lookback=[72,168]", "n_max=[5,10]"], ["rebalance=24", "percentile_window=365"])
+    assert len(grid) == 4
+    assert {s.params["rebalance"] for s in grid} == {24}
+    assert {s.params["percentile_window"] for s in grid} == {365}
+    with pytest.raises(SystemExit, match="rebalance"):
+        _build_grid(cls, ["rebalance=[1,24]"], ["rebalance=24"])
+    single = _build_grid(cls, None, ["entry=-1.0", "exit=-2.0", "ceiling=1.0", "n_max=40", "lookback=7"])
+    assert len(single) == 1 and single[0].params["n_max"] == 40

@@ -298,3 +298,63 @@ def test_the_result_reports_the_share_of_gross_that_was_funding(legs):
     assert result.stats()["carry_share_of_gross"] == pytest.approx(1.0)
     spot_only = run_backtest(panel, FundingCarry(entry=-1.0, exit=-2.0, ceiling=1.0, n_max=40, lookback=1), CostModel(fee_bps=0.0, half_spread_bps=0.0))
     assert np.isnan(spot_only.stats()["carry_share_of_gross"])
+
+
+def test_bar_funding_puts_a_settlement_on_the_bar_the_holder_had_to_hold():
+    """Hand-computed. Settlements at 00:00, 08:00, 16:00 of 0.01% each. On
+    hourly bars the 08:00 settlement is paid to the book held over 07:00-08:00,
+    so it lands on the bar that opened at 07:00; seven of eight bars carry
+    nothing; the day still sums to 0.03%."""
+    from qr.data.funding import bar_funding, daily_funding
+
+    stamps = pd.to_datetime(["2024-06-01 00:00", "2024-06-01 08:00", "2024-06-01 16:00", "2024-06-02 00:00"]).tz_localize("UTC")
+    frame = pd.DataFrame({"funding_rate": [0.0001] * 4}, index=stamps)
+    hourly = bar_funding(frame, "1h")
+    assert len(hourly) == 25  # every hour from 23:00 on 31 May to 23:00 on 1 June
+    paid = hourly[hourly != 0]
+    assert paid.index.tolist() == pd.to_datetime(["2024-05-31 23:00", "2024-06-01 07:00", "2024-06-01 15:00", "2024-06-01 23:00"]).tz_localize("UTC").tolist()
+    assert paid.tolist() == pytest.approx([0.0001] * 4)
+    assert hourly[hourly.index.date == pd.Timestamp("2024-06-01").date()].sum() == pytest.approx(0.0003)
+    assert daily_funding(frame).loc["2024-06-01"] == pytest.approx(0.0003)
+
+
+def test_the_hourly_unit_reads_the_same_annualised_funding_as_the_daily_one():
+    """A settlement of 0.01% every 8 hours is 10.95% a year on either panel."""
+    from qr.data.funding import bar_funding
+
+    hours = pd.date_range("2024-01-01", periods=24 * 40, freq="h", tz="UTC")
+    hours.name = "open_time"
+    stamps = pd.date_range("2024-01-01", periods=3 * 40, freq="8h", tz="UTC")
+    settlements = pd.DataFrame({"funding_rate": [0.0001] * len(stamps)}, index=stamps)
+    spot = _bars(hours, np.full(len(hours), 100.0))
+    perp = _bars(hours, np.full(len(hours), 101.0))
+    frame = carry_frames(spot, perp, pd.DataFrame({"funding_rate": bar_funding(settlements, "1h")}))
+    panel = Panel.from_frames({"XUSDT": frame}, fields=list(frame.columns), interval="1h")
+    assert panel.periods_per_year == pytest.approx(365 * 24)
+    signal = FundingCarry(lookback=24 * 7, entry=0.05, rebalance=24).signal(panel)
+    assert float(signal["XUSDT"].iloc[-9]) == pytest.approx(0.0003 * 365, rel=1e-6)  # inside the settlement history
+    days = pd.date_range("2024-01-01", periods=40, freq="D", tz="UTC")
+    days.name = "open_time"
+    daily = carry_frames(_bars(days, np.full(40, 100.0)), _bars(days, np.full(40, 101.0)), pd.DataFrame({"funding_rate": [0.0003] * 40}, index=days))
+    dpanel = Panel.from_frames({"XUSDT": daily}, fields=list(daily.columns))
+    assert float(FundingCarry(lookback=7, entry=0.05).signal(dpanel)["XUSDT"].iloc[-1]) == pytest.approx(0.0003 * 365, rel=1e-6)
+
+
+def test_a_bar_with_fewer_qualifying_units_than_room_holds_only_those_units():
+    """Found 2026-09-16 while vectorising the book: the pandas version took
+    `score.where(candidates).sort_values().index[:room]`, and when fewer
+    units qualified than there was room the NaN tail filled the book with
+    the alphabetically first non-qualifying units. The C1 v1 run carried
+    this whenever fewer than n_max units cleared the entry floor."""
+    index = pd.date_range("2024-01-01", periods=40, freq="D", tz="UTC")
+    index.name = "open_time"
+    frames = {}
+    for sym, rate in [("AAAUSDT", 0.0), ("BBBUSDT", 0.0), ("CCCUSDT", 0.0005), ("DDDUSDT", 0.0)]:
+        spot = _bars(index, np.full(40, 100.0))
+        perp = _bars(index, np.full(40, 101.0))
+        frames[sym] = carry_frames(spot, perp, pd.DataFrame({"funding_rate": [rate] * 40}, index=index))
+    panel = Panel.from_frames(frames, fields=list(next(iter(frames.values())).columns))
+    w = FundingCarry(lookback=3, entry=0.05, ceiling=1.0, n_max=3).target_weights(panel)
+    last = w.iloc[-1]
+    assert last["CCCUSDT"] == pytest.approx(1.0)
+    assert (last.drop("CCCUSDT") == 0.0).all()

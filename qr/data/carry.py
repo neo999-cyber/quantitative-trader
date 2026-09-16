@@ -118,15 +118,27 @@ def carry_frames(spot: pd.DataFrame, perp: pd.DataFrame, funding: pd.DataFrame |
     return out
 
 
-def build_carry_lake(lake, symbols: Iterable[str] | None = None, interval: str = "1d") -> pd.DataFrame:
+def build_carry_lake(
+    lake, symbols: Iterable[str] | None = None, interval: str = "1d", funding_bucket=None
+) -> pd.DataFrame:
     """Build and store every symbol that has both legs; returns a summary.
 
     A symbol with a perp but no spot pair (or the reverse) is skipped and
     counted, not invented: the unit cannot be held.
+
+    On daily bars the funding feature is the lake's daily sum. On any finer
+    interval each settlement is read from the mirror at its own timestamp
+    (`funding_bucket`, a `FundingBucket`) and put on the bar it was paid
+    for (`qr.data.funding.bar_funding`), so an 8-hour settlement lands on
+    one hourly bar and the other seven carry nothing.
     """
+    from qr.data.funding import bar_funding
+
     spot_names = set(lake.symbols(interval, market=SPOT_MARKET))
     perp_names = set(lake.symbols(interval, market=PERP_MARKET))
     funding_names = set(lake.symbols("1d", market=FUNDING_MARKET))
+    if interval != "1d" and funding_bucket is None:
+        raise ValueError("building carry units on intra-day bars needs the funding mirror (funding_bucket)")
     wanted = list(symbols) if symbols is not None else sorted(spot_names & perp_names)
     rows = []
     for symbol in wanted:
@@ -135,7 +147,11 @@ def build_carry_lake(lake, symbols: Iterable[str] | None = None, interval: str =
             continue
         spot = lake.read_klines(symbol, interval, market=SPOT_MARKET)
         perp = lake.read_klines(symbol, interval, market=PERP_MARKET)
-        funding = lake.read_klines(symbol, "1d", market=FUNDING_MARKET) if symbol in funding_names else None
+        if interval == "1d":
+            funding = lake.read_klines(symbol, "1d", market=FUNDING_MARKET) if symbol in funding_names else None
+        else:
+            settlements = funding_bucket.load_funding(symbol)
+            funding = pd.DataFrame({"funding_rate": bar_funding(settlements, interval)}) if len(settlements) else None
         frame = carry_frames(spot, perp, funding)
         if frame.empty:
             rows.append({"symbol": symbol, "days": 0, "note": "no overlapping dates"})

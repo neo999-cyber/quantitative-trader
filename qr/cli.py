@@ -488,8 +488,11 @@ def cmd_data_carry_build(args) -> int:
     """Spot + futures/um bars + funding -> the carry-unit panel (`carry-um`)."""
     from qr.data.carry import build_carry_lake
 
+    from qr.data.funding import FundingBucket
+
     lake = _lake(args)
-    summary = build_carry_lake(lake, args.symbols, args.interval)
+    bucket = FundingBucket(_mirror(args)) if args.interval != "1d" else None
+    summary = build_carry_lake(lake, args.symbols, args.interval, funding_bucket=bucket)
     if summary.empty:
         print(
             "nothing to build: no symbol has both a spot and a futures/um kline series in the lake.\n"
@@ -1773,6 +1776,7 @@ def _universe_spec(args, market: str) -> UniverseSpec:
     says what it is so the trial log never records a carry run under the
     spot universe's name.
     """
+    extra = {"vol_lookback": args.vol_lookback} if getattr(args, "vol_lookback", None) else {}
     if market == "carry-um":
         return UniverseSpec(
             n=args.n,
@@ -1780,8 +1784,9 @@ def _universe_spec(args, market: str) -> UniverseSpec:
             min_history=args.min_history,
             vol_field="spot_close",
             name=f"carry_top{args.n}",
+            **extra,
         )
-    return UniverseSpec(n=args.n, lookback=args.lookback, min_history=args.min_history)
+    return UniverseSpec(n=args.n, lookback=args.lookback, min_history=args.min_history, **extra)
 
 
 def _parse_params(pairs: list[str] | None) -> dict:
@@ -1808,6 +1813,10 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("--n", type=int, default=30)
         p.add_argument("--lookback", type=int, default=30)
         p.add_argument("--min-history", type=int, default=180, dest="min_history")
+        p.add_argument(
+            "--vol-lookback", type=int, default=None, dest="vol_lookback",
+            help="bars behind the universe's volatility floor (default 90; 2160 on hourly bars)",
+        )
 
     data = sub.add_parser("data", help="ingest and inspect market data").add_subparsers(
         dest="subcommand", required=True

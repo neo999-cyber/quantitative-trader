@@ -240,6 +240,31 @@ def daily_funding(frame: pd.DataFrame) -> pd.Series:
     return daily.astype(float)
 
 
+def bar_funding(frame: pd.DataFrame, interval: str) -> pd.Series:
+    """Funding settled per bar of `interval`, on the bar the holder had to hold.
+
+    A settlement at 08:00 UTC is paid to whoever holds the position *at*
+    08:00, i.e. the book held over the bar that ends there — on hourly bars
+    the one that opened at 07:00. So each settlement is assigned to the bar
+    whose close is its timestamp: `floor(calc_time - interval)`. On daily
+    bars this is not the same as `daily_funding` (which sums by calendar
+    day: the 00:00 settlement lands on the day it opens) — `daily_funding`
+    stays the daily convention, and this is the intra-day one.
+    """
+    if frame.empty:
+        return pd.Series(dtype=float, index=pd.DatetimeIndex([], tz="UTC", name="open_time"))
+    step = pd.Timedelta(interval)
+    bars = (frame.index - pd.Timedelta(seconds=1)).floor(step)
+    out = frame["funding_rate"].groupby(bars).sum()
+    # Inside the settlement history a bar with no settlement is a real zero
+    # (seven of every eight hourly bars); outside it nothing is known, and
+    # the unit's builder leaves those bars missing.
+    full = pd.date_range(out.index[0], out.index[-1], freq=step, tz="UTC")
+    out = out.reindex(full).fillna(0.0)
+    out.index.name = "open_time"
+    return out.astype(float)
+
+
 def daily_open_interest(frame: pd.DataFrame) -> pd.DataFrame:
     """Open interest as of each UTC day's **last** observation.
 

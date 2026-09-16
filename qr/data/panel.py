@@ -30,6 +30,12 @@ FIELDS = (
     "funding_rate", "open_interest", "open_interest_usd",
     # the carry unit (qr/data/carry.py): the perp's own rate, and perp/spot - 1
     "perp_funding_rate", "basis", "spot_close",
+    # the auction instrument (qr/data/auction.py): the session's real open and
+    # close, split nights, and the closing-cross snapshots at each cutoff
+    "session_open", "session_close", "split_night",
+    "imb_1550", "imb_1555", "imb_1558",
+    "paired_usd_1550", "paired_usd_1555", "paired_usd_1558",
+    "imb_age_1550", "imb_age_1555", "imb_age_1558",
 )
 
 

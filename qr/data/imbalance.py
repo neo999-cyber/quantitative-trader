@@ -55,7 +55,11 @@ def closing_snapshots(messages: pd.DataFrame, snapshots: tuple[str, ...] = SNAPS
                 last = before.iloc[-1]
                 paired = float(last["paired_qty"])
                 total = float(last["total_imbalance_qty"])
-                sign = {"B": 1.0, "S": -1.0}.get(str(last["side"]), 0.0)
+                # Databento's `side`: 'B' = bid (buy) imbalance, 'A' = ask (sell)
+                # imbalance, 'N' = none. The first version mapped 'S' for sell,
+                # which the feed never sends, so every sell imbalance read as
+                # zero and the E1 family never fired (16 September 2026).
+                sign = {"B": 1.0, "A": -1.0}.get(str(last["side"]), 0.0)
                 rows.append(
                     {
                         "symbol": symbol,

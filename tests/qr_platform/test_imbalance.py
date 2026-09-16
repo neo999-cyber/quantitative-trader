@@ -33,9 +33,9 @@ def messages():
         _msg("2024-03-05 15:50:00.5", "SPY", 510.0, 80_000, 60_000, "B"),
         _msg("2024-03-05 15:54:59", "SPY", 510.2, 90_000, 40_000, "B"),
         _msg("2024-03-05 15:55:00.9", "SPY", 510.3, 95_000, 30_000, "B"),
-        _msg("2024-03-05 15:57:59", "SPY", 510.5, 120_000, 10_000, "S"),
-        _msg("2024-03-05 15:59:30", "SPY", 510.6, 130_000, 5_000, "S"),
-        _msg("2024-03-05 15:50:00.2", "QQQ", 440.0, 50_000, 25_000, "S"),
+        _msg("2024-03-05 15:57:59", "SPY", 510.5, 120_000, 10_000, "A"),  # ask side = sell imbalance
+        _msg("2024-03-05 15:59:30", "SPY", 510.6, 130_000, 5_000, "A"),
+        _msg("2024-03-05 15:50:00.2", "QQQ", 440.0, 50_000, 25_000, "A"),
         _msg("2024-03-06 15:50:00.1", "SPY", 512.0, 70_000, 20_000, "N"),
     ]
     return pd.DataFrame(rows).set_index("ts_recv").sort_index()
@@ -50,7 +50,7 @@ def test_snapshots_take_the_last_message_at_or_before_each_cutoff_and_stamp_its_
     # 15:50 cutoff: the 15:50:00.5 message is the last at or before 15:50 (a 0.5 s tolerance is not given: it is AFTER)
     assert spy.loc["15:50", "paired_qty"] == 80_000  # 15:50:00.5 counted? see below
     assert spy.loc["15:55", "paired_qty"] == 95_000 and spy.loc["15:55", "side"] == "B"
-    assert spy.loc["15:58", "paired_qty"] == 120_000 and spy.loc["15:58", "side"] == "S"
+    assert spy.loc["15:58", "paired_qty"] == 120_000 and spy.loc["15:58", "side"] == "A"
     assert spy.loc["15:58", "imbalance_ratio"] == pytest.approx(-10_000 / 120_000)
     assert spy.loc["15:55", "published_at"] == pd.Timestamp("2024-03-05 15:55:00.9", tz="America/New_York").tz_convert("UTC")
     assert (spy["published_at"] <= spy["snapshot_cutoff"] + pd.Timedelta(seconds=1)).all()
@@ -70,3 +70,9 @@ def test_the_signed_imbalance_follows_the_side(messages):
     out = closing_snapshots(messages).set_index(["symbol", "session", "snapshot"])
     assert out.loc[("SPY", pd.Timestamp("2024-03-05").date(), "15:50"), "signed_imbalance_qty"] == 60_000
     assert out.loc[("SPY", pd.Timestamp("2024-03-06").date(), "15:50"), "signed_imbalance_qty"] == 0
+
+
+def test_databento_side_codes_are_bid_buy_and_ask_sell():
+    rows = pd.DataFrame([_msg("2024-03-05 15:55:00.5", "X", 100.0, 1_000, 100, "A"), _msg("2024-03-05 15:55:00.6", "Y", 100.0, 1_000, 100, "B"), _msg("2024-03-05 15:55:00.7", "Z", 100.0, 1_000, 0, "N")]).set_index("ts_recv")
+    out = closing_snapshots(rows, snapshots=("15:55",)).set_index("symbol")
+    assert out.loc["X", "signed_imbalance_qty"] == -100 and out.loc["Y", "signed_imbalance_qty"] == 100 and out.loc["Z", "signed_imbalance_qty"] == 0

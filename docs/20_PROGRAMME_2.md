@@ -359,6 +359,35 @@ funding-paid return of Sharpe ~2.4 net at hourly resolution on daily
 closes' arithmetic of 4.8; the entry rule is not an edge over it. That is
 the first Programme 2 mechanism candidate gated: **1 of 8**.
 
+**16 September 2026, evening — E1 `p2_auction_imbalance_v1`: verdict FAIL
+at gate 2.** 1,964 trials, chain verified. Built with tests: the
+`auction-xnas` instrument (bar return = open(t) / close(t−1) − 1, split
+nights empty, `META` from 9 June 2022 because the raw ticker was an ETF
+before), `AuctionFade` (`side=sell` family, `side=buy` mirror), `--basket
+nasdaq31`, `--costs alpaca`, `--equity`, the XNYS calendar for gate 1;
+minute and daily bars for the 31 names bought as batch jobs ($21.94 +
+$0.10; Databento used $77.30 of $125). Registered at seq 480 (mirror 481)
+after the QA read, whose amendment is in the document. **An eighth defect**:
+Databento's `side` is `A` (ask) for a sell imbalance and the loader mapped
+`S`, so every sell imbalance read as zero and the first family run
+(counted, 16 trials, stands) never took a position; fixed with a test on
+the real codes, snapshots and panel rebuilt, both hypotheses re-run.
+Results, best variant k = 0.20, 15:55, n_max 8, $1,000 book: gross 1.9%
+a year on 42% time in market over 1,188 round trips — **about 9 bps gross
+per event, inside the pre-registered 5–15** — of which the 6-bps round
+trip takes half (net 0.95%/yr, vol 1.4%, Sharpe 0.66, max drawdown −1.9%);
+gate 2 FAIL (costs eat 50%, all of it spread), gate 3 t = 1.84, gate 4
+DSR 0.61 over 16, **gate 5 SPA p = 0.51 vs the exposure-matched benchmark
+(7% invested)**, gate 6 p = 0.10 / random-entry 0.07, gate 7 44% of paths
+positive, gate 8 alpha t = 0.24. Two falsifiers fired independently of
+costs: the benchmark was not beaten, and the return is **not monotone in
+the threshold** (k = 0.10 earns more than k = 0.50), so the imbalance is
+not shown to be the driver. Mirror control (`side=buy`): t = −0.19, costs
+108% of gross — as the mechanism predicts, and it says the family's gross
+is not overnight drift either. Holdout not opened. Mechanism candidate
+**2 of 8**. The $100,000 twenty-position companion book is registered as
+`p2_auction_imbalance_v1_100k` and runs overnight.
+
 ---
 
 ## Reviewed against an independent plan (Codex, 15 September 2026)

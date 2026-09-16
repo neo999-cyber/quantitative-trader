@@ -60,6 +60,7 @@ FAMILIES = {
     "random_entry": "RandomEntry",
     "funding_carry": "FundingCarry",
     "auction_fade": "AuctionFade",
+    "late_day_momentum": "LateDayMomentum",
 }
 
 
@@ -516,6 +517,17 @@ def cmd_data_auction_build(args) -> int:
     summary = build_auction_lake(lake, daily, snapshots)
     print(table(summary))
     print(f"\n{len(summary)} auction instruments written under market 'auction-xnas'; manifest hash: {lake.manifest_hash()}")
+    return 0
+
+
+def cmd_data_intraday_build(args) -> int:
+    """E2's panel: the session to the decision time, then the last half hour."""
+    from qr.data.intraday import build_intraday_lake
+
+    lake = _lake(args)
+    summary = build_intraday_lake(lake, args.symbols, args.decision)
+    print(table(summary))
+    print(f"\n{len(summary)} intraday instruments written under market 'intraday-xnas'; manifest hash: {lake.manifest_hash()}")
     return 0
 
 
@@ -1106,7 +1118,7 @@ def cmd_gates(args) -> int:
         holdout_universe=holdout_universe,
         permutations=args.permutations,
         vol_preserving_permutations=args.vol_permutations,
-        calendar="xnys" if market == "auction-xnas" else "continuous",
+        calendar="xnys" if market == "auction-xnas" else "continuous",  # intraday-xnas has two bars a session
         **({"equity": equity} if equity else {}),
         **_benchmark_kwargs(args, lake),
     )
@@ -1792,10 +1804,10 @@ def _family_class(name: str):
     carry family lives beside the carry unit in `qr.strategies.carry`, which
     imports helpers from the library and so cannot be imported *by* it.
     """
-    from qr.strategies import auction, carry, library
+    from qr.strategies import auction, carry, intraday, library
 
     cls_name = FAMILIES[name]
-    for module in (library, carry, auction):
+    for module in (library, carry, auction, intraday):
         if hasattr(module, cls_name):
             return getattr(module, cls_name)
     raise KeyError(f"no strategy class {cls_name!r} for family {name!r}")
@@ -1818,7 +1830,7 @@ def _costs(args) -> CostModel:
 
 
 #: Named fixed baskets a run may use instead of a ranked universe.
-BASKETS = {"nasdaq31": "qr.data.auction:NASDAQ31"}
+BASKETS = {"nasdaq31": "qr.data.auction:NASDAQ31", "qqq": "qr.data.intraday:QQQ_ONLY"}
 
 
 def _basket_symbols(name: str) -> tuple[str, ...]:
@@ -1839,7 +1851,7 @@ def _universe_for(panel, spec: UniverseSpec, basket: str | None):
 
 def _source_of(market: str) -> str:
     """Which vendor a lake market comes from; Databento for the auction panel."""
-    return "databento" if market == "auction-xnas" else "binance"
+    return "databento" if market in ("auction-xnas", "intraday-xnas") else "binance"
 
 
 def _universe_spec(args, market: str) -> UniverseSpec:
@@ -2008,6 +2020,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     auction.add_argument("--symbols", nargs="*")
     auction.set_defaults(func=cmd_data_auction_build)
+
+    intra = data.add_parser("intraday-build", help="xnas minute bars -> two bars a session, the day so far and the last half hour (market intraday-xnas)")
+    intra.add_argument("--symbols", nargs="*", default=["QQQ"])
+    intra.add_argument("--decision", default="15:30")
+    intra.set_defaults(func=cmd_data_intraday_build)
 
     rf = data.add_parser("riskfree-pull", help="FRED DTB3 3-month T-bill rate -> lake (needs network, no key)")
     rf.add_argument("--series", default="DTB3")

@@ -36,6 +36,8 @@ FIELDS = (
     "imb_1550", "imb_1555", "imb_1558",
     "paired_usd_1550", "paired_usd_1555", "paired_usd_1558",
     "imb_age_1550", "imb_age_1555", "imb_age_1558",
+    # the two-bars-a-session instrument (qr/data/intraday.py)
+    "ret_to_decision", "is_late",
 )
 
 

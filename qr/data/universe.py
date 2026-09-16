@@ -83,6 +83,11 @@ class UniverseSpec:
     #: (`spot_close`) or it excludes every unit — and the floor exists to
     #: keep pegs out, which is a property of the coin, not of the basis.
     vol_field: str = "close"
+    #: First rank admitted (1 = the largest). A mid-cap band such as ranks
+    #: 31-150 is `rank_min=31, n=150`: the top thirty by volume are skipped,
+    #: which is what C5 (`docs/20` §5) pre-registers after the SSRN post-mortem
+    #: on large-cap perp screens.
+    rank_min: int = 1
     name: str = "binance_spot_top30"
 
     def describe(self) -> dict[str, object]:
@@ -97,6 +102,7 @@ class UniverseSpec:
             "vol_lookback_bars": self.vol_lookback,
             "exclude_leveraged": self.exclude_leveraged,
             "exclude_symbols": sorted(self.exclude_symbols),
+            "rank_min": self.rank_min,
         }
 
     def excluded_by_name(self, symbol: str) -> bool:
@@ -212,7 +218,8 @@ def rank_asof(
         if not available.empty:
             enough = available.iloc[-1] >= spec.min_history
             score = score[enough.reindex(score.index).fillna(False)]
-    return list(score.sort_values(ascending=False).head(spec.n).index)
+    ordered = score.sort_values(ascending=False)
+    return list(ordered.iloc[max(0, spec.rank_min - 1) : spec.n].index)
 
 
 def membership(panel: Panel, spec: UniverseSpec = UniverseSpec()) -> pd.DataFrame:

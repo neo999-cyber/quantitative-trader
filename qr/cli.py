@@ -61,6 +61,7 @@ FAMILIES = {
     "funding_carry": "FundingCarry",
     "auction_fade": "AuctionFade",
     "late_day_momentum": "LateDayMomentum",
+    "oi_reversal": "OIReversal",
 }
 
 
@@ -1804,10 +1805,10 @@ def _family_class(name: str):
     carry family lives beside the carry unit in `qr.strategies.carry`, which
     imports helpers from the library and so cannot be imported *by* it.
     """
-    from qr.strategies import auction, carry, intraday, library
+    from qr.strategies import auction, carry, intraday, library, oi
 
     cls_name = FAMILIES[name]
-    for module in (library, carry, auction, intraday):
+    for module in (library, carry, auction, intraday, oi):
         if hasattr(module, cls_name):
             return getattr(module, cls_name)
     raise KeyError(f"no strategy class {cls_name!r} for family {name!r}")
@@ -1824,6 +1825,8 @@ def _costs(args) -> CostModel:
         return CostModel.carry_pair(spot, CostModel.binance_perp())
     if getattr(args, "costs", "spot") == "alpaca":
         return CostModel.alpaca_zero()
+    if getattr(args, "costs", "spot") == "perp":
+        return CostModel.binance_perp(half_spread_bps=args.spread)
     if args.tier.upper() == TRIAL_FEE_TIER and args.bnb == TRIAL_BNB_DISCOUNT:
         return CostModel.trial(half_spread_bps=args.spread)
     return CostModel.binance_spot(tier=args.tier, bnb_discount=args.bnb, half_spread_bps=args.spread)
@@ -1862,6 +1865,8 @@ def _universe_spec(args, market: str) -> UniverseSpec:
     spot universe's name.
     """
     extra = {"vol_lookback": args.vol_lookback} if getattr(args, "vol_lookback", None) else {}
+    if getattr(args, "rank_min", None):
+        extra["rank_min"] = args.rank_min
     basket = getattr(args, "basket", None)
     if basket:
         return UniverseSpec(n=len(_basket_symbols(basket)), name=basket, min_annual_vol=0.0)
@@ -1874,7 +1879,8 @@ def _universe_spec(args, market: str) -> UniverseSpec:
             name=f"carry_top{args.n}",
             **extra,
         )
-    return UniverseSpec(n=args.n, lookback=args.lookback, min_history=args.min_history, **extra)
+    name = f"{market.replace('/', '_')}_ranks{args.rank_min}_{args.n}" if getattr(args, "rank_min", None) else None
+    return UniverseSpec(n=args.n, lookback=args.lookback, min_history=args.min_history, **extra, **({"name": name} if name else {}))
 
 
 def _build_grid(cls, grid_args: list[str] | None, param_args: list[str] | None) -> list:
@@ -1920,6 +1926,7 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("--n", type=int, default=30)
         p.add_argument("--lookback", type=int, default=30)
         p.add_argument("--min-history", type=int, default=180, dest="min_history")
+        p.add_argument("--rank-min", type=int, default=None, dest="rank_min", help="first volume rank admitted (skip the largest names)")
         p.add_argument(
             "--vol-lookback", type=int, default=None, dest="vol_lookback",
             help="bars behind the universe's volatility floor (default 90; 2160 on hourly bars)",
@@ -2182,10 +2189,11 @@ def build_parser() -> argparse.ArgumentParser:
     gt.add_argument("--spread", type=float, default=2.0)
     gt.add_argument(
         "--costs",
-        choices=("spot", "carry", "alpaca"),
+        choices=("spot", "carry", "alpaca", "perp"),
         default="spot",
         help="spot: the trial's Binance spot model; carry: spot plus Binance perp, both legs taker; "
-        "alpaca: $0 commission, 2 bps half-spread, 1 bp slippage, whole shares",
+        "alpaca: $0 commission, 2 bps half-spread, 1 bp slippage, whole shares; "
+        "perp: Binance USDT-M perpetual, regular user with BNB, taker, funding settled gross",
     )
     gt.add_argument(
         "--basket",

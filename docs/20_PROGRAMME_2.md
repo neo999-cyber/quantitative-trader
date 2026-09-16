@@ -514,7 +514,7 @@ gate 4. Mechanism candidate **5 of 8**. Holdout not opened.
 Night chains: night-2 (Databento bars) and night-3 (FTD 212 zips, Reg SHO
 2,042, FINRA SI 179 files, Bybit funding 765 symbols, pytest 791 passed)
 finished; night-4 is still waiting on the Binance `metrics` pull (open
-interest; 580 of 471 both-leg symbols' folders present, ~800 files a
+interest; 415 of the 471 both-leg symbols started, ~800 files a
 minute, workers alive) before the C5 mechanical check decides whether C5
 is registered and run.
 

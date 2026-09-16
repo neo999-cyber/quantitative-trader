@@ -233,6 +233,24 @@ gate JSON.
   schedules — none of these was drafted, because their data is not in the
   lake yet.
 
+**16 September 2026, morning — what the overnight chain did.** Hourly perp
+bars: 42,766 files, none failed, **864 series** ingested (BTCUSDT 58,440
+bars, 2020-01-01 → 2026-08-31). Hourly spot bars for the 471 both-leg
+symbols: 42,224 files, none failed, **471 series** ingested. Form 4 history
+2006 Q1 → 2026 Q2: **148,431 qualifying purchases, all 148,431 stamped with
+EDGAR acceptance times** (9.28M accessions indexed from the submissions
+API, cached under `mirror/sec/submissions`), **14,256 cluster signals** at
+the registered rule → `reference/form4_purchases.parquet`,
+`form4_clusters.parquet`, `form4_mirror_summary.json`. Two filing-data
+defects stopped the mirror and were fixed with tests: quarters before 2023
+have no `AFF10B5ONE` column (the 10b5-1 checkbox), and 2012 Q3 carries a
+transaction dated in the year 12. The control re-run on the committed engine
+reproduced the previous numbers exactly. The open-interest metrics pull
+(one request per symbol-day) was still running at 06:45 with 77 of 471
+symbols mirrored; it is resumable and its ingest, `pytest` and `qr trial
+verify` follow it in the chain. Owner opened the QuantConnect, Alpaca and
+Databento accounts this morning.
+
 ---
 
 ## Reviewed against an independent plan (Codex, 15 September 2026)

@@ -1118,7 +1118,7 @@ def cmd_gates(args) -> int:
         holdout_universe=holdout_universe,
         permutations=args.permutations,
         vol_preserving_permutations=args.vol_permutations,
-        calendar="xnys" if market == "auction-xnas" else "continuous",  # intraday-xnas has two bars a session
+        calendar={"auction-xnas": "xnys", "intraday-xnas": "sessions2"}.get(market, "continuous"),
         **({"equity": equity} if equity else {}),
         **_benchmark_kwargs(args, lake),
     )

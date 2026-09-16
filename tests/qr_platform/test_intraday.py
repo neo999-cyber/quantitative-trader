@@ -57,3 +57,12 @@ def test_late_day_momentum_buys_at_the_decision_when_the_day_is_up_and_is_flat_b
     assert float(result.gross.iloc[1]) == pytest.approx(0.005, abs=1e-6)
     reverse = run_backtest(panel, LateDayMomentum(k=0.005, side="reverse"), CostModel(fee_bps=0.0, half_spread_bps=0.0)).held["QQQ"]
     assert reverse.iloc[1] == 0.0 and reverse.iloc[3] == 1.0  # the control buys the down day
+
+
+def test_the_two_bar_instrument_passes_qa_under_the_sessions2_calendar():
+    from qr.data.qa import check_klines
+
+    bars = pd.concat([_session("2024-03-05", 100.0, 101.0, 101.505), _session("2024-03-06", 101.0, 100.0, 100.2)])
+    frame = session_split_frames(bars, decision="15:30")
+    assert [c.name for c in check_klines(frame, "QQQ", "1d", calendar="continuous").checks if c.verdict == "FAIL"] == ["bar_spacing"]
+    assert not [c.name for c in check_klines(frame, "QQQ", "1d", calendar="sessions2").checks if c.verdict == "FAIL"]

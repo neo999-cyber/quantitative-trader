@@ -208,3 +208,17 @@ def test_a_memo_sized_record_round_trips(tmp_path):
     record(log, memo, triage(memo))
     assert log.verify() == 2
     assert log.head().payload["memo"]["candidate_id"] == "month_end_v1"
+
+
+def test_a_void_note_takes_a_miscounted_run_out_of_the_trial_count_but_not_out_of_the_log(tmp_path):
+    from qr.validate.trial_log import TrialLog
+
+    log = TrialLog(tmp_path / "log.jsonl")
+    ok = log.run("h", "fam", {}, "u", variants=8)
+    bad = log.run("h", "fam", {}, "u", variants=4084)
+    assert log.trial_count() == 4092
+    log.note("h", "seq recorded the session count by mistake", void_seq=bad.seq)
+    assert log.trial_count() == 8
+    assert log.trial_count("h") == 8
+    assert len(list(log.records(kind="run"))) == 2  # nothing deleted
+    log.verify()

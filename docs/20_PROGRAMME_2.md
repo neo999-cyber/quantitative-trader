@@ -456,6 +456,29 @@ What it would take to reopen: the long/short version with shorting (the
 paper's specification), or a 20-position book — both need ≥ $2,000 and a
 finding, not a re-run of this one.
 
+**16 September 2026, late — E2 `p2_late_day_momentum_v1`: verdict FAIL at
+gate 2.** Built with tests: the `intraday-xnas` instrument (two bars a
+session from Nasdaq minute bars: 09:30 → 15:30 carrying `ret_to_decision`,
+15:30 → 16:00 carrying the trade; overnight gap dropped), `LateDayMomentum`
+(long-only, `side=reverse` control), basket `qqq`, and a `sessions2` QA
+calendar because the cadence checks assume one bar a period (gate 1 had
+failed on `bar_spacing` — an artefact, fixed with a test, re-run). Registered
+(seq 538, control 539) after the unconditional read only (2,094 sessions,
++0.43 bps a late bar). Result, 4 variants k ∈ {0, 0.25%, 0.5%, 1%}: the
+last half hour of QQQ, 2018–2026, is **uncorrelated with the day's move
+(r = 0.006)**: up-days +0.04 bps, days up ≥ 1% **−2.7 bps**, down-days +0.9
+bps; every variant's gross is negative, best HAC t = −2.63, SPA vs cash p =
+0.50, no monotone relation in k (it runs the wrong way). The reverse
+control also loses (t = −2.48). Two pre-registered falsifiers fire (gross
+per fire below 2 bps; no monotone relation), before costs are even
+charged. Baltussen et al.'s sample ends in 2020 and is in futures; in
+QQQ's own last half hour since 2018 the hedging demand is not visible at
+this resolution. Mechanism candidate **4 of 8**. SPY/IWM (~$1.50 of
+minute bars) would be the same test on a different index, not a new
+mechanism, and are not queued. Trial count 2,006 after a `void` note (seq
+580) took the miscounted seq 533 out of the count without touching the log;
+`TrialLog.trial_count` honours `void_seq`, with a test.
+
 ---
 
 ## Reviewed against an independent plan (Codex, 15 September 2026)

@@ -180,10 +180,20 @@ class TrialLog:
         return TrialRecord.from_json(last.decode("utf-8")) if last.strip() else None
 
     def trial_count(self, hypothesis_id: str | None = None) -> int:
-        """Every variant ever run — the N that gate 4's deflation consumes."""
+        """Every variant ever run — the N that gate 4's deflation consumes.
+
+        A run record whose `variants` was written wrong cannot be edited (the
+        chain is append-only), so a later `note` with `void_seq` set to its
+        sequence number takes it out of the count; the record and the note
+        both stay in the log, which is the point. First used for seq 533 on
+        16 September 2026, where a script passed the session count (4,084)
+        as the variant count of an 8-variant sweep.
+        """
+        voided = {int(r.payload["void_seq"]) for r in self.records(kind="note") if r.payload.get("void_seq") is not None}
         return sum(
             r.payload.get("variants", 1)
             for r in self.records(kind="run", hypothesis_id=hypothesis_id)
+            if r.seq not in voided
         )
 
     # ---------------------------------------------------------------- writing

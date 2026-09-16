@@ -46,7 +46,10 @@ NYSE_SPECIAL_CLOSURES = (
 #: year, and measuring it against a continuous calendar produces thousands of
 #: "gaps" per symbol — a check that fires on every instrument forever teaches
 #: the reader to ignore it, which is worse than not having it.
-CALENDARS = ("continuous", "xnys")
+#: "sessions2" is a two-bars-a-session instrument (qr/data/intraday.py): the
+#: spacing and gap checks assume one cadence and do not apply; every other
+#: check does.
+CALENDARS = ("continuous", "xnys", "sessions2")
 
 
 def _nyse_holidays(start, end) -> pd.DatetimeIndex:
@@ -236,7 +239,7 @@ def check_klines(
 
     # -- spacing and gaps -------------------------------------------------
     step = INTERVAL_DELTA.get(interval)
-    if step is not None and len(index) > 1:
+    if step is not None and len(index) > 1 and calendar != "sessions2":
         deltas = pd.Series(index[1:] - index[:-1], index=index[1:])
         add(
             "bar_spacing",

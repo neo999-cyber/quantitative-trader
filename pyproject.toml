@@ -25,6 +25,7 @@ qr = [
     "pyarrow>=15",
     "duckdb>=1.0",
     "scipy>=1.11",
+    "databento>=0.40",
 ]
 # The validation engine's statistics. Installing this WITHOUT the plotly pin
 # below silently breaks vectorbt: skfolio requires plotly>=6, vectorbt 1.1

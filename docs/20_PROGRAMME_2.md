@@ -388,6 +388,50 @@ is not overnight drift either. Holdout not opened. Mechanism candidate
 **2 of 8**. The $100,000 twenty-position companion book is registered as
 `p2_auction_imbalance_v1_100k` and runs overnight.
 
+**16 September 2026, evening — E5 `p2_insider_cluster_v1` run on
+QuantConnect's free tier, through the owner's Chrome.** Alpaca paper keys
+verified (account ACTIVE, $100k paper cash, IEX quotes answer; nothing
+traded). QC facts: no API on the free tier; one coding session at a time;
+`self.download()` works, so the 10,877 cluster signals (2010 →, zlib +
+base64, SHA-256 checked in the algorithm) are fetched from this repo's
+public branch (`qc/e5_signals.b64`; the owner made the repo public for
+it); results leave as JSON saved from the logged-in session
+(`/api/v2/backtests/read` and `chart/read`), read by
+`qr/data/quantconnect.py`. Algorithm `qc/e5_main.py`: entry MOO at the
+second session after acceptance, exit MOO after `hold` sessions, price >
+$5 and 20-session median dollar volume > $5M at entry, $1,000 book, 4
+whole-share slices, $0 fees (spread charged locally). Two LEAN defects
+fixed on the way (a security cannot be ordered on its first bar; a
+history frame without `volume`). All **8 pre-registered variants** ran
+(≈7 min each) and are in `mirror/quantconnect/e5/`:
+
+| hold | min $ | insiders | $1,000 → | gross Sharpe | max DD | round trips |
+|---|---|---|---|---|---|---|
+| 60 | 100k | 2 | 2,017 | 0.30 | 64% | 351 |
+| **20** | **100k** | **2** | **11,629** | **0.72** | 47% | 895 |
+| 60 | 250k | 2 | 1,726 | 0.26 | 52% | 328 |
+| 20 | 250k | 2 | 4,029 | 0.48 | 56% | 789 |
+| 60 | 100k | 3 | 2,182 | 0.35 | 48% | 134 |
+| 20 | 100k | 3 | 1,489 | 0.26 | 53% | 147 |
+| 60 | 250k | 3 | 1,174 | 0.14 | 46% | 60 |
+| 20 | 250k | 3 | 909 | 0.01 | 47% | 63 |
+
+`scripts/e5_external_gates.py` records the sweep in the trial log (seq
+535; seq 533 recorded 4,084 "variants" by a script slip — the session
+count — and seq 534 is the correction) and computes what the engine's own
+functions can from series: best variant **net Sharpe 0.69** after the
+alpaca_zero round trip (95% of gross survives, 0.66 at 2×), **HAC t =
+2.90**, PSR 0.997, **DSR 0.94 over 8**, PBO 0.23 (OOS loss 15%). So E5
+clears gates 2–4 on the statistics; the pre-registered comparison
+(exposure-matched equal weight of the eligible universe) and the
+random-entry control are QC runs in a second project
+(`qc/e5_benchmark_main.py`), the benchmark running as this was written.
+Gates 1, 6 and 8 cannot run on an external engine and the report says so;
+the single-draw random control stands beside gate 6 as evidence, not as
+a p-value. Not to be read as a pass: 4 positions of small caps, 47%
+drawdown, and the 20-session hold is the shorter of the two declared, not
+the paper's.
+
 ---
 
 ## Reviewed against an independent plan (Codex, 15 September 2026)

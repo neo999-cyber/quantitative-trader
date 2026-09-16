@@ -314,6 +314,22 @@ gross below 8, funding ≥ 80% of gross.
   as a `.py` module; the IDE's Return copies the previous line's indent
   (`qc/monaco_type.py` types code accordingly).
 
+**16 September 2026, afternoon — E1 data complete.** Owner approved the
+stock pull; a streamed request dropped after 20 MB (`IncompleteRead`), so
+it was resubmitted as a Databento **batch job** (`XNAS-20260916-Q6HSRHN5G6`,
+100 monthly files, 570 MB, **$48.99**, billed once; `scripts/databento_fetch_job.py`).
+30 Nasdaq-listed large caps that were Nasdaq-100 members throughout
+2018–2026 (AAPL MSFT NVDA AMZN META GOOGL GOOG TSLA AVGO COST NFLX AMD PEP
+CSCO ADBE INTU QCOM TXN ISRG AMGN CMCSA INTC BKNG AMAT MU LRCX ADI GILD SBUX
+MDLZ): 29.4M messages → 178,581 closing-auction snapshots; with the ETF
+file, **202,713 snapshots, 34 symbols** in `features/imbalance/`. Every
+one of the 30 has a real Nasdaq closing cross (median paired $59M–$903M at
+15:58; imbalance non-zero on 63–87% of sessions). Gaps to carry into E1's
+pre-registration: META's raw symbol starts June 2022 (FB before); the list
+is names that survived in the index, which is a mild survivorship on
+liquidity, not on returns, and is stated. Databento credit used so far:
+$55.26 of $125.
+
 ---
 
 ## Reviewed against an independent plan (Codex, 15 September 2026)

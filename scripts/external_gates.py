@@ -19,7 +19,7 @@ random-entry control (one QC draw) stands beside gate 6 as evidence, not as a
 p-value. This is written in the report and the log.
 
     export QR_ROOT=~/qr/lake
-    .venv/bin/python scripts/e5_external_gates.py
+    .venv/bin/python scripts/external_gates.py --family e5
 """
 from __future__ import annotations
 
@@ -39,15 +39,29 @@ from qr.validate.cscv import cscv
 from qr.validate.spa import cash_benchmark, superior_predictive_ability
 from qr.validate.trial_log import TrialLog
 
-HYP = "p2_insider_cluster_v1"
+import argparse
+
+ap = argparse.ArgumentParser()
+ap.add_argument("--family", default="e5", help="e5 or e4: which mirror folder and hypothesis")
+ap.add_argument("--no-log", action="store_true", help="recompute without recording the sweep again")
+args = ap.parse_args()
+HYP = {"e5": "p2_insider_cluster_v1", "e4": "p2_pead_v1"}[args.family]
+FAMILY_NAME = {"e5": "insider_cluster", "e4": "pead"}[args.family]
 root = Path(paths().root)
-files = sorted(glob.glob(str(root / "mirror" / "quantconnect" / "e5" / "qc_e5_*.json")))
-variants, gross, net, meta = {}, {}, {}, {}
+files = sorted(glob.glob(str(root / "mirror" / "quantconnect" / args.family / f"qc_{args.family}_*.json")))
+variants, gross, net, meta, controls = {}, {}, {}, {}, {}
 costs = CostModel.alpaca_zero()
 for f in files:
     r = load_result(f)
     v = r.get("variant") or {"hold_sessions": 60, "min_combined_usd": 100000, "min_insiders": 2, "max_positions": 4, "equity": 1000}
-    name = f"e5_hold{v['hold_sessions']}_usd{int(v['min_combined_usd'])}_ins{v['min_insiders']}"
+    if args.family == "e5":
+        name = f"e5_hold{v['hold_sessions']}_usd{int(v['min_combined_usd'])}_ins{v['min_insiders']}"
+    else:
+        name = v.get("impl", "e4").replace(".py", "")
+        v.setdefault("max_positions", 4)
+    if v.get("mode") in ("bottom", "random"):
+        controls[name] = (r, v)
+        continue
     eq = daily_equity(r)
     g = eq.pct_change().dropna()
     orders = int(statistics(r).get("Total Orders", "0"))
@@ -93,8 +107,12 @@ if bench is not None:
 print(json.dumps({k: out[k] for k in ("gate2", "gate3", "gate4", "gate5")}, indent=1, default=str))
 
 log = TrialLog(paths().ensure().trial_log)
-rec = log.run(HYP, "insider_cluster", {"grid": "hold[20,60] x min_combined[100k,250k] x min_insiders[2,3]", "engine": "quantconnect-free", "backtests": [m["backtest_id"] for m in meta.values()]}, "qc_us_equities_eligible", metrics={"best": best, "net_sharpe": sharpes[best], "hac_t": t, "dsr": dsr, "pbo": res.pbo}, variants=N.shape[1])
-print("trial log seq", rec.seq)
+if not args.no_log:
+  rec = log.run(HYP, FAMILY_NAME, {"grid": "the pre-registered variants (see prereg)", "engine": "quantconnect-free", "backtests": [m["backtest_id"] for m in meta.values()]}, "qc_us_equities_eligible", metrics={"best": best, "net_sharpe": sharpes[best], "hac_t": t, "dsr": dsr, "pbo": res.pbo}, variants=N.shape[1])
+  print("trial log seq", rec.seq)
+for name, (r, v) in controls.items():
+    eq = daily_equity(r); g = eq.pct_change().dropna()
+    print(f"control {name}: ann {g.mean()*252:.3f} sharpe {st.annualised_sharpe(g, ppy):.2f} DD {statistics(r).get('Drawdown')}")
 (root / "reports").mkdir(exist_ok=True)
 (root / "reports" / f"{HYP}_external.json").write_text(json.dumps(out, indent=1, default=str))
 N.to_parquet(root / "reports" / f"{HYP}_variant_returns.parquet")

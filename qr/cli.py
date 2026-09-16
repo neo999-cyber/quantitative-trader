@@ -59,6 +59,7 @@ FAMILIES = {
     "rsi_reversal": "RSIReversal",
     "random_entry": "RandomEntry",
     "funding_carry": "FundingCarry",
+    "auction_fade": "AuctionFade",
 }
 
 
@@ -482,6 +483,40 @@ def _benchmark_kwargs(args, lake) -> dict:
         else:
             risk_free = float(raw)
     return {"benchmark": benchmark, "risk_free": risk_free}
+
+
+def cmd_data_auction_build(args) -> int:
+    """E1's panel: one overnight-return instrument per Nasdaq name, with the imbalance features."""
+    from pathlib import Path
+
+    import databento as db
+
+    from qr.data.auction import NASDAQ31, build_auction_lake
+
+    lake = _lake(args)
+    root = Path(paths(args.root).root) / "mirror" / "databento" / "XNAS.ITCH"
+    files = sorted((root / "ohlcv-1d").rglob("*.dbn.zst"))
+    if not files:
+        print(f"no Databento ohlcv-1d files under {root / 'ohlcv-1d'}", file=sys.stderr)
+        return 2
+    bars = pd.concat([db.DBNStore.from_file(f).to_df() for f in files]).sort_index()
+    bars = bars[~bars.index.duplicated(keep="last") | bars["symbol"].duplicated(keep=False)]
+    wanted = args.symbols or list(NASDAQ31)
+    daily = {}
+    for symbol in wanted:
+        one = bars[bars["symbol"] == symbol][["open", "high", "low", "close", "volume"]].copy()
+        if one.empty:
+            print(f"  {symbol}: no daily bars", file=sys.stderr)
+            continue
+        one.index = pd.DatetimeIndex(one.index).tz_convert("UTC").normalize()
+        one = one[~one.index.duplicated(keep="last")]
+        one.index.name = "open_time"
+        daily[symbol] = one
+    snapshots = pd.read_parquet(Path(paths(args.root).root) / "features" / "imbalance" / "xnas_closing_snapshots.parquet")
+    summary = build_auction_lake(lake, daily, snapshots)
+    print(table(summary))
+    print(f"\n{len(summary)} auction instruments written under market 'auction-xnas'; manifest hash: {lake.manifest_hash()}")
+    return 0
 
 
 def cmd_data_carry_build(args) -> int:
@@ -1019,9 +1054,10 @@ def cmd_gates(args) -> int:
 
     lake = _lake(args)
     market = getattr(args, "market", "spot") or "spot"
-    panel = _load_panel(lake, args.interval, args.start, args.end, market=market)
+    source = _source_of(market)
+    panel = _load_panel(lake, args.interval, args.start, args.end, source=source, market=market)
     spec = _universe_spec(args, market)
-    universe = membership(panel, spec)
+    universe = _universe_for(panel, spec, getattr(args, "basket", None))
     if not args.no_restrict_universe:
         panel, universe = _restrict_to_universe(panel, universe)
     costs = _costs(args)
@@ -1031,8 +1067,10 @@ def cmd_gates(args) -> int:
     grid = _build_grid(cls, args.grid, args.param)
     hypothesis_id = args.hypothesis or args.family
 
+    equity = getattr(args, "equity", None)
     sweep = run_sweep(
-        panel, grid, costs, universe, spec.name, trial_log=log, hypothesis_id=hypothesis_id
+        panel, grid, costs, universe, spec.name, trial_log=log, hypothesis_id=hypothesis_id,
+        **({"equity": equity} if equity else {}),
     )
     log.run(
         hypothesis_id,
@@ -1047,8 +1085,8 @@ def cmd_gates(args) -> int:
     best = sweep.best()
     holdout_panel = holdout_universe = None
     if args.holdout_start:
-        holdout_panel = _load_panel(lake, args.interval, args.holdout_start, args.holdout_end, market=market)
-        holdout_universe = membership(holdout_panel, spec)
+        holdout_panel = _load_panel(lake, args.interval, args.holdout_start, args.holdout_end, source=source, market=market)
+        holdout_universe = _universe_for(holdout_panel, spec, getattr(args, "basket", None))
         if not args.no_restrict_universe:
             holdout_panel, holdout_universe = _restrict_to_universe(
                 holdout_panel, holdout_universe, "holdout: "
@@ -1068,6 +1106,8 @@ def cmd_gates(args) -> int:
         holdout_universe=holdout_universe,
         permutations=args.permutations,
         vol_preserving_permutations=args.vol_permutations,
+        calendar="xnys" if market == "auction-xnas" else "continuous",
+        **({"equity": equity} if equity else {}),
         **_benchmark_kwargs(args, lake),
     )
     report = run_gates(
@@ -1752,10 +1792,10 @@ def _family_class(name: str):
     carry family lives beside the carry unit in `qr.strategies.carry`, which
     imports helpers from the library and so cannot be imported *by* it.
     """
-    from qr.strategies import carry, library
+    from qr.strategies import auction, carry, library
 
     cls_name = FAMILIES[name]
-    for module in (library, carry):
+    for module in (library, carry, auction):
         if hasattr(module, cls_name):
             return getattr(module, cls_name)
     raise KeyError(f"no strategy class {cls_name!r} for family {name!r}")
@@ -1770,9 +1810,36 @@ def _costs(args) -> CostModel:
     if getattr(args, "costs", "spot") == "carry":
         spot = CostModel.trial(half_spread_bps=args.spread)
         return CostModel.carry_pair(spot, CostModel.binance_perp())
+    if getattr(args, "costs", "spot") == "alpaca":
+        return CostModel.alpaca_zero()
     if args.tier.upper() == TRIAL_FEE_TIER and args.bnb == TRIAL_BNB_DISCOUNT:
         return CostModel.trial(half_spread_bps=args.spread)
     return CostModel.binance_spot(tier=args.tier, bnb_discount=args.bnb, half_spread_bps=args.spread)
+
+
+#: Named fixed baskets a run may use instead of a ranked universe.
+BASKETS = {"nasdaq31": "qr.data.auction:NASDAQ31"}
+
+
+def _basket_symbols(name: str) -> tuple[str, ...]:
+    module, _, attr = BASKETS[name].partition(":")
+    import importlib
+
+    return tuple(getattr(importlib.import_module(module), attr))
+
+
+def _universe_for(panel, spec: UniverseSpec, basket: str | None):
+    """A ranked universe, or a named fixed basket when the run asks for one."""
+    from qr.data.universe import fixed_basket
+
+    if basket:
+        return fixed_basket(panel, _basket_symbols(basket))
+    return membership(panel, spec)
+
+
+def _source_of(market: str) -> str:
+    """Which vendor a lake market comes from; Databento for the auction panel."""
+    return "databento" if market == "auction-xnas" else "binance"
 
 
 def _universe_spec(args, market: str) -> UniverseSpec:
@@ -1783,6 +1850,9 @@ def _universe_spec(args, market: str) -> UniverseSpec:
     spot universe's name.
     """
     extra = {"vol_lookback": args.vol_lookback} if getattr(args, "vol_lookback", None) else {}
+    basket = getattr(args, "basket", None)
+    if basket:
+        return UniverseSpec(n=len(_basket_symbols(basket)), name=basket, min_annual_vol=0.0)
     if market == "carry-um":
         return UniverseSpec(
             n=args.n,
@@ -1931,6 +2001,13 @@ def build_parser() -> argparse.ArgumentParser:
     carry.add_argument("--symbols", nargs="*")
     carry.add_argument("--interval", default="1d")
     carry.set_defaults(func=cmd_data_carry_build)
+
+    auction = data.add_parser(
+        "auction-build",
+        help="Databento XNAS daily bars + closing-cross snapshots -> overnight-return panel (market auction-xnas)",
+    )
+    auction.add_argument("--symbols", nargs="*")
+    auction.set_defaults(func=cmd_data_auction_build)
 
     rf = data.add_parser("riskfree-pull", help="FRED DTB3 3-month T-bill rate -> lake (needs network, no key)")
     rf.add_argument("--series", default="DTB3")
@@ -2088,10 +2165,18 @@ def build_parser() -> argparse.ArgumentParser:
     gt.add_argument("--spread", type=float, default=2.0)
     gt.add_argument(
         "--costs",
-        choices=("spot", "carry"),
+        choices=("spot", "carry", "alpaca"),
         default="spot",
-        help="spot: the trial's Binance spot model; carry: spot plus Binance perp, both legs taker",
+        help="spot: the trial's Binance spot model; carry: spot plus Binance perp, both legs taker; "
+        "alpaca: $0 commission, 2 bps half-spread, 1 bp slippage, whole shares",
     )
+    gt.add_argument(
+        "--basket",
+        choices=tuple(BASKETS),
+        default=None,
+        help="use a named fixed basket as the universe instead of the ranked top-n",
+    )
+    gt.add_argument("--equity", type=float, default=None, help="account equity the book is sized and costed at (whole shares, per-order floors)")
     gt.add_argument("--permutations", type=int, default=200)
     gt.add_argument(
         "--vol-permutations",

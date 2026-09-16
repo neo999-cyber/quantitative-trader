@@ -479,6 +479,45 @@ mechanism, and are not queued. Trial count 2,006 after a `void` note (seq
 580) took the miscounted seq 533 out of the count without touching the log;
 `TrialLog.trial_count` honours `void_seq`, with a test.
 
+**17 September 2026, 03:40 Dubai — E4 `p2_pead_v1`: verdict FAIL at
+gates 3, 4 and 5.** Run on QuantConnect's free tier (four pre-registered
+variants, two controls, six backtests; equity curves mirrored under
+`mirror/quantconnect/e4/`, gates 2–5 by `scripts/external_gates.py
+--family e4`, trial log seq 584, count 2,010). Events: 8-K item 2.02
+filings from the submissions mirror (`qr/data/earnings.py`), ranked by the
+two-session announcement return, long the top decile, $1,000 book,
+`alpaca_zero`, 2010-01 → 2025-08.
+
+| impl | hold | top | final $ | Sharpe | max DD | orders |
+|---|---|---|---|---|---|---|
+| e4_h60_t20 | 60 | 0.20 | 2,926 | 0.37 | 68% | 718 |
+| e4_h20_t20 | 20 | 0.20 | 1,512 | 0.24 | 77% | 1,986 |
+| e4_h60_t10 | 60 | 0.10 | 1,373 | 0.21 | 74% | 688 |
+| e4_h20_t10 | 20 | 0.10 | 476 | −0.02 | 77% | 1,767 |
+| control: bottom decile | 60 | 0.20 | (−3.6%/yr) | 0.03 | 84% | — |
+| control: random events | 60 | 0.20 | (+3.6%/yr) | 0.15 | 57% | — |
+
+Best variant e4_h60_t20: net Sharpe 0.36, net/gross 0.97, Sharpe at 2×
+costs 0.35 (gate 2 passes — a 60-session hold is cheap); HAC t = 1.37,
+p = 0.17 (**gate 3 fails**); PSR 0.93, DSR 0.76 over 4 (**gate 4 fails**,
+bar 0.90); PBO 0.41 with a 22% out-of-sample loss; SPA p = 0.76 against
+the exposure-matched benchmark (**gate 5 fails**), best excess −0.1%/yr.
+Alpha regression against the E5 equal-weight eligible universe (v2,
+annual rebalance; 4,084 common sessions): **alpha −2.9%/yr, t = −0.50,
+beta 1.28**, benchmark Sharpe 0.69 vs family 0.37. The ordering top >
+random > bottom is the right way round (the bottom-decile mirror earns
+nothing), so a small drift may exist, but a four-position book at $1,000
+turns it into noise, and after beta there is nothing left — exactly the
+pre-registered prior. Two falsifiers fire (alpha t < 2; SPA > 0.5) plus
+gate 4. Mechanism candidate **5 of 8**. Holdout not opened.
+
+Night chains: night-2 (Databento bars) and night-3 (FTD 212 zips, Reg SHO
+2,042, FINRA SI 179 files, Bybit funding 765 symbols, pytest 791 passed)
+finished; night-4 is still waiting on the Binance `metrics` pull (open
+interest; 580 of 471 both-leg symbols' folders present, ~800 files a
+minute, workers alive) before the C5 mechanical check decides whether C5
+is registered and run.
+
 ---
 
 ## Reviewed against an independent plan (Codex, 15 September 2026)

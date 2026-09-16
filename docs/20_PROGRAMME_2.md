@@ -330,6 +330,35 @@ is names that survived in the index, which is a mild survivorship on
 liquidity, not on returns, and is stated. Databento credit used so far:
 $55.26 of $125.
 
+**16 September 2026, 15:00 — `p2_funding_carry_v2` as registered (daily
+decisions on hourly bars): verdict FAIL at gate 6.** 1,930 trials, chain
+verified. Best variant lookback 720, entry 5%, ceiling 0.95, n_max 10,
+rebalance 24. Gate 1 WARN (gross 3.39 / 3.36 / 3.36 at lags 0 / 1 / 2;
+below the ceiling); gate 2 PASS (92% survives, Sharpe 2.81 at 2× costs,
+capacity ~$10M); gate 3 t = 15.0; gate 4 DSR 0.99, haircut 3.09; gate 5
+WARN — PBO 0.35 and **SPA did not run** ("zero-size array to reduction
+operation maximum", inside `arch`; a seventh defect, open: it does not
+reproduce on synthetic inputs of the same shape, and runs now save their
+variant-return matrix beside the report so the next occurrence can be
+diagnosed); **gate 6 FAIL: bar-permutation p = 0.99 — the permuted worlds
+pay the re-optimised book *more* (null median 4.40 against 3.36)**;
+random-entry p = 0.005; gate 7 WARN (83% of in-sample, WFE 0.12); gate 8
+PASS (181 round trips, every year profitable, plateau). Tear sheet: CAGR
+15.5%, vol 4.7%, max drawdown −6.3%, net Sharpe 3.09, turnover 8.5×/yr,
+funding 97% of gross. Every prediction on sign, size and mechanism held;
+the timing did not. What p = 0.99 means is specific and is the BIS paper's
+own finding: in the real sequence the basis losses arrive *when* funding is
+high — the crash risk the ceiling was meant to filter — and shuffling the
+bars detaches them, so a world with the same funding in random order pays
+more. The rule collects the carry and eats its crashes; it does not time
+them. Beside it, the same book with hourly decisions read p = 0.49 and
+failed gate 8 as a spike; the always-in control read p = 0.63 at Sharpe
+2.42. **Holdout not opened** (gates 1–8 did not pass). C1 is closed at
+two runs and one control on each resolution: hold-the-carry is a real,
+funding-paid return of Sharpe ~2.4 net at hourly resolution on daily
+closes' arithmetic of 4.8; the entry rule is not an edge over it. That is
+the first Programme 2 mechanism candidate gated: **1 of 8**.
+
 ---
 
 ## Reviewed against an independent plan (Codex, 15 September 2026)

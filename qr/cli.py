@@ -1079,7 +1079,13 @@ def cmd_gates(args) -> int:
     print(f"\nverdict: {verdict} — {reason}")
 
     md, js = write_report(report, paths(args.root).reports, log, sweep.results[best].stats())
-    print(f"\nwrote {md}\n      {js}")
+    # The per-variant net return matrix beside the report, so a gate that
+    # failed inside a library call (gate 5's SPA on the C1 v2 run,
+    # 2026-09-16: "zero-size array to reduction operation maximum") can be
+    # diagnosed from the run that produced it rather than from a re-run.
+    returns_path = js.with_name(f"{js.stem}_variant_returns.parquet")
+    sweep.returns.to_parquet(returns_path)
+    print(f"\nwrote {md}\n      {js}\n      {returns_path}")
     return 0 if verdict != "FAIL" else 1
 
 

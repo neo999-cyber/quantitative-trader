@@ -156,3 +156,77 @@ def load_regsho(mirror: Path) -> pd.DataFrame:
         out["first_observed_at"] = pd.Timestamp.now(tz="UTC")
         out["ingested_at"] = pd.Timestamp.now(tz="UTC")
     return out
+
+
+# ------------------------------------------------------- FINRA short interest
+
+FINRA_SI_URL = "https://cdn.finra.org/equity/otcmarket/biweekly/shrt{day}.csv"
+
+
+def si_settlement_days(start: str = "2020-01-01", end: str | None = None) -> list[str]:
+    """FINRA's twice-monthly settlement dates: the 15th and the last day of each
+    month, moved back to the previous business day when they fall on a weekend."""
+    stop = pd.Timestamp(end) if end else pd.Timestamp.now().normalize()
+    out = []
+    for m in pd.period_range(start, stop.strftime("%Y-%m"), freq="M"):
+        for d in (pd.Timestamp(m.start_time.year, m.month, 15), m.end_time.normalize()):
+            while d.weekday() >= 5:
+                d -= pd.Timedelta(days=1)
+            if pd.Timestamp(start) <= d <= stop:
+                out.append(d.strftime("%Y%m%d"))
+    return out
+
+
+def parse_finra_si(payload: bytes) -> pd.DataFrame:
+    text = payload.decode("latin-1")
+    frame = pd.read_csv(io.StringIO(text), sep="|", dtype=str, keep_default_na=False)
+    out = pd.DataFrame(
+        {
+            "settlement_date": pd.to_datetime(frame["settlementDate"], errors="coerce"),
+            "symbol": frame["symbolCode"].str.strip(),
+            "market": frame["marketClassCode"].str.strip(),
+            "short_interest": pd.to_numeric(frame["currentShortPositionQuantity"], errors="coerce"),
+            "previous_short_interest": pd.to_numeric(frame["previousShortPositionQuantity"], errors="coerce"),
+            "adv": pd.to_numeric(frame["averageDailyVolumeQuantity"], errors="coerce"),
+            "days_to_cover": pd.to_numeric(frame["daysToCoverQuantity"], errors="coerce"),
+            "revision": frame["revisionFlag"].str.strip(),
+        }
+    )
+    return out.dropna(subset=["settlement_date"]).reset_index(drop=True)
+
+
+def pull_finra_si(mirror: Path, days: list[str], pause: float = 0.2) -> pd.DataFrame:
+    mirror.mkdir(parents=True, exist_ok=True)
+    rows = []
+    for stamp in days:
+        target = mirror / f"shrt{stamp}.csv"
+        if target.exists():
+            continue
+        try:
+            payload, last_modified = _get(FINRA_SI_URL.format(day=stamp), timeout=60)
+        except Exception as exc:  # noqa: BLE001
+            rows.append({"day": stamp, "note": str(exc)[:60]})
+            continue
+        target.write_bytes(payload)
+        published = parsedate_to_datetime(last_modified).astimezone(timezone.utc).isoformat() if last_modified else None
+        target.with_suffix(".json").write_text(pd.Series({"day": stamp, "published_at": published, "first_observed_at": datetime.now(timezone.utc).isoformat(), "sha256": hashlib.sha256(payload).hexdigest()}).to_json())
+        rows.append({"day": stamp, "bytes": len(payload), "published_at": published})
+        time.sleep(pause)
+    return pd.DataFrame(rows)
+
+
+def load_finra_si(mirror: Path) -> pd.DataFrame:
+    frames = []
+    for path in sorted(Path(mirror).glob("shrt*.csv")):
+        meta_path = path.with_suffix(".json")
+        meta = pd.read_json(meta_path, typ="series") if meta_path.exists() else pd.Series()
+        frame = parse_finra_si(path.read_bytes())
+        frame["published_at"] = pd.to_datetime(meta.get("published_at"), utc=True) if meta.get("published_at") else pd.NaT
+        frame["first_observed_at"] = pd.to_datetime(meta.get("first_observed_at"), utc=True) if meta.get("first_observed_at") else pd.NaT
+        frame["source_hash"] = meta.get("sha256", "")
+        frames.append(frame)
+    out = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+    if len(out):
+        out["event_time"] = out["settlement_date"].dt.tz_localize(NY) + pd.Timedelta(hours=16)
+        out["ingested_at"] = pd.Timestamp.now(tz="UTC")
+    return out

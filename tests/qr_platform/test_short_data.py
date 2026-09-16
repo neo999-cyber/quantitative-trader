@@ -24,3 +24,13 @@ def test_regsho_daily_parses_and_computes_the_short_ratio():
 
 def test_ftd_periods_are_two_a_month():
     assert ftd_periods("2024-01", "2024-02") == ["202401a", "202401b", "202402a", "202402b"]
+
+
+def test_finra_short_interest_parses_days_to_cover_and_settlement_dates_land_on_business_days():
+    from qr.data.short_data import parse_finra_si, si_settlement_days
+
+    text = "accountingYearMonthNumber|symbolCode|issueName|issuerServicesGroupExchangeCode|marketClassCode|currentShortPositionQuantity|previousShortPositionQuantity|stockSplitFlag|averageDailyVolumeQuantity|daysToCoverQuantity|revisionFlag|changePercent|changePreviousNumber|settlementDate\n20250630|A|Agilent Technologies Inc.|A|NYSE|3354818|4110706||1749336|1.92||-18.39|-755888|2025-06-30\n"
+    frame = parse_finra_si(text.encode())
+    assert frame["days_to_cover"].iloc[0] == 1.92 and frame["settlement_date"].iloc[0] == pd.Timestamp("2025-06-30")
+    days = si_settlement_days("2025-06-01", "2025-07-31")
+    assert days == ["20250613", "20250630", "20250715", "20250731"]  # 15 June 2025 is a Sunday

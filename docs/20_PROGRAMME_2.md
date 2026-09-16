@@ -432,6 +432,30 @@ a p-value. Not to be read as a pass: 4 positions of small caps, 47%
 drawdown, and the 20-session hold is the shorter of the two declared, not
 the paper's.
 
+**16 September 2026, night — E5 verdict: FAIL, on the pre-registered
+falsifiers for gates 5 and 8.** The comparison runs (`qc/e5_benchmark_main.py`,
+project 36614350): the first equal-weight benchmark hit LEAN's 10,000-order
+cap in May 2017 and sat in cash after (moved to `e5_benchmark/invalid_order_cap/`,
+not used); the second, rebalanced annually (2,648 orders, trading to
+2025-08-28), is the **exposure-matched benchmark: equal weight of the 500
+most-traded eligible names, 10.6%/yr, Sharpe 0.69, drawdown 35%**. The
+**random-entry control** (same signal dates and sizing, a random eligible
+name each time, one draw, seed 1): 5.1%/yr, Sharpe 0.33, drawdown 41%.
+Against the benchmark the family's best variant has **SPA p = 0.19** (no
+StepM survivor), **alpha 6.0%/yr with t = 1.31, beta 1.05** (HAC, 9 lags);
+family minus control 10.0%/yr, **t = 1.77**. The pre-registration set
+"alpha t below 2 against the market factor → the return is beta" and "not
+distinguishable from zero with clustered errors → the mechanism is not
+there in this period"; both fire. Same Sharpe as holding the universe,
+more return only through 4-stock concentration and a 47% drawdown.
+By year the family beat the benchmark in 8 of 16, and lost to it in 2013,
+2023 and 2024. Gates 1, 6 and 8 could not run in full on an external
+engine (no panel); gate 4 (DSR 0.94) and gate 2 pass; recorded as such,
+trial log seq 535–537. Holdout not opened. Mechanism candidate **3 of 8**.
+What it would take to reopen: the long/short version with shorting (the
+paper's specification), or a 20-position book — both need ≥ $2,000 and a
+finding, not a re-run of this one.
+
 ---
 
 ## Reviewed against an independent plan (Codex, 15 September 2026)

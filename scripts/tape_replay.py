@@ -43,7 +43,7 @@ def main() -> int:
 
     frames = []
     for venue in args.venues:
-        days = sorted(p.stem for p in (tape / venue / "book").glob("*.jsonl.gz")) if (tape / venue / "book").exists() else []
+        days = sorted(p.name[: -len(".jsonl.gz")] for p in (tape / venue / "book").glob("*.jsonl.gz")) if (tape / venue / "book").exists() else []
         for day in days:
             target = out / f"{venue}_{day}_orders.parquet"
             if target.exists() and not args.redo:

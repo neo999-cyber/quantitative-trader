@@ -62,6 +62,7 @@ FAMILIES = {
     "auction_fade": "AuctionFade",
     "late_day_momentum": "LateDayMomentum",
     "oi_reversal": "OIReversal",
+    "unlock_fade": "UnlockFade",
 }
 
 
@@ -568,6 +569,18 @@ def cmd_data_xvenue_build(args) -> int:
     built = int((summary["days"] > 0).sum())
     print(f"{built} cross-venue units written under market {'xvenue-um'!r}; manifest hash: {lake.manifest_hash()}")
     return 0 if built else 1
+
+
+def cmd_data_unlocks_build(args) -> int:
+    """DefiLlama vesting schedules -> per-perp unlock features (market `unlocks`); mirrors the raw JSON."""
+    from qr.data.unlocks import build_unlock_lake
+
+    lake = _lake(args)
+    summary = build_unlock_lake(lake, bucket_mirror(getattr(args, "mirror", None)).parent, args.symbols, args.start, args.end)
+    print(table(summary))
+    built = int((summary["cliffs"] > 0).sum()) if len(summary) else 0
+    print(f"{built} perps with an unlock calendar written under market 'unlocks'; manifest hash: {lake.manifest_hash()}")
+    return 0
 
 
 def cmd_data_carry_build(args) -> int:
@@ -1846,10 +1859,10 @@ def _family_class(name: str):
     carry family lives beside the carry unit in `qr.strategies.carry`, which
     imports helpers from the library and so cannot be imported *by* it.
     """
-    from qr.strategies import auction, carry, intraday, library, oi
+    from qr.strategies import auction, carry, intraday, library, oi, unlocks
 
     cls_name = FAMILIES[name]
-    for module in (library, carry, auction, intraday, oi):
+    for module in (library, carry, auction, intraday, oi, unlocks):
         if hasattr(module, cls_name):
             return getattr(module, cls_name)
     raise KeyError(f"no strategy class {cls_name!r} for family {name!r}")
@@ -2062,6 +2075,12 @@ def build_parser() -> argparse.ArgumentParser:
     xv = data.add_parser("xvenue-build", help="Binance perp + Bybit perp + both fundings -> cross-venue unit panel (market xvenue-um)")
     xv.add_argument("--symbols", nargs="*")
     xv.set_defaults(func=cmd_data_xvenue_build)
+    unl = data.add_parser("unlocks-build", help="DefiLlama vesting schedules -> unlock features per perp (market unlocks)")
+    unl.add_argument("--symbols", nargs="*")
+    unl.add_argument("--start", default="2020-01-01")
+    unl.add_argument("--end", default=None)
+    unl.set_defaults(func=cmd_data_unlocks_build)
+
     carry = data.add_parser("carry-build", help="spot + futures/um + funding -> carry-unit panel (market carry-um)")
     carry.add_argument("--symbols", nargs="*")
     carry.add_argument("--interval", default="1d")

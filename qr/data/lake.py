@@ -238,7 +238,12 @@ class Lake:
                 features[symbol] = self.read_klines(symbol, "1d", start, end, source, MARKET)
             except FileNotFoundError:
                 continue
-        return attach(panel, features)
+        panel = attach(panel, features)
+        if market == "futures/um":
+            from qr.data.unlocks import attach_unlocks
+
+            panel = attach_unlocks(panel, self, start, end)
+        return panel
 
 
 def _ts(value) -> datetime | None:

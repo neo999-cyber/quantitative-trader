@@ -30,6 +30,9 @@ FIELDS = (
     "funding_rate", "open_interest", "open_interest_usd",
     # the carry unit (qr/data/carry.py): the perp's own rate, and perp/spot - 1
     "perp_funding_rate", "basis", "spot_close",
+    # the unlock calendar (qr/data/unlocks.py): scheduled insider/investor
+    # supply in the next 30 days, the ecosystem control, the next big cliff
+    "unlock_pct_30d", "unlock_pct_eco_30d", "days_to_cliff", "cliff_pct_next",
     # the auction instrument (qr/data/auction.py): the session's real open and
     # close, split nights, and the closing-cross snapshots at each cutoff
     "session_open", "session_close", "split_night",

@@ -13,3 +13,4 @@ Vendor sites were largely blocked from the research sandbox, so prices marked **
 | `05_platforms_brokers_strategies.md` | Hosted platforms vs self-hosting, broker APIs per asset class, where validated ideas come from, which anomalies still work, AI-assisted workflows and their failure modes, build-vs-buy, ten strategy families to test first |
 
 The consolidated plan that draws on all five is `../PLAN.md`.
+- `10_forced_flows_fx_stocks.md` — forced-flow mechanisms in FX and single stocks where a small account is not the loser (17 Sep 2026): index deletions, Tokyo gotobi fix, spin-offs, odd-lot tenders; ranked, costed at $1–2k, nothing registered.

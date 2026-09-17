@@ -35,7 +35,7 @@ rerun() {
   done
 }
 
-stage "start (ledger re-run of the frozen grids; owner said yes on: ______)"
+stage "start (ledger re-run of the frozen grids; owner said yes on 17 September 2026, evening Dubai; unit_sizing=dollars)"
 
 # C1 funding carry, daily unit and control (docs/prereg/p2_funding_carry_v1.md)
 rerun p2_funding_carry_v1 --family funding_carry \

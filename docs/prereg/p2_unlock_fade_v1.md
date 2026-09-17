@@ -1,10 +1,12 @@
 # Pre-registration: `p2_unlock_fade_v1` — short the perp into a scheduled insider cliff
 
-*Drafted 17 September 2026 (`docs/research/10`), before any run. **Not
-registered**: the Programme 2 counter is full (`docs/23`) and this file
-becomes a registration only with the owner's yes. The counts below are
-from the unlock calendar alone (`qr data unlocks-build`, schedules
-mirrored 17 September 2026); no price series was looked at.*
+*Drafted 17 September 2026 (`docs/research/10`), before any run.
+**Registered the same evening on the owner's yes** — the ninth Programme 2
+candidate, the first new input since the counter closed at eight
+(`docs/23`). The counts below are from the unlock calendar alone (`qr data
+unlocks-build`, schedules mirrored 17 September 2026); no price series was
+looked at. Controls are registered beside it as `p2_unlock_fade_v1_long`
+and `p2_unlock_fade_v1_eco`.*
 
 ## Mechanism
 

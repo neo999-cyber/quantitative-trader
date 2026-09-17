@@ -42,11 +42,11 @@ from qr.validate.trial_log import TrialLog
 import argparse
 
 ap = argparse.ArgumentParser()
-ap.add_argument("--family", default="e5", help="e5 or e4: which mirror folder and hypothesis")
+ap.add_argument("--family", default="e5", help="e5, e4 or e7: which mirror folder and hypothesis")
 ap.add_argument("--no-log", action="store_true", help="recompute without recording the sweep again")
 args = ap.parse_args()
-HYP = {"e5": "p2_insider_cluster_v1", "e4": "p2_pead_v1"}[args.family]
-FAMILY_NAME = {"e5": "insider_cluster", "e4": "pead"}[args.family]
+HYP = {"e5": "p2_insider_cluster_v1", "e4": "p2_pead_v1", "e7": "p2_short_squeeze_v1"}[args.family]
+FAMILY_NAME = {"e5": "insider_cluster", "e4": "pead", "e7": "short_squeeze"}[args.family]
 root = Path(paths().root)
 files = sorted(glob.glob(str(root / "mirror" / "quantconnect" / args.family / f"qc_{args.family}_*.json")))
 variants, gross, net, meta, controls = {}, {}, {}, {}, {}
@@ -57,8 +57,8 @@ for f in files:
     if args.family == "e5":
         name = f"e5_hold{v['hold_sessions']}_usd{int(v['min_combined_usd'])}_ins{v['min_insiders']}"
     else:
-        name = v.get("impl", "e4").replace(".py", "")
-        v.setdefault("max_positions", 4)
+        name = v.get("impl", args.family).replace(".py", "")
+        v.setdefault("max_positions", v.get("n", 4))
     if v.get("mode") in ("bottom", "random"):
         controls[name] = (r, v)
         continue

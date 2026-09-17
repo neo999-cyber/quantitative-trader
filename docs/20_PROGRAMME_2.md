@@ -573,6 +573,81 @@ metrics start 2021-12, so the sample cannot grow backwards) or on a
 second venue's OI (Bybit's is mirrored for funding only) — a new
 pre-registration, not a re-run.
 
+**17 September 2026, 14:30 Dubai — C2 `p2_venue_spread_v1`: verdict FAIL
+at gate 3 (and 4, 5, 6).** Registered seq 624 (control 625) after the
+owner's yes on the unit read (`docs/prereg/p2_venue_spread_v1.md`: 942
+units, spread persistence 0.20, 25 bps a round trip). Built the same
+morning: Bybit daily klines (`qr/data/bybit.py::kline_history`, 765
+symbols), the cross-venue unit (`qr/data/xvenue.py`, `xvenue-um`, two
+mirrored units a symbol so `FundingCarry` runs unchanged), `CostModel.bybit_perp`
+(5.5 bps taker, unverified), `--costs xvenue`; tests. Run 2021-01 →
+2025-08, top 80 units:
+
+| run | gate 2 | gate 3 | gate 4 | gate 5 | gate 6 | gate 7 | gate 8 |
+|---|---|---|---|---|---|---|---|
+| always-in control | **FAIL** gross ≤ 0 | t −2.45 | — | skip | p 0.57 | 0/9 | 0% of years |
+| family (18) | WARN 55% net/gross | **FAIL** t 1.76 | FAIL DSR 0.71 (eff. 3) | FAIL PBO 0.73, SPA p 0.97 vs cash | FAIL p 0.17 | FAIL 0.18 = 29% IS | 32 round trips |
+
+Best variant `lookback7_entry0.05_n_max5`: net Sharpe 0.62 (gross 1.16),
+2.0%/yr at 3.1% vol, drawdown 3.1%, in the market 30% of the time, 32
+round trips in 4.7 years, funding 96% of gross. So the spread is real and
+is what the book collects — and there is not enough of it: the always-in
+control *loses* (t −2.45; the mean spread does not pay two taker legs),
+and the selected tail earns 2% a year on the 30% of the time it is open.
+Falsifiers "net Sharpe below 0.5 at 2×" (costs take 45% of gross) and
+"DSR < 0.90" fire; the "always-in within 0.3 Sharpe" one does not — the
+selection matters, it just selects too little. Mechanism candidate **7 of
+8**. Holdout not opened. Reopen only with maker fills on both legs (a
+different cost model that needs verified rebates and a fill assumption
+this engine refuses to make) or a third venue with a wider spread.
+
+**17 September 2026, 14:30 Dubai — E7 `p2_short_squeeze_v1`: verdict FAIL
+at gates 3, 4 and 5.** Registered seq 626, amendment 644 (what "credible"
+means for a publication stamp: FINRA's 2019 → mid-2023 archive all carries
+a 2023-07-27 regeneration stamp, so a stamp counts only 0–60 days after
+settlement; otherwise the 20-day rule). Event file built offline from the
+FINRA and SEC mirrors with no price read (`scripts/e7_events.py`: 1,700
+top, 1,700 low-cover, 1,700 random names over 170 publication dates, entry
+20–57 days after settlement); QuantConnect executes only
+(`qc/e7_impl.py`, six backtests through the cookie-authenticated web API,
+which the free tier does allow from a logged-in page — no more clicking).
+The FTD parser needed one fix (a literal `|` inside a description).
+
+| impl | n | hold | final $ | CAGR | Sharpe (QC) | max DD | orders | alpha vs benchmark | t |
+|---|---|---|---|---|---|---|---|---|---|
+| e7_n10_h10 | 10 | 10 | 1,799 | 9.2% | 0.37 | 21% | 1,734 | +5.7%/yr | 1.34 |
+| e7_n5_h10 | 5 | 10 | 1,602 | 7.3% | 0.23 | 36% | 816 | +4.5% | 0.87 |
+| e7_n10_h20 | 10 | 20 | 952 | −0.7% | −0.16 | 55% | 1,569 | −6.4% | −1.18 |
+| e7_n5_h20 | 5 | 20 | 682 | −5.6% | −0.33 | 68% | 747 | −10.8% | −1.69 |
+| control: low-cover mirror | 10 | 10 | 1,297 | 4.0% | −0.03 | 6% | 936 | +2.8% | 1.51 |
+| control: random names | 10 | 10 | 1,487 | 6.1% | 0.30 | 5% | 666 | +4.7% | **2.49** |
+
+Gates 2–5 on the best variant (`scripts/external_gates.py --family e7`,
+trial log seq 648): net Sharpe 0.70, net/gross 0.92 (gate 2 passes);
+HAC t 1.88, p 0.06 (**gate 3 fails**); DSR 0.75 over 4 (**gate 4
+fails**); PBO 0.01 but SPA p 0.88 against the exposure-matched benchmark,
+best excess **−5.7%/yr** (**gate 5 fails**). The random-name control has
+a higher alpha t than any variant, which is the pre-registered falsifier
+"the mirror earning as much"; and the 20-session holds lose outright,
+which is the opposite of a squeeze that builds. Beta 0.25 on a
+nominally full book: about half the names each date were not tradable in
+LEAN's universe (delisted tickers, symbol changes), stated, not repaired.
+Mechanism candidate **8 of 8**. Holdout not opened. Trial count **2,071**
+(649 records, chain verified).
+
+**The counter is at eight.** Under the rule restated at the top of this
+document — eight gated mechanism candidates, none surviving — Programme 2's
+answer on its own terms is the same as Programme 1's: no edge accessible
+at this account size with this data was found. C1 (t 0.99 at gate 6), C5
+(t 1.68), C2 (t 1.76) and E7 (t 1.88) are the four that showed a sign
+in the predicted direction and none reached significance, deflation, or
+the benchmark. What is *not* concluded: the recorders (C3 liquidations,
+ETF flows) keep running and were never counted; the independent review
+(`docs/22`, ten defects) has not been done and precedes any live order;
+the week-12 report (per family, capacity, what a serious attempt needs)
+is the remaining deliverable. Nothing is registered from here without a
+new input.
+
 ---
 
 ## Reviewed against an independent plan (Codex, 15 September 2026)

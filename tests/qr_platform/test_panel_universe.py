@@ -275,3 +275,18 @@ def test_turning_the_filters_off_restores_the_naive_ranking(mixed_market):
     )
     assert naive["USDCUSDT"].any()
     assert naive["PAXGUSDT"].any()
+
+
+def test_a_bar_whose_quote_volume_implies_a_vwap_outside_its_range_is_not_tradable(panel):
+    """AAVEUSDT 2023-09-21 in the perp archive: quote volume ~1.5x what the range
+    allows (24 such bars in 637,705, five dates in 2023). `qa.check_klines` flags
+    it; the panel must withhold it too, or gate 1 fails a book for a bar it read."""
+    fields = {k: v.copy() for k, v in panel.fields.items()}
+    bar = panel.index[30]
+    fields["quote_volume"].loc[bar, "BTCUSDT"] = (
+        fields["volume"].loc[bar, "BTCUSDT"] * fields["high"].loc[bar, "BTCUSDT"] * 1.5
+    )
+    broken = Panel(fields, panel.interval)
+    assert panel.tradable().loc[bar, "BTCUSDT"]
+    assert not broken.tradable().loc[bar, "BTCUSDT"]
+    assert (panel.tradable().sum().sum() - broken.tradable().sum().sum()) == 1

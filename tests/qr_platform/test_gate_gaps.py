@@ -263,7 +263,7 @@ def test_a_more_liquid_universe_has_more_capacity(costs):
     from qr.data.panel import Panel
 
     base = edge_world(n_symbols=4, years=3, seed=1)
-    thick = Panel({**base.fields, "quote_volume": base["quote_volume"] * 1000}, base.interval)
+    thick = Panel({**base.fields, "quote_volume": base["quote_volume"] * 1000, "volume": base["volume"] * 1000}, base.interval)
     thin_capacity = _capacity(context(base, TSMOM(lookback=60), costs)).get("capacity_usd")
     thick_capacity = _capacity(context(thick, TSMOM(lookback=60), costs)).get("capacity_usd")
     assert thick_capacity >= thin_capacity

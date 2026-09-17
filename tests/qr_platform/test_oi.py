@@ -22,7 +22,7 @@ def test_oi_reversal_longs_the_losers_and_shorts_the_winners_among_crowded_names
     frames = {}
     for s in closes:
         c = closes[s]
-        frames[s] = pd.DataFrame({"open": c, "high": c, "low": c, "close": c, "volume": 1.0, "quote_volume": 1e6, "open_interest": oi[s]}, index=idx)
+        frames[s] = pd.DataFrame({"open": c, "high": c, "low": c, "close": c, "volume": 1e6 / c, "quote_volume": 1e6, "open_interest": oi[s]}, index=idx)
     panel = Panel.from_frames(frames, fields=["open", "high", "low", "close", "volume", "quote_volume", "open_interest"])
     w = OIReversal(lookback=7, oi_lookback=7, oi_min=0.05, n_side=1, rebalance_on=None).target_weights(panel)
     last = w.iloc[-1]

@@ -165,6 +165,17 @@ class Panel:
             body_low = np.minimum(self.close, body)
             mask &= (high >= body_high * (1 - 1e-9)) | high.isna()
             mask &= (low <= body_low * (1 + 1e-9)) | low.isna()
+        # A bar whose quote volume implies a VWAP outside its own range did not
+        # happen either. The perp archive has 24 such bars in 637,705 (19 pairs,
+        # five dates in September and November 2023; quote volume about 1.5x
+        # too large). Same 5% tolerance as `qa.check_klines`, and only where
+        # the bar traded, so a zero-volume bar is judged by the rules above.
+        if quote is not None and volume is not None and high is not None and low is not None:
+            with np.errstate(divide="ignore", invalid="ignore"):
+                vwap = quote / volume
+            traded = volume > 0
+            outside = traded & ((vwap < low * 0.95) | (vwap > high * 1.05))
+            mask &= ~outside.fillna(False)
         return mask
 
     #: Bars per year, for annualising.

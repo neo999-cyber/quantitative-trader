@@ -167,9 +167,14 @@ def permute_panel(
     # it would price commissions off the adjusted close while the observed run
     # used the real one, and gate 6 would be comparing two different cost
     # models rather than two orderings of the same market.
+    # Quote volume travels the same way: base volume is a per-bar quantity, and
+    # the dollar volume of the rebuilt bar is that base volume at the rebuilt
+    # price. Carrying the dollar figure unchanged (as this did before
+    # 2026-09-17) left the source bar's VWAP at the source bar's price level,
+    # which `Panel.tradable` now rejects as a bar that cannot be true.
     ratios = {
         field_name: (panel[field_name] / close)
-        for field_name in ("open", "high", "low", "close_unadjusted")
+        for field_name in ("open", "high", "low", "close_unadjusted", "quote_volume")
         if field_name in panel.fields
     }
 

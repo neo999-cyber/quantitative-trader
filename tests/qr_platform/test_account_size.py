@@ -46,7 +46,14 @@ def etf_panel():
     world = edge_world(n_symbols=6, years=3, seed=5)
     fields = {}
     for name, frame in world.fields.items():
-        fields[name] = frame * 100.0 if name in ("open", "high", "low", "close") else frame
+        # prices x100 and base volume /100 keep quote volume, and so the implied
+        # VWAP, consistent with the bar (the panel withholds bars where it is not)
+        if name in ("open", "high", "low", "close"):
+            fields[name] = frame * 100.0
+        elif name == "volume":
+            fields[name] = frame / 100.0
+        else:
+            fields[name] = frame
     fields["close_unadjusted"] = fields["close"]
     return Panel(fields, world.interval)
 

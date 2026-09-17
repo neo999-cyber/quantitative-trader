@@ -213,7 +213,8 @@ def test_removing_the_double_count_raises_capacity(costs):
     """The regression test for the number the user called out."""
     base = edge_world(n_symbols=8, years=4, seed=3)
     quote = base["quote_volume"]
-    deep = Panel({**base.fields, "quote_volume": quote / quote.mean().mean() * 1e8}, base.interval)
+    scale = 1e8 / quote.mean().mean()
+    deep = Panel({**base.fields, "quote_volume": quote * scale, "volume": base["volume"] * scale}, base.interval)
     strategy = TSMOM(lookback=60)
     fixed = _capacity(context(deep, strategy, costs))
     before = _capacity(context(deep, strategy, raw_law()))

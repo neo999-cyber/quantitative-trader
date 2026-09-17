@@ -7,7 +7,7 @@ formulas, and reports what the numbers say before reading the code.*
 
 ## What to review
 
-Nine defects were found by the first Programme 2 runs and fixed the same day,
+Ten defects were found by the first Programme 2 runs and fixed the same day,
 each with a test. The reviewer's job is (a) to confirm each fix from its
 test and a hand computation, (b) to say whether any fix could have moved a
 Programme 1 verdict, and (c) to look for what the fixes missed.
@@ -22,6 +22,7 @@ Programme 1 verdict, and (c) to look for what the fixes missed.
 | 6 | `qr/strategies/carry.py` | when fewer than `n_max` units qualified, the NaN tail of `sort_values` filled the book with alphabetically-first non-qualifying units | `test_a_bar_with_fewer_qualifying_units_than_room_holds_only_those_units` |
 | 7 | `qr/cli.py` | `--param` silently dropped whenever `--grid` was present | `test_fixed_params_apply_to_every_grid_variant_and_a_clash_is_refused` |
 | 8 | `qr/data/imbalance.py` | Databento side code `A` (ask = sell imbalance) mapped as `S`; every sell imbalance read as zero | `test_databento_side_codes_are_bid_buy_and_ask_sell` |
+| 10 | `qr/data/panel.py`, `qr/validate/permutation.py` (17 Sep) | 24 perp bars (19 pairs, five dates in 2023) with quote volume ~1.5× the bar's range: QA flagged them, `Panel.tradable()` served them, gate 1 failed the C5 book for bars it had read. Now withheld (VWAP outside [low·0.95, high·1.05]); permuted panels carry quote volume as a ratio to close | `test_a_bar_whose_quote_volume_implies_a_vwap_outside_its_range_is_not_tradable` |
 | 9 | `qr/validate/spa.py` (open) | SPA raised "zero-size array to reduction operation maximum" on the C1 v2 hourly run; not reproduced; runs now save their variant-return matrix (`reports/<id>_variant_returns.parquet`) | none yet |
 
 Also new and worth a second pair of eyes: `benchmark=exposure`

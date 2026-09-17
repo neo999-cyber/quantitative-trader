@@ -82,3 +82,56 @@ def pull_all(mirror: Path, pause: float = 0.1) -> pd.DataFrame:
         rows.append({"symbol": sym, "settlements": len(frame), "start": frame.index.min() if len(frame) else None})
         time.sleep(pause)
     return pd.DataFrame(rows)
+
+
+# ------------------------------------------------------------- daily klines
+
+
+def kline_history(symbol: str, interval: str = "D", pause: float = 0.1) -> pd.DataFrame:
+    """`GET /v5/market/kline`: up to 1,000 bars a page, newest first, paged by
+    `end`. Columns come back as [start, open, high, low, close, volume,
+    turnover]; `volume` is in base units and `turnover` in USDT, so
+    `quote_volume = turnover` and the implied VWAP is consistent."""
+    rows, end = [], None
+    while True:
+        params = {"category": "linear", "symbol": symbol, "interval": interval, "limit": 1000}
+        if end:
+            params["end"] = end
+        page = _get("/v5/market/kline", params)["result"]["list"]
+        if not page:
+            break
+        rows += page
+        oldest = int(page[-1][0])
+        if len(page) < 1000:
+            break
+        end = oldest - 1
+        time.sleep(pause)
+    cols = ["open_time", "open", "high", "low", "close", "volume", "quote_volume"]
+    if not rows:
+        return pd.DataFrame(columns=cols[1:], index=pd.DatetimeIndex([], tz="UTC", name="open_time"))
+    frame = pd.DataFrame(rows, columns=cols)
+    frame["open_time"] = pd.to_datetime(frame["open_time"].astype(int), unit="ms", utc=True)
+    for c in cols[1:]:
+        frame[c] = frame[c].astype(float)
+    return frame.set_index("open_time").sort_index().pipe(lambda f: f[~f.index.duplicated(keep="last")])
+
+
+def pull_klines(mirror: Path, symbols: list[str] | None = None, pause: float = 0.1) -> pd.DataFrame:
+    """Daily USDT-perp klines -> `mirror/bybit/klines_1d/<SYMBOL>.parquet`."""
+    mirror.mkdir(parents=True, exist_ok=True)
+    symbols = symbols or [s["symbol"] for s in linear_symbols()]
+    rows = []
+    for sym in symbols:
+        target = mirror / f"{sym}.parquet"
+        if target.exists():
+            continue
+        try:
+            frame = kline_history(sym, pause=pause)
+        except Exception as exc:  # noqa: BLE001
+            rows.append({"symbol": sym, "note": str(exc)[:60]})
+            continue
+        frame["first_observed_at"] = pd.Timestamp(datetime.now(timezone.utc))
+        frame.reset_index().to_parquet(target, index=False)
+        rows.append({"symbol": sym, "bars": len(frame), "start": frame.index.min() if len(frame) else None})
+        time.sleep(pause)
+    return pd.DataFrame(rows)

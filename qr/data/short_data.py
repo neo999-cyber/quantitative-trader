@@ -47,8 +47,14 @@ def parse_ftd(payload: bytes) -> pd.DataFrame:
     with zipfile.ZipFile(io.BytesIO(payload)) as zf:
         raw = zf.read(zf.namelist()[0])
     text = raw.decode("latin-1")
-    frame = pd.read_csv(io.StringIO(text), sep="|", dtype=str, keep_default_na=False)
-    frame = frame.rename(columns=lambda c: c.strip().lower())
+    # A few descriptions carry a literal "|" (one line in 52,725 of the
+    # 2017-07a file); the row's first five fields are still positional, so
+    # split by hand and keep the first six columns rather than drop the row.
+    lines = [ln for ln in text.splitlines() if ln.strip()]
+    header = [c.strip().lower() for c in lines[0].split("|")]
+    body = [ln.split("|", len(header) - 1)[: len(header)] for ln in lines[1:]]
+    body = [row + [""] * (len(header) - len(row)) for row in body]
+    frame = pd.DataFrame(body, columns=header, dtype=str)
     frame = frame.rename(columns={"settlement date": "settlement_date", "quantity (fails)": "fails"})
     frame = frame[frame["settlement_date"].str.match(r"^\d{8}$")]
     out = pd.DataFrame(

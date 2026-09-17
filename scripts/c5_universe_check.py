@@ -26,7 +26,10 @@ m = membership(panel, spec)
 members = m.sum(axis=1)
 ever = list(m.any()[m.any()].index)
 has_oi = oi[m].notna().sum() / m.sum().replace(0, np.nan)
-bad_names = [s for s in ever if s in NOT_CRYPTO_ASSETS or s.endswith(LEVERAGED_SUFFIXES) or any(x in s for x in ("USDC", "BUSD", "TUSD", "FDUSD", "EUR", "GBP"))]
+# stablecoin / fiat bases by exact base-asset match: a substring test would
+# catch DOTUSDT ("TUSD"), ARBUSDT ("BUSD") and forty-odd other real assets
+STABLE_OR_FIAT = {"USDC", "BUSD", "TUSD", "FDUSD", "USDP", "DAI", "EUR", "GBP"}
+bad_names = [s for s in ever if s in NOT_CRYPTO_ASSETS or s.endswith(LEVERAGED_SUFFIXES) or s.removesuffix("USDT") in STABLE_OR_FIAT]
 print(f"members per bar: median {members.median():.0f}, min {members.min()}, max {members.max()}; ever {len(ever)}")
 print(f"share of member-bars with OI, median across names: {has_oi.median():.2f}; names below 0.5: {(has_oi < 0.5).sum()}")
 print(f"OI observed from {oi.notna().any(axis=1).idxmax().date()}; sample bars {len(panel.index)}")

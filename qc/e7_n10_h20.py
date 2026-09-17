@@ -1,4 +1,4 @@
-# E7 implementation — variant e7_n5_h20 5 20 top: n , hold , mode 
+# E7 implementation — variant e7_n10_h20: n 10, hold 20, mode top
 # E7 implementation (docs/prereg/p2_short_squeeze_v1.md + amendment), loaded by qc/bootstrap_main.py:
 # every top-level function taking `self` is bound to the running QCAlgorithm.
 # Selection is done offline (scripts/e7_events.py, no prices); this only executes:
@@ -8,9 +8,9 @@ from datetime import datetime, timedelta
 
 EVENTS_URL = "https://raw.githubusercontent.com/neo999-cyber/quantitative-trader/claude/funny-faraday-nizzck/qc/e7_events.b64"
 EVENTS_SHA256_PREFIX = "e469af595960c4bb"
-N = 
-HOLD = 
-MODE = ""   # top | bottom | random
+N = 10
+HOLD = 20
+MODE = "top"   # top | bottom | random
 
 
 def impl_initialize(self):

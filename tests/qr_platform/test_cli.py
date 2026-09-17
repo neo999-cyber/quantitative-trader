@@ -517,3 +517,21 @@ def test_autopilot_prices_each_asset_at_the_account_its_trial_uses(tmp_path, mon
     long_short = run_asset("etf-ls")
     assert long_short["equity"] == LONG_SHORT_TRIAL_EQUITY
     assert long_short["costs"].borrow_bps_per_year > 0
+
+
+def test_gates_on_the_ledger_engine_record_which_engine_ran(env, tmp_path, capsys):
+    import json
+
+    run(env, "data", "ingest")
+    capsys.readouterr()
+    assert run(env, "trial", "prereg", "tsmom_ledger", "--text", "trends persist; long-only; top 3") == 0
+    run(env, "gates", "--family", "tsmom", "--grid", "lookback=[20,40]", "--n", "3",
+        "--min-history", "60", "--permutations", "5", "--all-gates", "--hypothesis", "tsmom_ledger",
+        "--engine", "ledger")
+    out = capsys.readouterr().out
+    assert "wrote" in out
+    report = json.loads((tmp_path / "lake" / "reports" / "tsmom_ledger.json").read_text())
+    assert report["context"]["engine"] == "ledger"
+    log = TrialLog(paths(tmp_path / "lake").trial_log)
+    runs = [r for r in log.records(kind="run", hypothesis_id="tsmom_ledger")]
+    assert runs and runs[-1].payload["params"]["engine"] == "ledger"

@@ -370,3 +370,28 @@ def test_the_cli_takes_the_engine_flag():
     args = build_parser().parse_args(["gates", "--family", "tsmom", "--engine", "ledger"])
     assert _engine_kwargs(args, {"risk_free": 0.04}) == {"engine": "ledger", "risk_free": 0.04}
     assert _engine_kwargs(build_parser().parse_args(["gates", "--family", "tsmom"]), {"risk_free": 0.04}) == {}
+
+
+def test_impact_on_the_ledger_matches_the_runners_to_the_account_it_compounds():
+    panel = edge_world(n_symbols=4, years=1, seed=2)
+    costs = CostModel.trial()
+    runner = run_backtest(panel, TSMOM(lookback=30), costs, equity=1e6, charge_impact=True)
+    ledger = run_backtest(panel, TSMOM(lookback=30), costs, equity=1e6, charge_impact=True, engine="ledger")
+    assert ledger.cost_parts["impact"].sum() > 0
+    # the runner prices impact on a constant $1m; the ledger on the account as it
+    # compounds — this book loses on this world, so its orders shrink and so does impact
+    assert runner.equity.iloc[-1] < 0.5
+    ratio = ledger.cost_parts["impact"].sum() / runner.cost_parts["impact"].sum()
+    assert 0.5 < ratio < 1.0
+    assert (ledger.cost_parts.sum(axis=1) - ledger.costs).abs().max() < 1e-15
+
+
+def test_the_leakage_probe_reads_the_same_on_both_engines_at_zero_cost():
+    from qr.research.runner import leakage_probe
+
+    panel = edge_world(n_symbols=4, years=2, seed=1)
+    for strategy in (TSMOM(lookback=30), CrossSectionalMomentum()):
+        weights = leakage_probe(panel, strategy, FREE)
+        ledger = leakage_probe(panel, strategy, FREE, engine="ledger")
+        np.testing.assert_allclose(ledger["gross_sharpe"].to_numpy(), weights["gross_sharpe"].to_numpy(), rtol=1e-9)
+        assert ledger.attrs["spike_z"] == pytest.approx(weights.attrs["spike_z"], rel=1e-9)

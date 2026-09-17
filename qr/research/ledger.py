@@ -255,6 +255,7 @@ def run_ledger(
     qty = np.zeros(m)  # units of the book (leg k holds sides[k] * qty)
     cash = float(equity)
     last = [np.full(m, np.nan) for _ in legs]  # last valid price per leg
+    last0 = [np.zeros(m) for _ in legs]  # the same with 0 for "never priced", for the hot loop
     pending = np.zeros(3)  # commission, spread, impact of the orders at t-1
     pending_notional = 0.0
     nav_prev = float(equity)
@@ -330,7 +331,7 @@ def run_ledger(
         return fees, unit_notional
 
     for t in range(n):
-        held[t] = qty * np.nan_to_num(last[0]) / nav_prev if nav_prev > 0 else 0.0
+        held[t] = qty * last0[0] / nav_prev if nav_prev > 0 else 0.0
         qty_path[t] = qty
         forced = np.zeros(3)
         forced_notional = 0.0
@@ -348,20 +349,21 @@ def run_ledger(
             move = np.where(valid[t] & np.isfinite(last[k]), p[t] - last[k], 0.0)
             pnl += float((sides[k] * qty * move).sum())
             last[k] = np.where(valid[t], p[t], last[k])
+            last0[k] = np.where(np.isfinite(last[k]), last[k], 0.0)
         # 2. funding on held notional at the mark, venue sign
         funding_flow = 0.0
         for k, f in enumerate(fundings):
             if f is None:
                 continue
             rate = np.nan_to_num(f[t])
-            funding_flow -= float((rate * sides[k] * qty * np.nan_to_num(last[k])).sum())
+            funding_flow -= float((rate * sides[k] * qty * last0[k]).sum())
         cash += funding_flow
         # 3. borrow on short notional at the mark
         borrow = 0.0
         for k in range(len(legs)):
             if borrow_per_bar[k] > 0:
                 short = np.minimum(sides[k] * qty, 0.0)
-                borrow += float((np.abs(short) * np.nan_to_num(last[k])).sum() * borrow_per_bar[k])
+                borrow += float((np.abs(short) * last0[k]).sum() * borrow_per_bar[k])
         cash -= borrow
         # 4. an instrument whose bar is the round trip is flat by the mark
         if round_trip and np.abs(qty).sum() > 0:
@@ -373,7 +375,7 @@ def run_ledger(
         paid = cash * rf[t]
         cash += paid
 
-        nav = cash + sum(float((sides[k] * qty * np.nan_to_num(last[k])).sum()) for k in range(len(legs)))
+        nav = cash + sum(float((sides[k] * qty * last0[k]).sum()) for k in range(len(legs)))
         nav_path[t] = nav
         if nav_prev > 0:
             gross[t] = (pnl + funding_flow + paid) / nav_prev

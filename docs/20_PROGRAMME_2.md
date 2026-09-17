@@ -648,6 +648,21 @@ the week-12 report (per family, capacity, what a serious attempt needs)
 is the remaining deliverable. Nothing is registered from here without a
 new input.
 
+**17 September 2026, 15:40 Dubai — after the counter.** `docs/23` (the
+report) and `docs/24` (the maker-fill study) written. Owner: "$2,000 is
+fine if eventually a proper system emerges" — recorded as a standing input
+for E5/E4's long/short versions, unused. Owner said yes to **stage 0** of
+the maker study: two recorder services on the Hetzner box
+(`qr-tape-binance`, `qr-tape-bybit`; `scripts/record_tape.py`) now write
+the public top-of-book and every trade for the 20 most liquid cross-venue
+symbols (BTC, ETH, SOL, XRP, HYPE, ZEC, DOGE, ADA, ENA, BEAT, NEAR, LINK,
+1000PEPE, CL, XAUT, WLD, SUI, UNI, ONDO, BNB) to `/root/tape/data/`, ~320
+rows a second on Binance, gzip per day. No key, no order. Binance's
+`@aggTrade` sends nothing to that host; `@trade` does. Stage 0's decision
+rule (≥ 70% fills in 15 minutes, < 2 bps adverse mark) is fixed in
+`docs/24` before any tape is read; the read is on or after **1 October
+2026**. The independent review is running on Codex.
+
 ---
 
 ## Reviewed against an independent plan (Codex, 15 September 2026)

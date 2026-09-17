@@ -90,7 +90,7 @@ hand ledger, not from the production formula)
   runner's `(1+net).cumprod()` to 1e-9 (the identity case), and equal on
   every existing `edge_world` fixture for daily-rebalanced strategies.
 
-### Status, 18 September 2026 (end of the build session)
+### Status, 17 September 2026, evening (end of the build session; the independent scope review caught this line's earlier "18 September")
 
 Built and tested: `qr/research/ledger.py`, `tests/qr_platform/test_ledger.py`
 (every acceptance case above, plus the fee-booking and unit-sizing

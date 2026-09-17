@@ -17,8 +17,16 @@ Two Programme 2 mechanisms are real and untradeable at taker costs:
 A maker order pays the lower fee and does not cross the spread. Published
 schedules: Binance USDⓈ-M regular tier maker 2.0 bps / taker 5.0 bps
 (1.8 / 4.5 with BNB); Bybit non-VIP linear maker 2.0 / taker 5.5. With
-both legs made, C2's round trip falls from ~25 bps to **~4–5 bps plus
-whatever the wait costs**, and that last term is the unknown this study
+both legs made, C2's round trip falls from ~25 bps to **~8 bps plus
+whatever the wait costs** — both figures per one leg's notional (the
+taker: 2 × 5 + 2 × 5.5 = 21 bps of fees plus two spreads; the maker:
+2 bps × two legs × two sides; per two-leg gross notional halve both).
+Until 18 September 2026 this line read "~4–5 bps", which was the maker
+figure on the gross denominator against the taker figure on the one-leg
+denominator — caught by the independent scope review (`docs/27`). The
+engine charges it the 8-bps way (`CostModel.carry_pair` sums both legs'
+fees on unit turnover), so no reported number moves; C2's break-even
+falls from ~9 days to ~3. The wait cost is the unknown this study
 measures. Nothing else in the programme changes: same units, same gates,
 same 3× bar — only the cost model, and only after it is measured.
 

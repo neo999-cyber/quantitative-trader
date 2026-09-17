@@ -518,6 +518,61 @@ interest; 415 of the 471 both-leg symbols started, ~800 files a
 minute, workers alive) before the C5 mechanical check decides whether C5
 is registered and run.
 
+**17 September 2026, 09:15 Dubai — C5 `p2_oi_reversal_v1`: verdict FAIL at
+gate 3 (and 4, 5, 6).** Registered by the night chain at seq 585 (control
+586) after the mechanical universe check passed, and only then. Two
+defects surfaced on the way, both closed with tests before the counted
+re-run:
+
+- *The check itself.* Its stablecoin/fiat-base filter tested `"TUSD"`,
+  `"BUSD"` as substrings and so flagged DOTUSDT, ARBUSDT and 44 other real
+  assets → FAIL. Fixed to an exact base-asset match
+  (`scripts/c5_universe_check.py`); no return was read. Open interest was
+  also ingested for the 187 perp-only USDT symbols already mirrored (the
+  first ingest covered only the 471 both-leg names). Final check: members
+  per bar median 119 (min 0 before `min_history`, max 120), OI coverage
+  median 1.00 with 20 names below 0.5 (perp-only names whose metrics the
+  workers had not reached — KAS, LUNA2 and the like; 20 of 359 ever-members),
+  OI observed from 2021-12-01, sample 1,370 bars, **PASS**.
+- *Gate 1 on the perp lake.* Both runs stopped at gate 1: Binance's `um`
+  daily archive carries **24 bars (19 pairs, five dates in September and
+  November 2023) whose quote volume is ~1.5× what the bar's range allows**
+  (AAVE 2023-09-21: implied VWAP $96 against a high of $66). `qa.check_klines`
+  had always flagged them; `Panel.tradable` did not withhold them, so the
+  gate failed a book for bars the platform had served. `tradable()` now
+  withholds a bar whose implied VWAP lies outside [low·0.95, high·1.05]
+  (same tolerance as QA; the third "cannot be true" rule after negative
+  volume and high-below-close), and `permute_panel` carries quote volume
+  as a ratio to close so the permuted bars stay consistent. Three synthetic
+  fixtures that scaled price or quote volume alone were made consistent.
+  792 tests pass. The first, gate-1-blocked family attempt was still
+  written to the trial log (seq 587–604) and counts.
+
+Re-run (night-4d), 2021-12 → 2025-08, `futures/um` ranks 31–150, `--costs
+perp`, benchmark cash:
+
+| run | gate 1 | gate 2 | gate 3 | gate 4 | gate 5 | gate 6 | gate 7 | gate 8 |
+|---|---|---|---|---|---|---|---|---|
+| control (unconditioned, 1 variant) | WARN | **FAIL** gross ≤ 0 | HAC t −0.80 | DSR 0.27 | skip | p 0.92 | 0/9 paths | 40% years |
+| family (18 variants) | WARN | PASS 78% net/gross, Sharpe 0.60 at 2× | **FAIL** HAC t 1.68 (p 0.09) | FAIL DSR 0.63 (eff. rank 5) | FAIL PBO 0.43, SPA p 0.46 | FAIL p 0.35 re-optimised; random-entry 0.005 | WARN 0.62 = 74% IS, 8/9 paths | FAIL alpha t 1.69 |
+
+Best variant `lookback3_n_side10_oi_min0.1_rebalance_W`: net Sharpe 0.84
+(gross 1.07), 16.9%/yr, vol 20%, max DD 23%, turnover 71×/yr, 2,291 round
+trips, capacity ~$30k. What that means: the pre-registered falsifier
+"DSR below 0.90 over 18" fires, and the unconditioned control earning
+*nothing* (t −0.80) while the OI-conditioned book earns t 1.68 is the
+right direction but not evidence — PSR 0.95 over 3.75 years with a
+minimum track record of 8.3 years, and a re-optimised permutation null
+that reaches the observed Sharpe 35% of the time. The 9-path CV is the
+one thing that looks alive (8 of 9 positive, WFE 0.47). Not enough to
+pass; not nothing. Mechanism candidate **6 of 8**. Holdout not opened.
+Trial count **2,048** (624 records, chain verified).
+
+What it would take to reopen: the same rule on a longer sample (OI
+metrics start 2021-12, so the sample cannot grow backwards) or on a
+second venue's OI (Bybit's is mirrored for funding only) — a new
+pre-registration, not a re-run.
+
 ---
 
 ## Reviewed against an independent plan (Codex, 15 September 2026)

@@ -83,7 +83,18 @@ bench_files = sorted(glob.glob(str(root / "mirror" / "quantconnect" / "e5_benchm
 bench = None
 if bench_files:
     b = daily_equity(load_result(bench_files[-1])).pct_change().dropna()
-    exposure = float(np.clip((N[best] != 0).mean(), 0, 1))  # share of sessions with a move: a proxy for time invested
+    # Holdings-based exposure: the mean of LEAN's "Equity - Long Ratio" for
+    # the best variant's backtest, read from its Exposure chart and kept in
+    # mirror/quantconnect/exposure.json. Until 17 September 2026 this was
+    # the share of sessions with a non-zero net return, which the constant
+    # daily cost deduction made 1.0 for every variant (review 22, Q5): the
+    # "exposure-matched" benchmark was the full benchmark.
+    expo_file = root / "mirror" / "quantconnect" / "exposure.json"
+    expo = json.loads(expo_file.read_text()) if expo_file.exists() else {}
+    bid = meta[best]["backtest_id"]
+    if bid not in expo:
+        raise SystemExit(f"no holdings-based exposure for {best} ({bid}) in {expo_file}; read the Exposure chart first")
+    exposure = float(np.clip(expo[bid][0] - expo[bid][1], 0, 1))
     rf = cash_benchmark(N.index, ppy, 0.02)
     bench = (exposure * b.reindex(N.index).fillna(0.0) + (1 - exposure) * rf).rename("exposure_matched")
     print(f"benchmark: equal-weight eligible universe scaled to exposure {exposure:.2f}")
@@ -104,7 +115,17 @@ if bench is not None:
         out["gate5"].update(spa.summary())
     except Exception as exc:  # noqa: BLE001
         out["gate5"]["spa_error"] = str(exc)
-print(json.dumps({k: out[k] for k in ("gate2", "gate3", "gate4", "gate5")}, indent=1, default=str))
+# gate 7 on the same variant matrix, with the engine's own CPCV and walk-forward
+# (review 22, Q5: it was neither implemented nor present until 17 September 2026).
+# Purge = the longest hold in the family, in sessions.
+from qr.validate.cpcv import combinatorial_purged_cv, walk_forward_efficiency
+
+hold_key = "hold_sessions" if args.family == "e5" else "hold"
+purge = int(max(int(v.get(hold_key, 60)) for v in variants.values()))
+cv = combinatorial_purged_cv(N, ppy, n_groups=10, k=2, purge=purge, embargo=max(5, purge // 4))
+walk = walk_forward_efficiency(N, ppy, n_windows=6, purge=purge)
+out["gate7"] = {**cv.summary(), "walk_forward_efficiency": walk.attrs.get("wfe", float("nan")), "purge_bars": purge}
+print(json.dumps({k: out[k] for k in ("gate2", "gate3", "gate4", "gate5", "gate7")}, indent=1, default=str))
 
 log = TrialLog(paths().ensure().trial_log)
 if not args.no_log:

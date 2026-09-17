@@ -20,6 +20,8 @@ from qr.strategies.base import Strategy
 
 
 class AuctionFade(Strategy):
+    #: every bar of the overnight unit is a full round trip (close -> open)
+    round_trip_each_bar = True
     family = "auction_fade"
 
     def __init__(

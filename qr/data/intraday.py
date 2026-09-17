@@ -39,15 +39,23 @@ def session_split_frames(minutes: pd.DataFrame, decision: str = "15:30") -> pd.D
     rows = []
     for day, bars in regular.groupby(regular.index.date):
         bars = bars.sort_index()
-        at_decision = bars[bars.index.time <= pd.Timestamp(f"{day} {decision}").time()]
-        after = bars[bars.index.time > pd.Timestamp(f"{day} {decision}").time()]
+        # Databento stamps a minute bar with the *start* of its interval, so
+        # the bar stamped 15:30 closes at 15:31 and is not known at a 15:30
+        # decision: only bars stamped before the decision are complete by it
+        # (review 22, §1.6; until 17 September 2026 the 15:30 bar was read).
+        at_decision = bars[bars.index.time < pd.Timestamp(f"{day} {decision}").time()]
+        after = bars[bars.index.time >= pd.Timestamp(f"{day} {decision}").time()]
         if at_decision.empty or after.empty:
             continue  # an early close, or a day with no bars around the decision
         if bars.index[-1].time() < pd.Timestamp("15:45").time():
             continue
         open_px = float(bars["open"].iloc[0])
         px_dec = float(at_decision["close"].iloc[-1])
-        close_px = float(bars["close"].iloc[-1])
+        # The session's closing print is the auction at 16:00:00, which is the
+        # first trade of the bar stamped 16:00; that bar's close (15:59-16:01
+        # prints after the auction) is not a regular-session fill.
+        last = bars.iloc[-1]
+        close_px = float(last["open"]) if last.name.time() == pd.Timestamp("16:00").time() else float(last["close"])
         vol_a = float(at_decision["volume"].sum()); vol_b = float(after["volume"].sum())
         rows.append((pd.Timestamp(f"{day} 09:30", tz=NY), open_px, px_dec, vol_a, px_dec / open_px - 1.0, 0.0))
         rows.append((pd.Timestamp(f"{day} {decision}", tz=NY), px_dec, close_px, vol_b, float("nan"), 1.0))

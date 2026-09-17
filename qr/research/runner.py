@@ -197,7 +197,17 @@ def run_backtest(
     marks = strategy.trades_on(panel.index) if hasattr(strategy, "trades_on") else None
     if marks is not None and not bool(marks.all()):
         held = hold_between(held, returns, marks)
-    held = held.where(panel.tradable(), 0.0)
+    # Permission to *enter* is judged at the decision bar (t - lag), on what
+    # was known then: the bar had to be tradable. Permission to *hold* through
+    # bar t needs only a valid price at t. Until 17 September 2026 the held
+    # book was masked by bar t's full `tradable()`, so a corrupt volume field
+    # on a crash bar zeroed the position and erased the loss (review 22, §1.1).
+    # A bar with no valid price still liquidates at the last close — the
+    # honest reading of an archive that stops, stated as a convention.
+    prior = drift(held.shift(1).fillna(0.0), returns.shift(1))
+    entered = held.abs() > prior.abs() + 1e-12
+    may_enter = panel.tradable().shift(lag).fillna(False).astype(bool)
+    held = held.where(panel.price_valid() & (may_enter | ~entered), 0.0)
     if costs.whole_shares:
         # A venue that fills whole shares holds what the account can buy at
         # the price it traded at, which is the previous bar's close for a
@@ -224,6 +234,14 @@ def run_backtest(
     # matched it only because both looked one bar ahead.)
     drifted = drift(held.shift(1).fillna(0.0), returns.shift(1))
     turnover_matrix = (held - drifted).abs()
+    if getattr(strategy, "round_trip_each_bar", False):
+        # An instrument whose bar *is* the round trip (the overnight unit:
+        # buy at the close, sell at the open) is flat between bars, so two
+        # consecutive signals on one name are two entries and two exits, not
+        # a position carried across the day. Until 17 September 2026 adjacent
+        # equal weights were read as a hold and the middle legs went
+        # uncharged (review 22, §1.4). Exit is at the grown value.
+        turnover_matrix = held.abs() + (held * (1.0 + returns.fillna(0.0))).abs()
     turnover = turnover_matrix.sum(axis=1).rename("turnover")
 
     adv = volume_adv(panel) if charge_impact else None

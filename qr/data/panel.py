@@ -125,6 +125,24 @@ class Panel:
     def log_returns(self) -> pd.DataFrame:
         return np.log(self.close).diff()
 
+    def price_valid(self) -> pd.DataFrame:
+        """Where a bar has a price that can be true: a positive close whose
+        high and low bracket its open and close. This is what an *existing*
+        position needs to be carried through the bar and earn (or lose) its
+        return; `tradable()` adds the volume rules an *order* needs. Split out
+        on 17 September 2026 (review 22, §1.1): masking held positions by the
+        full `tradable()` erased a real −50% loss on a bar whose only defect
+        was a corrupt quote-volume field."""
+        mask = self.close.notna() & (self.close > 0)
+        high, low, open_ = self.get("high"), self.get("low"), self.get("open")
+        if high is not None and low is not None:
+            body = open_ if open_ is not None else self.close
+            body_high = np.maximum(self.close, body)
+            body_low = np.minimum(self.close, body)
+            mask &= (high >= body_high * (1 - 1e-9)) | high.isna()
+            mask &= (low <= body_low * (1 + 1e-9)) | low.isna()
+        return mask
+
     def tradable(self, min_quote_volume: float = 0.0) -> pd.DataFrame:
         """Where a bar is real: a price exists, it traded, and it is possible.
 

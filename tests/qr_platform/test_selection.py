@@ -407,3 +407,21 @@ def test_walk_forward_efficiency_separates_an_edge_from_noise(planted, noise_var
 def test_cross_validation_needs_variants():
     with pytest.raises(ValueError, match="no variants"):
         combinatorial_purged_cv(pd.DataFrame())
+
+
+def test_stepm_survives_every_model_being_removed_over_successive_rounds():
+    """arch 8.0.0's StepM re-runs SPA on an empty selection when the last
+    model is removed in a later round (review 22, §2: the C1 v2 hourly
+    "zero-size array" failure). Two models, both better than the benchmark
+    by very different margins, so they leave in two rounds."""
+    import numpy as np
+    import pandas as pd
+    from qr.validate.spa import superior_predictive_ability
+
+    rng = np.random.default_rng(3)
+    idx = pd.date_range("2024-01-01", periods=400, freq="D", tz="UTC")
+    bench = pd.Series(rng.normal(0, 1e-3, 400), index=idx, name="bench")
+    models = pd.DataFrame({"strong": bench + 0.01 + rng.normal(0, 1e-3, 400), "mild": bench + 0.002 + rng.normal(0, 5e-3, 400)}, index=idx)
+    res = superior_predictive_ability(models, bench, periods_per_year=365, reps=200, block_size=10, seed=1)
+    assert set(res.stepm_survivors) == {"strong", "mild"}
+    assert res.p_consistent < 0.05

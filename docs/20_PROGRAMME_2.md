@@ -663,6 +663,26 @@ rule (≥ 70% fills in 15 minutes, < 2 bps adverse mark) is fixed in
 `docs/24` before any tape is read; the read is on or after **1 October
 2026**. The independent review is running on Codex.
 
+**17 September 2026, evening (Fable 5.1) — the independent review came
+back (`docs/25`).** Codex confirmed the nine tests and found four more
+defects plus the StepM cause, all reproduced here by inspection and closed
+with tests the same evening: a held position was zeroed by a corrupt
+*volume* field on the bar (a −50% loss erased; now entry needs the decision
+bar tradable, holding needs a valid price); the overnight unit charged one
+round trip for consecutive nights (now one per night); the 15:30 intraday
+decision read the minute stamped 15:30, which closes at 15:31; arch's StepM
+loop re-ran SPA on an empty set. The external gates' "exposure-matched"
+benchmark had never been scaled (its proxy read 1.0 for every backtest);
+with LEAN's holdings-based exposure **E5's SPA p moves 0.19 → 0.066** and
+its best excess −1.9% → +8.7%/yr, **E7's 0.88 → 0.52**; both verdicts
+stand on their pre-registered alpha-t falsifiers (E5 t 1.31; E7 t 1.34 with
+the random control at 2.49). Gate 7 now runs externally. Seq 536–537 (E5
+re-scorings) voided with a reason; trial count **2,055**, E5 = 8 unique
+configurations. Not done: the per-leg position/cash ledger the review puts
+first — a rewrite of the runner core, specified in `docs/25`, and the
+prerequisite for the maker study's stage 1. No family was re-run; every
+change's direction on the closed verdicts is stated in `docs/25`.
+
 ---
 
 ## Reviewed against an independent plan (Codex, 15 September 2026)

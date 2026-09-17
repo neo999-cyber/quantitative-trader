@@ -154,9 +154,15 @@ def test_a_strategy_cannot_hold_an_impossible_bar(panel):
     from qr.research.runner import run_backtest
     from qr.strategies.library import BuyAndHold
 
-    broken, bad_bar, _ = _reproduce_real_defects(panel)
+    broken, bad_volume_bar, bad_price_bar = _reproduce_real_defects(panel)
     result = run_backtest(broken, BuyAndHold(), CostModel(fee_bps=0.0, half_spread_bps=0.0))
-    assert result.held.loc[bad_bar, "BTCUSDT"] == 0.0
+    # A held position is carried through a bar whose only defect is its
+    # volume field — the price is real and so is its return (review 22, §1.1);
+    # it cannot be *entered* on that bar (`test_a_new_position_is_refused_when_
+    # the_decision_bar_was_not_tradable`). A bar with no valid price cannot be
+    # held: the book is out at the last close, stated as a convention.
+    assert result.held.loc[bad_volume_bar, "BTCUSDT"] == pytest.approx(0.25)
+    assert result.held.loc[bad_price_bar, "ETHUSDT"] == 0.0
 
 
 def test_clean_bars_are_unaffected_by_the_sanity_checks(panel):

@@ -8,10 +8,19 @@ family in this repository is a book of single legs; this one is a book of
 pairs, and the cleanest way to run a pair through an engine built for legs is
 to make the pair a synthetic instrument with a price of its own.
 
-**The unit's price is the ratio spot / perp.** Its percentage change is
-exactly the return of a position long one dollar of spot and short one dollar
-of perp, rebalanced each bar: (1 + r_spot) / (1 + r_perp) − 1. No
-approximation, no separate basis leg to account for. The basis itself is
+**The unit's price is the ratio spot / perp.** Its percentage change,
+(1 + r_spot) / (1 + r_perp) − 1, is the return of one dollar long spot against
+one dollar short perp *to second order*: the exact one-bar return of that
+pair is r_spot − r_perp, and the ratio understates it by r_perp·(r_spot −
+r_perp)/(1 + r_perp). Measured on the daily units on 17 September 2026 (review
+22, §1.3): mean +0.13 bps a bar in the ratio's favour, 99th percentile of the
+gap 5 bps, and the exact pair's daily volatility is 142 bps against the
+ratio's 133 — so a Sharpe read off the ratio is ~7% high on the daily unit.
+The ratio is kept as the *price* because a synthetic instrument needs one;
+the per-leg dollar ledger the review asks for is the fix, not a re-labelling
+(`docs/25`). The denominator is one dollar of spot notional: perp margin and
+the cash reserve are the capital-committed line of gate 2, not part of the
+return. The basis itself is
 carried as a feature (`basis` = perp / spot − 1) because a family that enters
 on funding should be able to see what it is paying in basis to get it.
 

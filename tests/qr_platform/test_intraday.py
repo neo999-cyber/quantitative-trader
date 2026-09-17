@@ -22,8 +22,11 @@ def _minutes(day, path):
 
 
 def _session(day, open_px, at_1530, close_px):
-    n = 391  # 09:30 .. 16:00 inclusive
-    path = np.linspace(open_px, at_1530, 361).tolist() + np.linspace(at_1530, close_px, 31)[1:].tolist()
+    # 391 minutes stamped 09:30 .. 16:00 inclusive. `at_1530` is reached at
+    # the close of the minute stamped 15:29 — the last one complete by 15:30
+    # (Databento stamps the interval start; review 22, §1.6) — and the bar
+    # stamped 16:00 opens at `close_px`, the auction print.
+    path = np.linspace(open_px, at_1530, 360).tolist() + np.linspace(at_1530, close_px, 32)[1:].tolist()
     return _minutes(day, path)
 
 
@@ -66,3 +69,27 @@ def test_the_two_bar_instrument_passes_qa_under_the_sessions2_calendar():
     frame = session_split_frames(bars, decision="15:30")
     assert [c.name for c in check_klines(frame, "QQQ", "1d", calendar="continuous").checks if c.verdict == "FAIL"] == ["bar_spacing"]
     assert not [c.name for c in check_klines(frame, "QQQ", "1d", calendar="sessions2").checks if c.verdict == "FAIL"]
+
+
+def test_the_decision_reads_only_minutes_completed_by_the_decision_time():
+    """Review 22, §1.6: the minute stamped 15:30 (Databento: interval start)
+    closes at 15:31 and cannot move the 15:30 signal; the closing fill is the
+    16:00 auction print, the first trade of the bar stamped 16:00."""
+    import numpy as np
+    import pandas as pd
+    from qr.data.intraday import session_split_frames
+
+    idx = pd.date_range("2024-03-04 09:30", "2024-03-04 16:00", freq="1min", tz="America/New_York")
+    px = np.full(len(idx), 100.0)
+    bars = pd.DataFrame({"open": px, "high": px, "low": px, "close": px, "volume": 1000.0}, index=idx.tz_convert("UTC"))
+    base = session_split_frames(bars)
+    spiked = bars.copy()
+    spiked.loc[idx[idx.time == pd.Timestamp("15:30").time()].tz_convert("UTC"), "close"] = 110.0  # inside the 15:30 minute
+    out = session_split_frames(spiked)
+    assert out["ret_to_decision"].iloc[0] == base["ret_to_decision"].iloc[0] == 0.0
+    auction = bars.copy()
+    stamp = idx[idx.time == pd.Timestamp("16:00").time()].tz_convert("UTC")
+    auction.loc[stamp, "open"] = 101.0   # the auction print
+    auction.loc[stamp, "close"] = 99.0   # a print after the auction
+    out = session_split_frames(auction)
+    assert out["close"].iloc[1] / out["open"].iloc[1] - 1 == pytest.approx(0.01)

@@ -96,7 +96,7 @@ def superior_predictive_ability(
     is removed: it carries no information and its zero variance upsets the
     standardisation.
     """
-    from arch.bootstrap import SPA, StepM
+    from arch.bootstrap import SPA
 
     frame = variant_returns.copy()
     joined = pd.concat([benchmark.rename("_benchmark"), frame], axis=1, join="inner").dropna()
@@ -127,9 +127,14 @@ def superior_predictive_ability(
 
     survivors: list[str] = []
     if run_stepm and models.shape[1] > 1:
-        stepm = StepM(bench_loss, model_losses, size=stepm_size, reps=reps, block_size=block_size, seed=seed)
-        stepm.compute()
-        survivors = [str(name) for name in stepm.superior_models]
+        # StepM is computed here rather than by `arch.bootstrap.StepM` (8.0.0),
+        # whose loop tests the *latest round's* removals against the model
+        # count instead of the cumulative set: when every model is removed
+        # over successive rounds it re-runs SPA on an empty selection and
+        # raises "zero-size array to reduction operation maximum". That is
+        # the C1 v2 hourly failure of 16 September 2026 (review 22, §2). The
+        # procedure is Romano-Wolf's as arch states it; only the stop is fixed.
+        survivors = [str(models.columns[i]) for i in _stepm(bench_loss, model_losses, stepm_size, reps, block_size, seed)]
 
     return SPAResult(
         p_consistent=float(p["consistent"]),
@@ -260,3 +265,23 @@ def exposure_benchmark(
     out.attrs["exposure"] = exposure
     out.attrs["backfilled_bars"] = cash.attrs.get("backfilled_bars", 0)
     return out
+
+
+def _stepm(bench_loss, model_losses, size: float, reps: int, block_size: int, seed: int) -> list[int]:
+    """Romano-Wolf StepM by successive SPA rounds; stops when nothing is
+    removed or when the cumulative survivor set holds every model."""
+    from arch.bootstrap import SPA
+
+    k = int(model_losses.shape[1])
+    spa = SPA(bench_loss, model_losses, reps=reps, block_size=block_size, seed=seed)
+    spa.compute()
+    better = [int(i) for i in spa.better_models(size)]
+    all_better = better[:]
+    while better and len(all_better) < k:
+        selector = np.ones(k, dtype=bool)
+        selector[np.array(all_better)] = False
+        spa.subset(selector)
+        spa.compute()
+        better = [int(i) for i in spa.better_models(size)]
+        all_better.extend(better)
+    return sorted(set(all_better))

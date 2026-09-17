@@ -74,8 +74,11 @@ def test_auction_fade_buys_sell_imbalances_at_the_close_and_is_flat_by_the_next_
     assert held["A"].iloc[1] == pytest.approx(0.5) and held["B"].iloc[1] == 0.0
     assert held.iloc[2].abs().sum() == 0.0
     assert float(result.gross.iloc[1]) == pytest.approx(0.5 * 0.01)  # A's overnight: close 100 -> open 101
-    assert result.turnover.iloc[1] == pytest.approx(0.5)
-    assert result.turnover.iloc[2] == pytest.approx(0.5 * 1.01 / 1.005)  # sold after growing 1% overnight
+    # the overnight bar is the whole round trip: bought at the close (0.5),
+    # sold at the open after growing 1% (0.505); nothing is carried into day 2
+    # (review 22, §1.4 — until 17 September 2026 the exit was charged a bar late)
+    assert result.turnover.iloc[1] == pytest.approx(0.5 + 0.5 * 1.01)
+    assert result.turnover.iloc[2] == pytest.approx(0.0)
 
 
 def test_the_basket_is_the_thirty_one_nasdaq_names():

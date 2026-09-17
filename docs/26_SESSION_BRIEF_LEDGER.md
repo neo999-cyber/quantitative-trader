@@ -90,6 +90,22 @@ hand ledger, not from the production formula)
   runner's `(1+net).cumprod()` to 1e-9 (the identity case), and equal on
   every existing `edge_world` fixture for daily-rebalanced strategies.
 
+### Status, 18 September 2026 (end of the build session)
+
+Built and tested: `qr/research/ledger.py`, `tests/qr_platform/test_ledger.py`
+(every acceptance case above, plus the fee-booking and unit-sizing
+conventions), `run_backtest(engine="ledger")`, `GateContext.engine`,
+`qr gates --engine ledger` / `qr backtest --engine ledger`, the engine in
+the trial-log run record and the report's context, `CostModel.legs` on
+`carry_pair` so each leg fills on its own model. The identity case holds
+at zero cost to 1e-9 and the with-fee residual is stated and tested.
+Conventions stated in the module docstring and the report meta: fee
+booking (runner's split), fill price field, capital convention (margin
+recorded, not charged; `count_margin` for the +5%-on-$200 reading), unit
+sizing (`dollars`, with `coins` as the stated alternative). Step 8's chain
+is `scripts/night5_ledger_rerun.sh` + `scripts/ledger_before_after.py`,
+**not run**. Details in `docs/20`'s entry for the day.
+
 ### Then
 
 - `run_backtest(..., engine="ledger")` switch; gates unchanged (they read

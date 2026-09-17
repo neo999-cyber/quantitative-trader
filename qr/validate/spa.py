@@ -150,7 +150,7 @@ def superior_predictive_ability(
 
 
 def buy_and_hold_benchmark(
-    panel, universe: pd.DataFrame | None = None, costs=None, equity: float | None = None
+    panel, universe: pd.DataFrame | None = None, costs=None, equity: float | None = None, **engine_kwargs
 ) -> pd.Series:
     """The benchmark gate 5 tests against: equal-weight the same universe.
 
@@ -175,7 +175,7 @@ def buy_and_hold_benchmark(
 
     kwargs = {"equity": equity} if equity else {}
     return run_backtest(
-        panel, BuyAndHold(), costs or CostModel.trial(), universe, **kwargs
+        panel, BuyAndHold(), costs or CostModel.trial(), universe, **kwargs, **engine_kwargs
     ).net.rename("buy_and_hold")
 
 
@@ -238,6 +238,7 @@ def exposure_benchmark(
     exposure: float,
     periods_per_year: float,
     risk_free: "pd.Series | float | None" = None,
+    **engine_kwargs,
 ) -> pd.Series:
     """The comparator for a long-only stock-selection book: the market at the
     book's own size, the rest in cash.
@@ -259,7 +260,7 @@ def exposure_benchmark(
     exposure = float(exposure)
     if not np.isfinite(exposure) or exposure < 0.0:
         raise ValueError(f"exposure must be a non-negative number, not {exposure!r}")
-    market = buy_and_hold_benchmark(panel, universe, costs, equity)
+    market = buy_and_hold_benchmark(panel, universe, costs, equity, **engine_kwargs)
     cash = cash_benchmark(panel.index, periods_per_year, risk_free)
     out = (exposure * market + (1.0 - exposure) * cash).rename("exposure_matched")
     out.attrs["exposure"] = exposure

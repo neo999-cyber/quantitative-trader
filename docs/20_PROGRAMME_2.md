@@ -683,6 +683,47 @@ first — a rewrite of the runner core, specified in `docs/25`, and the
 prerequisite for the maker study's stage 1. No family was re-run; every
 change's direction on the closed verdicts is stated in `docs/25`.
 
+**18 September 2026 (Opus 5) — the position/cash ledger is built
+(`qr/research/ledger.py`, `docs/26`).** Review 22's first ticket: an
+engine that holds `qty`, `cash` and `nav` and derives weights, beside the
+weight runner, behind `run_backtest(engine="ledger")` and `qr gates
+--engine ledger`; the gates read the same `BacktestResult` and the trial
+log records the engine. Written from the acceptance tests first
+(`tests/qr_platform/test_ledger.py`, expected values from a hand ledger):
+$50 stock + $50 cash drifts to 54.545% with no trade; a −$50 short against
+$150 cash marks to NAV $90 and −66.667%; a monthly book's quantities are
+constant between marks and its turnover zero there; the carry unit books
+spot 100→120 against perp 100→110 as +$10 on $100 (the ratio runner reads
+9.09%), settles funding on the perp leg with the venue's sign, pays each
+leg's fee on its own notional; three consecutive overnight signals are six
+fills; a $250 slice at $400 is no shares and the cash stays, at $100 two
+shares that persist through a rise; a corrupt volume field on a crash bar
+books the loss and refuses a new order; cash earns the risk-free rate only
+when asked. With no costs the ledger's NAV path equals the runner's equity
+to 1e-9 on `edge_world` for seven daily and scheduled strategies; with
+fees they differ by the fee the runner's drift leaves out of its
+denominator (equity within 1e-4 over two years at 9.5 bps a side — the
+ledger is the one that is right). Two conventions are stated in the
+report: fees of an order at the close of *t−1* are booked on bar *t*, the
+bar the position is held over (the runner's split, which gate 2 reads);
+a two-leg unit is delivered in dollars on every decision bar like any
+other family's weight (`unit_sizing="dollars"`), because the ratio runner
+never charged the coin's own drift. That last one is the first thing the
+ledger found: on the real carry unit (three names, always-in, one counted
+smoke, `ledger_engine_smoke`, not a candidate) the same book turns over
+12.4 a year on the ledger against 1.6 on the ratio, costs 2.7%/yr against
+0.3%. Holding the coins instead (`unit_sizing="coins"`) removes the
+re-hedge and doubles the vol — the notional floats against a NAV that
+does not — so it is an option, not the default. The ledger is ~6× slower
+than the runner (0.12 s against 0.02 s on 40 names × 6 years); a night
+chain is fine, a permutation gate is longer. **The review's step 8** — the
+frozen grids re-run on the ledger with a before/after table — is written
+and not run: `scripts/night5_ledger_rerun.sh` (eleven counted runs: C1
+v1/v2 and controls, C5, C2, E1, E2 and their controls; the three
+QuantConnect families are not local) and `scripts/ledger_before_after.py`.
+Every one is a counted trial, so it waits for the owner's yes. Trial log
+**652 records / 2,057 trials**, chain verified.
+
 ---
 
 ## Reviewed against an independent plan (Codex, 15 September 2026)

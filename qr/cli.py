@@ -460,6 +460,29 @@ def _add_benchmark_args(parser) -> None:
     )
 
 
+def _add_engine_arg(parser) -> None:
+    parser.add_argument(
+        "--engine",
+        choices=("weights", "ledger"),
+        default="weights",
+        help="the accounting every backtest runs on: the weight-space runner, or the "
+        "position/cash ledger (quantities, cash, per-leg fills; docs/26). Recorded in the trial log.",
+    )
+
+
+def _engine_kwargs(args, benchmark_kwargs: dict | None = None) -> dict:
+    """`--engine` into what `run_backtest` / `run_sweep` take. On the ledger,
+    cash earns the `--risk-free` rate when one was resolved for the benchmark."""
+    engine = getattr(args, "engine", "weights") or "weights"
+    if engine == "weights":
+        return {}
+    out = {"engine": engine}
+    rate = (benchmark_kwargs or {}).get("risk_free")
+    if rate is not None:
+        out["risk_free"] = rate
+    return out
+
+
 def _benchmark_kwargs(args, lake) -> dict:
     """`--benchmark` and `--risk-free` into what `GateContext` takes.
 
@@ -1096,14 +1119,16 @@ def cmd_gates(args) -> int:
     hypothesis_id = args.hypothesis or args.family
 
     equity = getattr(args, "equity", None)
+    benchmark_kwargs = _benchmark_kwargs(args, lake)
+    engine_kwargs = _engine_kwargs(args, benchmark_kwargs)
     sweep = run_sweep(
         panel, grid, costs, universe, spec.name, trial_log=log, hypothesis_id=hypothesis_id,
-        **({"equity": equity} if equity else {}),
+        **({"equity": equity} if equity else {}), **engine_kwargs,
     )
     log.run(
         hypothesis_id,
         family=sweep.family,
-        params={"grid": f"{len(grid)} variants"},
+        params={"grid": f"{len(grid)} variants", "engine": engine_kwargs.get("engine", "weights")},
         universe=spec.name,
         metrics={"best_sharpe": float(sweep.sharpes().max())},
         variants=len(grid),
@@ -1136,7 +1161,8 @@ def cmd_gates(args) -> int:
         vol_preserving_permutations=args.vol_permutations,
         calendar={"auction-xnas": "xnys", "intraday-xnas": "sessions2"}.get(market, "continuous"),
         **({"equity": equity} if equity else {}),
-        **_benchmark_kwargs(args, lake),
+        **benchmark_kwargs,
+        engine=getattr(args, "engine", "weights") or "weights",
     )
     report = run_gates(
         context, upto=args.upto, stop_on_fail=not args.all_gates, progress=_progress
@@ -1781,7 +1807,7 @@ def cmd_backtest(args) -> int:
     strategy = _family_class(args.family)(**_parse_params(args.param))
     costs = _costs(args)
 
-    result = run_backtest(panel, strategy, costs, universe, charge_impact=args.impact)
+    result = run_backtest(panel, strategy, costs, universe, charge_impact=args.impact, **_engine_kwargs(args))
     stats = result.stats()
     print(f"# {strategy.name}\n")
     print(table(pd.DataFrame([{"metric": k, "value": v} for k, v in stats.items()])))
@@ -2174,6 +2200,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     bt.add_argument("--spread", type=float, default=2.0, help="half-spread in bps per side")
     bt.add_argument("--impact", action="store_true", help="charge square-root impact too")
+    _add_engine_arg(bt)
     bt.add_argument("--crosscheck", action="store_true", help="verify against the share-ledger engine")
     bt.add_argument("--leakage", action="store_true", help="run the gate-1 lag probe")
     bt.add_argument("--log", action="store_true", help="record the run in the trial log")
@@ -2223,6 +2250,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="use a named fixed basket as the universe instead of the ranked top-n",
     )
     gt.add_argument("--equity", type=float, default=None, help="account equity the book is sized and costed at (whole shares, per-order floors)")
+    _add_engine_arg(gt)
     gt.add_argument("--permutations", type=int, default=200)
     gt.add_argument(
         "--vol-permutations",

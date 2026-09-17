@@ -53,6 +53,16 @@ class BacktestResult:
     #: carry. None for a venue that settles no funding.
     carry: pd.Series | None = None
     meta: dict[str, Any] = field(default_factory=dict)
+    #: Filled only by the ledger engine (`qr.research.ledger`): the account in
+    #: dollars — NAV at each bar's mark, the cash balance carried into the next
+    #: bar, the units of each symbol held over the bar, every fill, and the
+    #: interest cash earned when a risk-free rate was given. None from the
+    #: weight engine, which has no account to report.
+    nav: pd.Series | None = None
+    cash: pd.Series | None = None
+    quantities: pd.DataFrame | None = None
+    fills: pd.DataFrame | None = None
+    cash_interest: pd.Series | None = None
 
     # -- curves ------------------------------------------------------------
 
@@ -168,6 +178,10 @@ def run_backtest(
     equity: float = 10_000.0,
     charge_impact: bool = False,
     lag: int = 1,
+    engine: str = "weights",
+    risk_free: pd.Series | float | None = None,
+    margin: float = 1.0,
+    count_margin: bool = False,
 ) -> BacktestResult:
     """Run one strategy over one panel.
 
@@ -175,7 +189,24 @@ def run_backtest(
     next bar), 2 delays a further bar and should degrade smoothly, and 0 lets
     the strategy trade on information from the bar it is predicting — if Sharpe
     explodes at `lag=0` relative to `lag=1`, the signal is reading the future.
+
+    `engine="ledger"` runs the position/cash ledger (`qr.research.ledger`)
+    instead of this weight-space arithmetic: same result type, same gates;
+    `risk_free`, `margin` and `count_margin` are its knobs and mean nothing
+    here — this engine's cash earns nothing, so a rate is refused rather
+    than dropped.
     """
+    if engine == "ledger":
+        from qr.research.ledger import run_ledger
+
+        return run_ledger(
+            panel, strategy, costs, universe, equity=equity, charge_impact=charge_impact, lag=lag,
+            risk_free=risk_free, margin=margin, count_margin=count_margin,
+        )
+    if engine != "weights":
+        raise ValueError(f"unknown engine {engine!r}: 'weights' or 'ledger'")
+    if risk_free is not None:
+        raise ValueError("the weight engine pays no interest on cash; use engine='ledger' with risk_free")
     costs = costs or CostModel.trial()
     returns = panel.returns()
     targets = strategy.target_weights(panel, universe)
@@ -281,6 +312,7 @@ def run_backtest(
         held=held,
         periods_per_year=panel.periods_per_year,
         meta={
+            "engine": "weights",
             "strategy": strategy.describe(),
             "costs": costs.describe(),
             "lag": lag,
@@ -337,6 +369,7 @@ def leakage_probe(
     strategy: Strategy,
     costs: CostModel | None = None,
     universe: pd.DataFrame | None = None,
+    **backtest_kwargs,
 ) -> pd.DataFrame:
     """Gate 1's one-switch test: the same strategy at lag 0, 1 and 2.
 
@@ -393,7 +426,7 @@ def leakage_probe(
     """
     rows = []
     for lag in (0, 1, 2):
-        result = run_backtest(panel, strategy, costs, universe, lag=lag)
+        result = run_backtest(panel, strategy, costs, universe, lag=lag, **backtest_kwargs)
         rows.append({"lag": lag, "sharpe": result.sharpe(), "gross_sharpe": result.sharpe(gross=True)})
     frame = pd.DataFrame(rows).set_index("lag")
     honest = frame.loc[1, "gross_sharpe"]

@@ -213,11 +213,28 @@ class GateContext:
     #: `qr data riskfree-pull`). None means zero, which is the pessimistic
     #: direction for the strategy only when rates are negative.
     risk_free: "pd.Series | float | None" = None
+    #: Which accounting runs every backtest the gates make: "weights" is the
+    #: runner's weight-space arithmetic, "ledger" the position/cash ledger
+    #: (`qr.research.ledger`). The sweep must have been run on the same one —
+    #: a gate that re-runs a variant on a different engine is scoring a
+    #: different curve. On the ledger, cash earns `risk_free` when one is
+    #: given, which is the same rate the "cash" benchmark compounds.
+    engine: str = "weights"
     seed: int = 0
 
     @property
-    def backtest_kwargs(self) -> dict[str, float]:
-        return {"equity": self.equity} if self.equity else {}
+    def backtest_kwargs(self) -> dict:
+        kwargs: dict = {"equity": self.equity} if self.equity else {}
+        if self.engine != "weights":
+            kwargs["engine"] = self.engine
+            if self.risk_free is not None:
+                kwargs["risk_free"] = self.risk_free
+        return kwargs
+
+    @property
+    def engine_kwargs(self) -> dict:
+        """`backtest_kwargs` without `equity`, for callers that take it positionally."""
+        return {k: v for k, v in self.backtest_kwargs.items() if k != "equity"}
 
     @property
     def periods_per_year(self) -> float:
@@ -371,7 +388,7 @@ def gate_1_data_integrity(ctx: GateContext) -> GateResult:
             verdict = WARN if verdict == PASS else verdict
             detail_parts.append(f"{len(warned & traded)} held symbols with QA warnings")
 
-    probe = leakage_probe(ctx.panel, ctx.strategy, ctx.costs, ctx.universe)
+    probe = leakage_probe(ctx.panel, ctx.strategy, ctx.costs, ctx.universe, **ctx.backtest_kwargs)
     honest = float(probe.loc[1, "gross_sharpe"])
     spike = probe.attrs.get("spike_ratio", float("nan"))
     spike_z = probe.attrs.get("spike_z", float("nan"))
@@ -662,7 +679,7 @@ def benchmark_series(ctx: GateContext) -> pd.Series:
     aligns them with the variants without dropping bars.
     """
     if ctx.benchmark == "buyhold":
-        return buy_and_hold_benchmark(ctx.panel, ctx.universe, ctx.costs, ctx.equity)
+        return buy_and_hold_benchmark(ctx.panel, ctx.universe, ctx.costs, ctx.equity, **ctx.engine_kwargs)
     if ctx.benchmark == "cash":
         return cash_benchmark(ctx.panel.index, ctx.periods_per_year, ctx.risk_free)
     if ctx.benchmark == "exposure":
@@ -674,6 +691,7 @@ def benchmark_series(ctx: GateContext) -> pd.Series:
             gross_exposure(ctx.result),
             ctx.periods_per_year,
             ctx.risk_free,
+            **ctx.engine_kwargs,
         )
     raise ValueError(f"unknown benchmark {ctx.benchmark!r}; known: {', '.join(BENCHMARKS)}")
 
@@ -1604,6 +1622,7 @@ def run_gates(
             "manifest_hash": ctx.manifest_hash,
             "symbols": ctx.panel.symbols,
             "sandbox_side": sandbox_side(ctx.panel),
+            "engine": ctx.engine,
             "start": str(ctx.panel.index[0]) if len(ctx.panel) else None,
             "end": str(ctx.panel.index[-1]) if len(ctx.panel) else None,
             "thresholds": ctx.thresholds.__dict__,

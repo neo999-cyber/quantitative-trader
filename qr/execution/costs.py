@@ -183,6 +183,10 @@ class CostModel:
     multiplier: float = 1.0
     name: str = "binance_spot_vip0_taker"
     verified_on: str = "unverified"
+    #: The physical venues behind a pair model (`carry_pair`): long leg, short
+    #: leg. The weight runner prices the unit on this model's summed rates;
+    #: the ledger (`qr.research.ledger`) fills each leg on its own model.
+    legs: tuple = ()
 
     @classmethod
     def binance_spot(
@@ -301,6 +305,7 @@ class CostModel:
             funding=True,
             name=f"carry[{spot.name}+{perp.name}]",
             verified_on=min(spot.verified_on, perp.verified_on, key=lambda v: (v != "unverified", v)),
+            legs=(spot, perp),
         )
 
     @classmethod
@@ -450,7 +455,8 @@ class CostModel:
 
     def stressed(self, multiplier: float) -> "CostModel":
         """Gate 2 asks whether the edge survives 2x costs. This is that knob."""
-        return replace(self, multiplier=self.multiplier * float(multiplier))
+        legs = tuple(leg.stressed(multiplier) for leg in self.legs)
+        return replace(self, multiplier=self.multiplier * float(multiplier), legs=legs)
 
     def impact_bps(
         self,
@@ -664,4 +670,5 @@ class CostModel:
             "multiplier": self.multiplier,
             "linear_bps_per_side": self.linear_bps,
             "fees_verified_on": self.verified_on,
+            **({"legs": [leg.name for leg in self.legs]} if self.legs else {}),
         }

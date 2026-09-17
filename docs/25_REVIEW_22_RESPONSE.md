@@ -58,14 +58,20 @@ is the owner's call, since every run counts.
 ## Not done, and why
 
 - **The authoritative position/cash ledger (1.2, 1.3, 1.5)** — the review's
-  first ticket. It is the right foundation and it is a rewrite of the
-  runner's core (weights → quantities, cash, liabilities, fees on fills,
-  funding on notional). Not started today: it is a week of work with its own
-  review, not an afternoon's, and nothing in Programme 2 passes or fails on
-  it (the half-invested cash drift affects scheduled books, which are
-  Programme 1's; the carry ledger changes C1's Sharpe by ~7% and its verdict
-  not at all). It is the prerequisite for the maker-fill study's stage 1 and
-  for any re-registration, and is listed as such in `docs/24`.
+  first ticket. **Built on 18 September** (`qr/research/ledger.py`,
+  `docs/26`, `docs/20` entry of that date): quantities, cash and NAV with
+  weights derived; per-leg fills, fees and funding for the carry and
+  cross-venue units; whole shares at the real fill price with a persistent
+  count; cash interest at the risk-free rate; `run_backtest(engine="ledger")`
+  and `qr gates --engine ledger`, the engine recorded in the trial log and
+  the report. Acceptance tests from a hand ledger, and the identity with
+  the weight runner at zero cost to 1e-9. Not yet done: the frozen-grid
+  re-run (step 8 below) — the chain is written, every run counts, and it
+  waits for the owner. The 7% C1 estimate above was of the ratio's
+  second-order error only; the ledger also finds the coin's drift the
+  ratio hid (turnover 8× on the always-in unit), which the re-run will
+  size. It remains the prerequisite for the maker-fill study's stage 1
+  and for any re-registration.
 - **Q1 (rebalancing premium)** — as the review says, unresolved until the
   ledger exists; the 0.35%/yr, t 1.2 figure is reported as "not
   distinguishable from zero", not as a premium.

@@ -532,6 +532,21 @@ def cmd_data_intraday_build(args) -> int:
     return 0
 
 
+def cmd_data_xvenue_build(args) -> int:
+    """Binance perp bars + funding, Bybit perp bars + funding -> the cross-venue unit panel (`xvenue-um`)."""
+    from qr.data.xvenue import build_xvenue_lake
+
+    lake = _lake(args)
+    summary = build_xvenue_lake(lake, bucket_mirror(getattr(args, "mirror", None)).parent / "bybit", args.symbols)
+    if summary.empty:
+        print("nothing to build: no symbol has futures/um bars, funding and a Bybit mirror.", file=sys.stderr)
+        return 2
+    print(table(summary))
+    built = int((summary["days"] > 0).sum())
+    print(f"{built} cross-venue units written under market {'xvenue-um'!r}; manifest hash: {lake.manifest_hash()}")
+    return 0 if built else 1
+
+
 def cmd_data_carry_build(args) -> int:
     """Spot + futures/um bars + funding -> the carry-unit panel (`carry-um`)."""
     from qr.data.carry import build_carry_lake
@@ -1820,6 +1835,8 @@ def _costs(args) -> CostModel:
     `--costs carry` prices a carry unit: the spot model plus the Binance
     perp regular-user model, both legs taker (`CostModel.carry_pair`).
     """
+    if getattr(args, "costs", "spot") == "xvenue":
+        return CostModel.carry_pair(CostModel.binance_perp(), CostModel.bybit_perp())
     if getattr(args, "costs", "spot") == "carry":
         spot = CostModel.trial(half_spread_bps=args.spread)
         return CostModel.carry_pair(spot, CostModel.binance_perp())
@@ -2016,6 +2033,9 @@ def build_parser() -> argparse.ArgumentParser:
     fund_pull.add_argument("--force", action="store_true", help="re-download files already mirrored")
     fund_pull.set_defaults(func=cmd_data_funding_pull)
 
+    xv = data.add_parser("xvenue-build", help="Binance perp + Bybit perp + both fundings -> cross-venue unit panel (market xvenue-um)")
+    xv.add_argument("--symbols", nargs="*")
+    xv.set_defaults(func=cmd_data_xvenue_build)
     carry = data.add_parser("carry-build", help="spot + futures/um + funding -> carry-unit panel (market carry-um)")
     carry.add_argument("--symbols", nargs="*")
     carry.add_argument("--interval", default="1d")
@@ -2189,11 +2209,12 @@ def build_parser() -> argparse.ArgumentParser:
     gt.add_argument("--spread", type=float, default=2.0)
     gt.add_argument(
         "--costs",
-        choices=("spot", "carry", "alpaca", "perp"),
+        choices=("spot", "carry", "alpaca", "perp", "xvenue"),
         default="spot",
         help="spot: the trial's Binance spot model; carry: spot plus Binance perp, both legs taker; "
         "alpaca: $0 commission, 2 bps half-spread, 1 bp slippage, whole shares; "
-        "perp: Binance USDT-M perpetual, regular user with BNB, taker, funding settled gross",
+        "perp: Binance USDT-M perpetual, regular user with BNB, taker, funding settled gross; "
+        "xvenue: Binance perp plus Bybit perp, both legs taker (the cross-venue unit)",
     )
     gt.add_argument(
         "--basket",

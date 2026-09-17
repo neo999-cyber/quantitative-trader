@@ -242,6 +242,21 @@ class CostModel:
         )
 
     @classmethod
+    def bybit_perp(cls, half_spread_bps: float = 1.5, use_maker: bool = False, impact_coef: float = 1.0) -> "CostModel":
+        """Bybit USDT perpetual, non-VIP: taker 5.5 bps, maker 2 bps (published
+        schedule, read 17 September 2026; **verify before freezing**). The
+        half-spread is set a touch above Binance's: the book is thinner."""
+        return cls(
+            fee_bps=2.0 if use_maker else 5.5,
+            half_spread_bps=half_spread_bps,
+            impact_coef=impact_coef,
+            use_maker=use_maker,
+            funding=True,
+            name=f"bybit_perp_nonvip_{'maker' if use_maker else 'taker'}",
+            verified_on="unverified",
+        )
+
+    @classmethod
     def hyperliquid_perp(
         cls,
         half_spread_bps: float = 1.0,

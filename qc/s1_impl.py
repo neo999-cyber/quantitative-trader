@@ -75,10 +75,20 @@ def before_open(self):
     due = [p for p in self.pending if p[2] <= self.session]
     self.pending = [p for p in self.pending if p[2] > self.session]
     due.sort(key=lambda q: q[1])
-    for sym, rank, _ in due:
+    for sym, rank, enter_at in due:
         sec = self.securities[sym]
-        if sym in self.open_positions or not sec.has_data or sec.price <= 0:
-            self.debug(f"skip {sym.value} on {self.time.date()}: has_data {sec.has_data}, price {sec.price}, open {sym in self.open_positions}")
+        if sym in self.open_positions:
+            continue
+        if not sec.has_data or sec.price <= 0:
+            # on daily resolution a security added at 16:05 has no price until the
+            # end of its first subscribed session, so the first open after the
+            # effective date sees has_data False (every name, 18 Sep 2026 run);
+            # keep it pending and enter at the first open with a price, up to
+            # five sessions, then drop it and say so
+            if self.session - enter_at < 5:
+                self.pending.append((sym, rank, self.session + 1))
+            else:
+                self.debug(f"drop {sym.value}: no price within 5 sessions of {enter_at}")
             continue
         price = float(sec.price)
         if price < 1:

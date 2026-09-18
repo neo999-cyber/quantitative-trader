@@ -26,6 +26,10 @@ def impl_initialize(self):
     self.entry_cutoff = datetime.strptime(self.get_parameter("entry_cutoff", "2024-08-31"), "%Y-%m-%d").date()
     self.set_security_initializer(lambda s: s.set_fee_model(ConstantFeeModel(0)))
     self.universe_settings.resolution = Resolution.DAILY
+    # one always-on subscription so the engine has a clock from the start date:
+    # with no security added, a first run on 18 Sep 2026 completed instantly
+    # with zero tradeable dates and the scheduled events never fired
+    self.add_equity("SPY", Resolution.DAILY)
     raw = self.download(EVENTS_URL)
     csv = zlib.decompress(base64.b64decode(raw)).decode()
     digest = hashlib.sha256(csv.encode()).hexdigest()

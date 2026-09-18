@@ -25,8 +25,7 @@ class Clock:
 def make(tmp_path):
     fake = FakeVenue(name="fake", instruments={"SUIUSDT": Instrument("fake", "SUIUSDT", D("0.0001"), D("0.1"), D("1"), D("5"))},
                      books={"SUIUSDT": (D("0.7000"), D("0.7001"))})
-    journal = Journal(tmp_path / "j.sqlite")
-    journal.cash_event("dep", "acct", "fake", "USDT", "100", "transfer", T0.isoformat())
+    journal = Journal(tmp_path / "j.sqlite")  # no cash seeded: `start` imports the venue's balance
     config = StudyConfig(account="acct", symbols={"fake": ["SUIUSDT"]}, hours_utc=(7, 15), session_expires_at=(T0 + timedelta(hours=6)).isoformat())
     return fake, journal, config
 
@@ -45,6 +44,7 @@ def test_the_mandate_is_typed_back_and_starts_only_from_a_flat_paused_account(tm
     fake.pos.clear()
     start(journal, config, {"fake": fake}, f"{config.digest()} STUDY", now=T0)
     assert journal.mode() == "STUDY"
+    assert journal.cash("acct")[("fake", "USDT")] == D("100")  # the venue's balance became the opening cash
     assert journal.db.execute("SELECT COUNT(*) FROM audit WHERE kind = 'mandate'").fetchone()[0] == 1
     with pytest.raises(PermissionError, match="only from PAUSED"):
         start(journal, config, {"fake": fake}, f"{config.digest()} STUDY", now=T0)
@@ -119,5 +119,20 @@ def test_close_all_leaves_the_venue_flat_and_the_journal_paused(tmp_path):
 
 def test_resume_refuses_when_the_venue_and_the_journal_disagree(tmp_path):
     fake, journal, config = make(tmp_path)
+    journal.cash_event("dep", "acct", "fake", "USDT", "100", "transfer", T0.isoformat())
     fake.pos["SUIUSDT"] = D("3")  # a manual trade outside the harness
     assert resume(journal, {"fake": fake}, "acct") == ["fake SUIUSDT: venue 3, journal 0"]
+
+
+def test_a_new_session_rebuilds_its_working_set_from_the_journal(tmp_path):
+    fake, journal, config = make(tmp_path)
+    start(journal, config, {"fake": fake}, f"{config.digest()} STUDY", now=T0)
+    clock = Clock()
+    s = Session(journal, config, {"fake": fake}, now=clock, log=lambda m: None)
+    s.tick()  # one resting entry
+    cid = next(iter(s.working))
+    fake._exec(fake.orders[cid], D("14.2"))  # it fills while no session is running
+    fresh = Session(journal, config, {"fake": fake}, now=clock, log=lambda m: None)
+    assert cid in fresh.working and fresh.working[cid].kind == "entry"
+    problems = fresh.close_all()  # reconciles the fill, closes the position, verifies flat
+    assert problems == [] and fake.positions() == {} and journal.positions("acct") == {}

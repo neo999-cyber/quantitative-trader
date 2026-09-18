@@ -51,7 +51,7 @@ TRANSITIONS: dict[str, set[str]] = {
     "UNKNOWN": {"ACKED", "PARTIAL", "FILLED", "REJECTED", "CANCELLED", "EXPIRED"},  # by reconciliation only
     "ACKED": {"PARTIAL", "FILLED", "CANCEL_REQUESTED", "UNKNOWN", "EXPIRED"},
     "PARTIAL": {"PARTIAL", "FILLED", "CANCEL_REQUESTED", "UNKNOWN", "EXPIRED"},
-    "CANCEL_REQUESTED": {"PARTIAL", "FILLED", "CANCELLED", "UNKNOWN"},
+    "CANCEL_REQUESTED": {"PARTIAL", "FILLED", "CANCELLED", "EXPIRED", "UNKNOWN"},
     "FILLED": set(),
     "CANCELLED": set(),
     "REJECTED": set(),
@@ -210,8 +210,10 @@ class Journal:
                 if old[0] != intent.digest():
                     raise ValueError(f"client id {intent.client_id} reused with a different payload")
                 return self.state(intent.client_id)
-            if self.mode() not in ("PAPER", "STUDY"):
-                raise ValueError(f"staging refused in mode {self.mode()}")
+            mode = self.mode()
+            # an EXIT may be staged while PAUSED: pausing stops new risk, not the way out
+            if mode not in ("PAPER", "STUDY") and not (mode == "PAUSED" and intent.action == "EXIT"):
+                raise ValueError(f"staging refused in mode {mode}")
             self.db.execute(
                 "INSERT INTO intents VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (

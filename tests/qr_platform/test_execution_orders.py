@@ -147,3 +147,17 @@ def test_a_transport_timeout_surfaces_as_venue_timeout():
 
     with pytest.raises(VenueTimeout):
         BinanceUSDM("k", "s", transport=T()).book("SUIUSDT")
+
+
+def test_a_refused_cancel_means_reconcile_not_error(journal, venue):
+    from qr.execution.venues import VenueError
+
+    i = intent()
+    assert submit(journal, venue, i) == "ACKED"
+    venue._exec(venue.orders[i.client_id], D("10"))  # filled before the cancel arrives
+    original = venue.cancel
+    venue.cancel = lambda symbol, cid: (_ for _ in ()).throw(VenueError("-2011 Unknown order sent"))
+    assert cancel(journal, venue, i) == "FILLED"
+    assert journal.positions("acct")[("fake", "SUIUSDT")] == D("10")
+    venue.cancel = original
+    assert cancel(journal, venue, i) == "FILLED"  # terminal: nothing more happens

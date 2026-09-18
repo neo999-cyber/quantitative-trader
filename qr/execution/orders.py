@@ -92,10 +92,17 @@ def cancel(journal: Journal, venue, intent: Intent) -> str:
         return state
     if state == "UNKNOWN":
         return reconcile(journal, venue, intent)
-    journal.transition(intent.client_id, "CANCEL_REQUESTED", "cancel requested")
+    if state != "CANCEL_REQUESTED":  # a repeated cancel does not re-enter the state it is in
+        journal.transition(intent.client_id, "CANCEL_REQUESTED", "cancel requested")
     try:
         order = venue.cancel(intent.symbol, intent.client_id)
     except VenueTimeout as exc:
         journal.transition(intent.client_id, "UNKNOWN", f"cancel timeout: {exc}")
         return "UNKNOWN"
+    except VenueError as exc:
+        # the venue will not cancel it: it is no longer open (filled, expired or already
+        # cancelled) — Binance says -2011 "Unknown order sent" for a filled order (18 Sep 2026).
+        # A refused cancel is a reason to look, never a reason to assume.
+        journal.db.execute("INSERT INTO audit (ts, kind, ref, detail) VALUES (datetime('now'), 'cancel_refused', ?, ?)", (intent.client_id, str(exc)[:300]))
+        return reconcile(journal, venue, intent)
     return _book_state(journal, venue, intent, order, f"after cancel request venue reports {order.status} filled {order.filled}/{order.qty}")

@@ -160,3 +160,10 @@ def test_exits_must_reduce_and_cannot_double_close(journal, policy):
     journal.pause("operator")
     assert check_exit(journal, intent(side="SELL", action="EXIT", signal="e3", qty="10", reduce_only=True), policy) == ["exit_exceeds_unclaimed_holding"]
     assert "exit_must_be_reduce_only" in check_exit(journal, intent(side="SELL", action="EXIT", signal="e4", reduce_only=False), policy)
+
+
+def test_an_exit_can_be_staged_while_paused_but_an_entry_cannot(journal):
+    journal.pause("operator")
+    with pytest.raises(ValueError, match="staging refused"):
+        journal.stage(intent(signal="p1"))
+    assert journal.stage(intent(side="SELL", action="EXIT", signal="p2")) == "STAGED"

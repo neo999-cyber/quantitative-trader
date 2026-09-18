@@ -56,6 +56,7 @@ def main() -> int:
     ap.add_argument("--session-hours", type=float, default=8.0)
     ap.add_argument("--poll", type=int, default=5)
     ap.add_argument("--i-have-the-owners-yes", action="store_true", dest="owners_yes")
+    ap.add_argument("--confirm", default=None, help="testnet only: the `<hash> STUDY` line, instead of typing it")
     args = ap.parse_args()
 
     config = load_config(args.config, args.session_hours)
@@ -86,7 +87,10 @@ def main() -> int:
     if diffs:
         print("cannot start: venues and journal disagree:\n  " + "\n  ".join(diffs), file=sys.stderr)
         return 1
-    typed = input(f"\nType `{config.digest()} STUDY` to start this session (anything else aborts): ")
+    if args.confirm and not config.testnet:
+        print("--confirm is for testnet rehearsals; a live study is typed at the terminal", file=sys.stderr)
+        return 2
+    typed = args.confirm or input(f"\nType `{config.digest()} STUDY` to start this session (anything else aborts): ")
     try:
         start(journal, config, venues, typed)
     except PermissionError as exc:

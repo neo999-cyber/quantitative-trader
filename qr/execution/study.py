@@ -112,8 +112,20 @@ def start(journal: Journal, config: StudyConfig, venues: dict, typed: str, now: 
     for name, venue in venues.items():
         if venue.positions():
             raise PermissionError(f"{name} is not flat: {venue.positions()}")
-        if not venue.balances():
+        balances = venue.balances()
+        if not balances:
             raise PermissionError(f"{name} reports no balance: wrong key or account?")
+        # the venue's balance is the journal's opening cash: booked once per venue
+        # and day as a cash event, so the limits see what the account can spend
+        # and a later reconciliation has a baseline (first rehearsal, 18 Sep 2026:
+        # every entry was refused for "insufficient unreserved cash" because the
+        # journal had never been told the balance)
+        for currency, amount in balances.items():
+            held = journal.cash(config.account).get((name, currency), D(0))
+            delta = amount - held
+            if delta != 0:
+                journal.cash_event(f"balance:{name}:{currency}:{now.date().isoformat()}:{amount}", config.account, name, currency,
+                                   delta, "venue_balance_snapshot", now.isoformat())
     journal.db.execute("INSERT INTO audit (ts, kind, ref, detail) VALUES (?, ?, ?, ?)",
                        (now.isoformat(), "mandate", config.digest(), json.dumps({"config": asdict(config), "venues": sorted(venues)})))
     journal.set_mode("STUDY", f"mandate {config.digest()} confirmed at the terminal; expires {config.session_expires_at}")
@@ -173,6 +185,38 @@ class Session:
     def __post_init__(self) -> None:
         self.journal.db.executescript(SCHEMA)
         self.policy = self.config.policy()
+        self._load_working()
+
+    def _load_working(self) -> None:
+        """Rebuild the working set from the journal's non-terminal orders (a restart must not forget
+        a resting order: on 18 Sep 2026 one filled while the runner was down and a fresh session
+        did not know it held 12.5 SUI). Fills are re-read by the first reconcile."""
+        rows = self.journal.db.execute(
+            "SELECT i.client_id, i.payload, i.staged_at, o.state, o.filled_qty FROM intents i JOIN orders o ON o.client_id = i.client_id "
+            "WHERE i.account = ? AND o.state NOT IN ('FILLED', 'CANCELLED', 'REJECTED', 'EXPIRED')", (self.config.account,)).fetchall()
+        filled_entries = self.journal.db.execute(
+            "SELECT i.client_id, i.payload, i.staged_at FROM intents i JOIN orders o ON o.client_id = i.client_id "
+            "WHERE i.account = ? AND i.action = 'ENTRY' AND o.state = 'FILLED'", (self.config.account,)).fetchall()
+        for cid, payload, staged_at, state, filled in rows:
+            intent = Intent(**json.loads(payload))
+            kind = "entry" if intent.action == "ENTRY" else ("exit_taker" if not intent.post_only else "exit_maker")
+            parent = intent.signal_id.split(":exit_")[0] if kind != "entry" else None
+            parent_cid = next((c for c, w in self.working.items() if w.intent.signal_id == parent), None) if parent else None
+            self.working[cid] = _Working(intent, intent.venue, datetime.fromisoformat(staged_at), kind, D(0), parent=parent_cid)
+        # a filled entry whose position is still held needs its exit path back
+        held = self.journal.positions(self.config.account)
+        for cid, payload, staged_at in filled_entries:
+            intent = Intent(**json.loads(payload))
+            if (intent.venue, intent.symbol) in held and cid not in self.working:
+                row = self.journal.db.execute("SELECT filled_at, fill_price FROM study_marks WHERE client_id = ?", (cid,)).fetchone()
+                filled_at = datetime.fromisoformat(row[0]) if row else datetime.fromisoformat(staged_at)
+                self.working[cid] = _Working(intent, intent.venue, datetime.fromisoformat(staged_at), "entry", D(0),
+                                             filled_at=filled_at, fill_price=D(row[1]) if row else D(intent.limit))
+        for w in self.working.values():
+            if w.kind != "entry":
+                for cid, e in self.working.items():
+                    if e.kind == "entry" and e.intent.signal_id == w.intent.signal_id.split(":exit_")[0]:
+                        w.parent = cid
 
     # -- helpers -------------------------------------------------------------
 
@@ -207,11 +251,17 @@ class Session:
                 self.open_nav = self.journal.nav(self.config.account, max_mark_age_s=None)
             except Exception:
                 self.open_nav = D(0)
-        self._reconcile_working(t)
-        if self.journal.mode() == "STUDY" and self.in_hours(t):
-            self._place_entries(t)
-        self._expire_and_exit(t)
-        self._settle_marks(t)
+        # a fault in one step is logged and the rest of the pass still runs: the
+        # exits and the marks must not depend on the entries' code path
+        for step in (self._reconcile_working, self._place_entries if (self.journal.mode() == "STUDY" and self.in_hours(t)) else None,
+                     self._expire_and_exit, self._settle_marks):
+            if step is None:
+                continue
+            try:
+                step(t)
+            except Exception as exc:  # noqa: BLE001
+                self.log(f"ERROR in {step.__name__}: {exc!r}")
+                self.journal.db.execute("INSERT INTO audit (ts, kind, ref, detail) VALUES (?, 'error', ?, ?)", (t.isoformat(), step.__name__, repr(exc)[:500]))
 
     def _reconcile_working(self, t: datetime) -> None:
         for cid, w in list(self.working.items()):
@@ -258,7 +308,9 @@ class Session:
                     continue
                 intent = Intent(account=self.config.account, venue=venue, symbol=symbol, side=side, qty=str(qty), limit=str(price),
                                 post_only=True, reduce_only=False, strategy_version=self.config.version,
-                                signal_id=f"{slot.isoformat()}", action="ENTRY",
+                                # venue and symbol are part of the signal: the client id hashes it, and
+                                # the first live slot collided two symbols on the bare slot time (18 Sep)
+                                signal_id=f"{venue}:{symbol}:{slot.isoformat()}", action="ENTRY",
                                 expires_at=(t + timedelta(seconds=self.config.ttl_s)).isoformat())
                 reasons = check_entry(self.journal, intent, self.policy, self.open_nav or D(0), t)
                 if reasons:

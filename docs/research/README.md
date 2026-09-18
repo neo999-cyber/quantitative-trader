@@ -14,3 +14,4 @@ Vendor sites were largely blocked from the research sandbox, so prices marked **
 
 The consolidated plan that draws on all five is `../PLAN.md`.
 - `10_forced_flows_fx_stocks.md` — forced-flow mechanisms in FX and single stocks where a small account is not the loser (17 Sep 2026): index deletions, Tokyo gotobi fix, spin-offs, odd-lot tenders; ranked, costed at $1–2k, nothing registered.
+- `11_options_vrp_data_check.md` — the options VRP candidate's data check (18 Sep 2026): IBKR serves no expired-option history; CBOE's own iron-condor index earned about cash over five years pre-cost; filed, not registered.

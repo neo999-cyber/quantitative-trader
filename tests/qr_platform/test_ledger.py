@@ -271,8 +271,10 @@ def test_cash_earns_the_risk_free_rate_only_when_asked():
     assert (zero.net == 0.0).all()
     paid = run_ledger(panel, _Book(flat), FREE, equity=100.0, risk_free=0.0365)
     per_bar = 1.0365 ** (1 / 365) - 1
-    assert paid.net.loc[idx[1]] == pytest.approx(per_bar)
+    assert (paid.net == 0.0).all() and (paid.gross == 0.0).all()  # interest is not the strategy's return
+    assert paid.cash_interest.loc[idx[1]] == pytest.approx(per_bar)
     assert paid.nav.iloc[-1] == pytest.approx(100.0 * (1 + per_bar) ** 3)  # the opening balance earns on bar 0 too
+    assert paid.meta["engine"] == "ledger"
 
 
 # -- the identity with the weight runner ------------------------------------

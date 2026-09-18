@@ -790,6 +790,29 @@ and it is not read as a result. **Decision:** the ledger is not made the
 default until (3) is closed; C6 runs on it tonight as registered, on
 single-leg perps, which the item does not touch.
 
+**18 September 2026, 09:30 Dubai — item (3) closed, and it reaches the
+whole table.** Per-symbol attribution of the cross-venue always-in book
+on the ledger (counted, `ledger_engine_smoke`): price P&L **$56 on $10,000
+over 4.7 years** — both engines agree the spread earns nothing. The +2%/yr
+at 0.24% vol was **cash interest**: `--risk-free fred` pays T-bill on the
+~100% cash a spot-long/perp-short unit leaves, and the ledger booked it
+into `gross`; gate 3's t = 11.6 was the T-bill rate's t-statistic. Fixed
+with a test: interest stays in NAV and in `cash_interest`, and is out of
+`gross`/`net`, which are the active return the gates score, as on the
+weight engine (the cash benchmark is where the rate lives, gate 5). Re-
+measured after the fix: the control reads gross 0.20 / net −5.13 (weights
+0.33 / −1.20 — the ledger's daily dollar re-sizing costs 5.5% against
+1.4%), interest 3.1%/yr reported beside it. **Consequence for the night5
+table:** every ledger run took `--risk-free fred`, so the "after" column
+carries interest on cash in every crypto row — C2 and C1 heavily, C5
+partly, E1/E2 little (Alpaca, mostly cash but short horizon). The eleven
+verdicts stand (FAIL on gates interest cannot pass, and the ceiling caught
+the one case it inflated most), but the after-numbers are not the engine
+comparison step 8 asked for and are not to be quoted as such. A clean
+before/after needs the eleven runs again on the fixed engine — eleven
+counted trials, the owner's call, not started. The ledger is still not
+the default: the C2 item is closed, the comparison is not yet made.
+
 **18 September 2026 (Opus 5) — the position/cash ledger is built
 (`qr/research/ledger.py`, `docs/26`).** Review 22's first ticket: an
 engine that holds `qty`, `cash` and `nav` and derives weights, beside the

@@ -25,7 +25,11 @@ Events, in order, on every bar *t*:
 5. **Cash interest** at the risk-free rate on the balance carried through
    the bar, when `risk_free` is given; zero otherwise. A negative balance
    pays the same rate — leverage is not free, and it is not modelled as
-   cheaper than cash either.
+   cheaper than cash either. Interest is in `nav` and in the
+   `cash_interest` series, and **not in `gross` or `net`**: those are the
+   active return the gates score, as on the weight engine, and the rate is
+   the cash benchmark's job (gate 5). Booking it into gross made a
+   near-flat carry book read gross Sharpe 20 on 18 September 2026.
 6. **Orders** decided from bar *t*'s targets (for `lag=1`), filled at bar
    *t*'s close, on the bars the strategy's `trades_on` allows. Between marks
    no order is generated, quantities are constant and weights drift by
@@ -382,13 +386,19 @@ def run_ledger(
         nav = cash + sum(float((sides[k] * qty * last0[k]).sum()) for k in range(len(legs)))
         nav_path[t] = nav
         if nav_prev > 0:
-            gross[t] = (pnl + funding_flow + paid) / nav_prev
+            # cash interest is in NAV and reported on its own; it is *not* in
+            # gross or net, which stay the active return the gates score —
+            # found on 18 September 2026 when a cross-venue book with ~100%
+            # cash read gross Sharpe 20 and gate-3 t 11.6: the T-bill rate's
+            # t-statistic, tripping gate 1's ceiling. The cash benchmark is
+            # where the rate belongs, and gate 5 already compares to it.
+            gross[t] = (pnl + funding_flow) / nav_prev
             carry[t] = funding_flow / nav_prev
             interest[t] = paid / nav_prev
             parts[t, :3] = (pending + forced) / nav_prev
             parts[t, 3] = borrow / nav_prev
             turnover[t] = (pending_notional + forced_notional) / nav_prev
-            net[t] = nav / nav_prev - 1.0
+            net[t] = (nav - paid) / nav_prev - 1.0
         pending = np.zeros(3)
         pending_notional = 0.0
 

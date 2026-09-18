@@ -683,6 +683,61 @@ first — a rewrite of the runner core, specified in `docs/25`, and the
 prerequisite for the maker study's stage 1. No family was re-run; every
 change's direction on the closed verdicts is stated in `docs/25`.
 
+**18 September 2026, 07:30 Dubai — C6 `p2_unlock_fade_v1`: verdict FAIL
+at gate 2, and at 3, 4, 5, 6, 8 with `--all-gates`.** The ninth candidate
+(registered seq 679–681 the evening before, run on `--engine ledger`,
+single-leg perps, 318 qualifying cliffs on 36 names 2022-01 → 2025-08).
+Best of eight variants (lead 20, post 7, min_pct 2%): net Sharpe 0.32,
+**t = 0.64 (p = 0.52)**, permutation p = 0.17, DSR fails over 8, 87 round
+trips. The long mirror is flat (t 0.04) and paid funding (carry −59% of a
+gross that is itself ~0); the ecosystem control — the cliffs that were
+supposed *not* to fall — earned as much as the family (Sharpe 0.27 vs
+0.32). **Read precisely:** this is *no demonstrated pre-unlock pressure a
+daily short can collect*, not proof the effect cannot exist; the
+published 30-day drift may sit earlier, be front-run, or need intraday
+bars. One construction fault to state and not fix here: `normalise` puts
+gross 1.0 into however many names qualify, so a bar with one cliff in
+window is a 100% short of one altcoin (annualised vol 106%); a per-name
+cap would be a new hypothesis, not a correction. Counter: nine
+registered, nine failed. Trial log 797 records / 2,265 trials, verified.
+
+**18 September 2026, 07:15 Dubai — S1 index deletions run on QuantConnect,
+EXPLORATORY: seven backtests before registration.** The owner asked for
+the backup to be started; the protocol's order (register, then run) was
+not followed and that is recorded as such (`s1_index_deletion_exploratory`,
+seq 796, seven variants counted). `docs/prereg/p2_index_deletion_v1.md`
+stays a draft; if it is ever registered it must declare the 2008 → Aug
+2024 in-sample as seen and rest on the untouched holdout (entries from
+1 September 2024). Two LEAN facts cost two failed runs first: an algorithm
+with no subscribed security has no clock (SPY added as one); a security
+added after the close has no price at the next open on daily resolution
+(entry is the first open with a price). Results, QC's own statistics on
+$1,000, 2008-01 → 2025-08:
+
+| variant | orders | end $ | CAGR | Sharpe | max DD | long ratio |
+|---|---|---|---|---|---|---|
+| h252 d0 | 215 | 3,464 | 7.3% | 0.29 | 42% | 0.39 |
+| h252 d5 | 215 | 3,495 | 7.3% | 0.30 | 40% | 0.40 |
+| h126 d0 | 225 | 2,500 | 5.3% | 0.23 | 37% | 0.21 |
+| h126 d5 | 225 | 2,854 | 6.1% | 0.29 | 34% | 0.21 |
+| control: additions | 378 | 2,375 | 5.0% | 0.19 | 34% | 0.62 |
+| control: delayed 63 sessions | 214 | 1,723 | 3.1% | 0.09 | 40% | 0.37 |
+| h252 d0 at $10,000 | 223 | 34,926 | 7.3% | 0.29 | 43% | 0.43 |
+
+SPY did ~×6 over the same window. External gates (`scripts/external_gates.py
+--family s1 --no-log`, benchmark SPY scaled to the best variant's
+holdings-based exposure of 0.21 — the eligible-universe run does not
+reach 2008): best h126 d5 net Sharpe 0.69, **gate 3 t = 2.13 (p 0.033)**,
+DSR 0.99 over 4, **SPA p = 0.20 (fail)**, PBO 0.67 (fail), WFE 0.23, best
+excess +4.9%/yr over the matched benchmark. The delayed-entry control
+captures less than half (3.1% vs 7.3%) — consistent with a reconstitution
+effect rather than a value screen — but the additions control also earns
+5.0%, and a $100 slot buys no whole share of most deleted names (long
+ratio 0.2–0.4: the book is mostly cash). **Reading: a weak positive that
+is not the paper's +20%, fails selection and beats the market only by its
+own dilution; the small-cap/value exposure the index provider itself
+names is not yet separated.** Not registered; parked as the backup it was.
+
 **18 September 2026, 04:00 Dubai — night5: the eleven frozen grids re-run
 on the ledger (`docs/25` step 8).** Eleven counted runs, 17:08 → 23:59 UTC
 (C1 v2 hourly alone 6 h 11 m: gate 6 re-optimises 25 of 64 variants over

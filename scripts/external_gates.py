@@ -45,8 +45,8 @@ ap = argparse.ArgumentParser()
 ap.add_argument("--family", default="e5", help="e5, e4 or e7: which mirror folder and hypothesis")
 ap.add_argument("--no-log", action="store_true", help="recompute without recording the sweep again")
 args = ap.parse_args()
-HYP = {"e5": "p2_insider_cluster_v1", "e4": "p2_pead_v1", "e7": "p2_short_squeeze_v1"}[args.family]
-FAMILY_NAME = {"e5": "insider_cluster", "e4": "pead", "e7": "short_squeeze"}[args.family]
+HYP = {"e5": "p2_insider_cluster_v1", "e4": "p2_pead_v1", "e7": "p2_short_squeeze_v1", "s1": "p2_index_deletion_v1"}[args.family]
+FAMILY_NAME = {"e5": "insider_cluster", "e4": "pead", "e7": "short_squeeze", "s1": "index_deletion"}[args.family]
 root = Path(paths().root)
 files = sorted(glob.glob(str(root / "mirror" / "quantconnect" / args.family / f"qc_{args.family}_*.json")))
 variants, gross, net, meta, controls = {}, {}, {}, {}, {}
@@ -56,6 +56,17 @@ for f in files:
     v = r.get("variant") or {"hold_sessions": 60, "min_combined_usd": 100000, "min_insiders": 2, "max_positions": 4, "equity": 1000}
     if args.family == "e5":
         name = f"e5_hold{v['hold_sessions']}_usd{int(v['min_combined_usd'])}_ins{v['min_insiders']}"
+    elif args.family == "s1":
+        # the variant is the QC backtest's name; its parameters carry impl and equity
+        if not isinstance(v, str) or "_charts" in f:
+            continue
+        name = v
+        ps = (r["backtest"]["backtest"].get("parameterSet") or {})
+        v = {"impl": ps.get("impl", name + ".py"), "equity": int(ps.get("equity", 1000)), "max_positions": 10,
+             "hold": 126 if "h126" in name else 252}
+        if name.startswith("s1_ctrl") or name.endswith("_10k"):
+            controls[name] = (r, v)
+            continue
     else:
         name = v.get("impl", args.family).replace(".py", "")
         v.setdefault("max_positions", v.get("n", 4))
@@ -81,7 +92,26 @@ print(f"{N.shape[1]} variants x {N.shape[0]} sessions; best {best} net Sharpe {s
 # benchmark: QC equal-weight eligible universe, if downloaded
 bench_files = sorted(glob.glob(str(root / "mirror" / "quantconnect" / "e5_benchmark" / "*.json")))
 bench = None
-if bench_files:
+if args.family == "s1":
+    # S1 spans 2008-2025, before the equal-weight universe run exists; the
+    # comparator is LEAN's default benchmark (SPY) from the best variant's own
+    # Benchmark chart, scaled to its holdings-based exposure (Exposure chart),
+    # the rest at 2% cash. Stated in the report as "SPY-matched", not the
+    # eligible universe; the deletions are small/mid-cap value names, so a
+    # factor control is still owed (docs/prereg/p2_index_deletion_v1.md).
+    bid = meta[best]["backtest_id"]
+    charts = json.loads((root / "mirror" / "quantconnect" / "s1" / f"qc_s1_{bid}_charts.json").read_text())
+    bvals = charts["benchmark"]["chart"]["series"]["Benchmark"]["values"]
+    bser = pd.Series([x[-1] for x in bvals], index=pd.to_datetime([x[0] for x in bvals], unit="s", utc=True))
+    bser = bser.groupby(bser.index.tz_convert("America/New_York").normalize().tz_convert("UTC")).last()
+    bser.index.name = "open_time"
+    b = bser.pct_change().dropna()
+    lr = charts["exposure"]["chart"]["series"]["Equity - Long Ratio"]["values"]
+    exposure = float(np.clip(np.mean([x[-1] for x in lr]), 0, 1))
+    rf = cash_benchmark(N.index, ppy, 0.02)
+    bench = (exposure * b.reindex(N.index).fillna(0.0) + (1 - exposure) * rf).rename("spy_matched")
+    print(f"benchmark: SPY scaled to holdings-based exposure {exposure:.2f}")
+elif bench_files:
     b = daily_equity(load_result(bench_files[-1])).pct_change().dropna()
     # Holdings-based exposure: the mean of LEAN's "Equity - Long Ratio" for
     # the best variant's backtest, read from its Exposure chart and kept in

@@ -78,6 +78,7 @@ def before_open(self):
     for sym, rank, _ in due:
         sec = self.securities[sym]
         if sym in self.open_positions or not sec.has_data or sec.price <= 0:
+            self.debug(f"skip {sym.value} on {self.time.date()}: has_data {sec.has_data}, price {sec.price}, open {sym in self.open_positions}")
             continue
         price = float(sec.price)
         if price < 1:

@@ -120,3 +120,26 @@ The research funnel — C6 (`docs/prereg/p2_unlock_fade_v1.md`, running
 the night of 17–18 September), stage 0's read on 1 October, C3's kill
 test in late October — remains the thing that decides whether the
 execution layer ever carries a strategy.
+
+## 18 September 2026, afternoon — venue access from Dubai
+
+- **Binance:** the futures testnet (`testnet.binancefuture.com`) now
+  redirects to the main site; the rehearsal venue is **Demo Trading**
+  inside the owner's account (`demo.binance.com/en/futures`, API key
+  under the main account's API Management, host `demo-fapi.binance.com`).
+  Wired as the adapter's testnet default.
+- **Bybit:** `testnet.bybit.com` and the global site refuse a Dubai
+  address ("Restricted IP Address — not within Bybit's service zone"):
+  since its UAE licences (SCA, October 2025; VARA provisional) Dubai users
+  are routed to a UAE-licensed onboarding, and neither the testnet nor
+  Demo Trading is offered that way. No VPN: a rehearsal from an address
+  the owner cannot trade from later is not a rehearsal. **Consequences:**
+  stage 1 is **Binance-only** until Bybit is reachable to the owner as a
+  customer; the C2 cross-venue family is **untradeable for this owner** as
+  things stand (it needs a Bybit leg), and the maker re-registration plan
+  that assumed it is reduced to C1; the Bybit half of the stage-0 tape is
+  reference data. The clean route is Bybit's UAE onboarding and a support
+  question — is API trading enabled for a Dubai account under VARA? — and
+  if yes the adapter runs unchanged on mainnet keys with the study's own
+  $10 orders as the first plumbing check. `study/stage1.testnet.json` is
+  Binance-only from today.

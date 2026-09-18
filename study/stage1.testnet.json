@@ -1,7 +1,16 @@
 {
   "account": "stage1-testnet",
-  "symbols": {"binance": ["SUIUSDT", "DOGEUSDT", "ONDOUSDT"], "bybit": ["SUIUSDT", "DOGEUSDT", "ONDOUSDT"]},
-  "hours_utc": [7, 15],
+  "symbols": {
+    "binance": [
+      "SUIUSDT",
+      "DOGEUSDT",
+      "ONDOUSDT"
+    ]
+  },
+  "hours_utc": [
+    7,
+    15
+  ],
   "slot_s": 900,
   "ttl_s": 900,
   "exit_after_fill_s": 3600,

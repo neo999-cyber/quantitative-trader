@@ -143,3 +143,35 @@ execution layer ever carries a strategy.
   if yes the adapter runs unchanged on mainnet keys with the study's own
   $10 orders as the first plumbing check. `study/stage1.testnet.json` is
   Binance-only from today.
+
+## 18 September 2026, evening — second venue: parked; stage 1 is Binance-only
+
+The owner rejected OKX and chose Hyperliquid as Bybit's replacement, then
+parked it: the testnet refuses an address with no deposit history
+("Must deposit before performing actions"), which would need a small real
+deposit first — the owner's decision, deferred. **Stage 1 runs on Binance
+alone.** What that means for the programme: the maker-fill measurement is
+Binance-only (fine — C1's perp leg is Binance); no cross-venue unit is
+tradeable for this owner until a second venue exists, so the maker
+re-registration plan is C1 only; the Bybit half of the stage-0 tape is
+reference data. Hyperliquid stays the named second venue if one is ever
+wanted (`CostModel.hyperliquid_perp` exists; the adapter would be
+wallet-signed, one new dependency). A testnet agent key was pasted into a
+chat on 18 September and is treated as burned; any future key goes only
+into `~/.qr/secrets.env`.
+
+**Rehearsal record (Binance demo, `demo-fapi.binance.com`, 18 Sep):** three
+takes. Take 1: every entry refused — the journal had never been told the
+venue balance (fixed: `start` snapshots balances as opening cash). Take 2:
+the second symbol in a slot collided with the first on the client id
+(fixed: venue and symbol in the signal id); a resting order filled while
+the runner was down and a fresh session did not know it (fixed: the
+working set is rebuilt from the journal); Binance answers a cancel of a
+filled order with -2011 (fixed: a refused cancel reconciles); an exit
+could not be staged while PAUSED (fixed). Take 3, 15 minutes, 2-minute
+slots, SUI/DOGE/ONDO: 27 scheduled attempts, 16 placed, 11 refused by the
+limits with reasons; **9 maker fills, every one closed** (6 by the
+post-only exit, 3 by the reduce-only taker), 28 executions of which 24
+maker; marks 60 s after each fill; session ended flat by itself, verified
+at the venue; one re-post client-id defect isolated by the per-step guard
+and fixed after. The Binance leg of stage 1 is rehearsed end to end.

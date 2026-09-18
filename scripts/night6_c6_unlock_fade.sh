@@ -10,7 +10,7 @@ if [[ "$1" == "--now" ]]; then
   stage "started in parallel with night5's last run (C1 v2 hourly gate 6, 3-5x slower on the ledger; owner asked for parallel runs)"
 else
   stage "queued behind night5"
-  until grep -q "\[night5\] done" $STATUS; do sleep 120; done
+  until grep -qF "[night5] done" $STATUS; do sleep 120; done
 fi
 stage "start (C6 on --engine ledger; calendar frozen 17 Sep, manifest in the log)"
 COMMON=(--market futures/um --costs perp --n 300 --min-history 60

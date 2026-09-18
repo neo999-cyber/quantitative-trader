@@ -683,6 +683,58 @@ first — a rewrite of the runner core, specified in `docs/25`, and the
 prerequisite for the maker study's stage 1. No family was re-run; every
 change's direction on the closed verdicts is stated in `docs/25`.
 
+**18 September 2026, 04:00 Dubai — night5: the eleven frozen grids re-run
+on the ledger (`docs/25` step 8).** Eleven counted runs, 17:08 → 23:59 UTC
+(C1 v2 hourly alone 6 h 11 m: gate 6 re-optimises 25 of 64 variants over
+200 permutations, and the ledger is 3–5× the runner per backtest on
+hourly bars). **Every verdict stays FAIL.** Trial log 772 records / 2,247
+trials, chain verified. The table (`scripts/ledger_before_after.py`,
+before → after; reports in `reports/weights_engine/` and
+`reports/ledger_engine/`, the recorded verdicts untouched):
+
+| hypothesis | verdict | failed gates | net Sharpe | gross Sharpe | cost drag/yr | turnover/yr | gate 3 t | gate 6 p | engine |
+|---|---|---|---|---|---|---|---|---|---|
+| p2_auction_imbalance_v1 | FAIL → FAIL | 2,3,4,5,6,7,8 → 2,3,4,5,7,8 | 0.66 → 0.65 | 1.33 → 1.47 | 0.0096 → 0.0111 | 31.9 → 22.3 | 1.84 → 1.79 | 0.10 → 0.08 | weights → ledger |
+| p2_auction_imbalance_v1_mirror | FAIL → FAIL | 2,3,4,6,7,8 → 2,3,4,6,7,8 | -0.07 → -0.20 | 0.91 → 0.67 | 0.0255 → 0.0280 | 85.0 → 57.7 | -0.19 → -0.52 | 0.30 → 0.64 | weights → ledger |
+| p2_funding_carry_v1 | FAIL → FAIL | 1 → 1 | 8.85 → 7.49 | 9.69 → 9.20 | 0.0100 → 0.0315 | 6.7 → 0.0 | 9.66 → 9.41 | 0.00 → 0.00 | weights → ledger |
+| p2_funding_carry_v1_always_in | FAIL → FAIL | 6,8 → 8 | 4.76 → 6.37 | 5.13 → 7.87 | 0.0077 → 0.0268 | 5.1 → 0.0 | 5.75 → 6.80 | 0.12 → 0.00 | weights → ledger |
+| p2_funding_carry_v2 | FAIL → FAIL | 6 → 6 | 3.09 → 3.81 | 3.36 → 4.52 | 0.0127 → 0.0278 | 8.5 → 0.0 | 15.02 → 20.65 | 0.99 → 0.11 | weights → ledger |
+| p2_late_day_momentum_v1 | FAIL → FAIL | 2,3,4,5,6,7,8 → 2,3,4,5,6,7,8 | -1.04 → -0.25 | -0.31 → 0.48 | 0.0203 → 0.0207 | 67.6 → 68.9 | -2.63 → -0.62 | 0.80 → 0.44 | weights → ledger |
+| p2_late_day_momentum_v1_reverse | FAIL → FAIL | 2,3,4,6,7,8 → 2,3,4,6,7,8 | -0.90 → -0.26 | 0.11 → 0.76 | 0.0338 → 0.0349 | 112.5 → 116.3 | -2.48 → -0.72 | 0.56 → 0.28 | weights → ledger |
+| p2_oi_reversal_v1 | FAIL → FAIL | 3,4,5,6,8 → 3,4,5,6 | 0.84 → 1.00 | 1.07 → 1.21 | 0.0463 → 0.0417 | 71.3 → 0.0 | 1.68 → 2.03 | 0.35 → 0.36 | weights → ledger |
+| p2_oi_reversal_v1_unconditioned | FAIL → FAIL | 2,3,4,6,7,8 → 2,3,4,6,7,8 | -0.34 → -0.34 | -0.23 → -0.24 | 0.0645 → 0.0569 | 99.2 → 0.0 | -0.80 → -0.80 | 0.92 → 0.96 | weights → ledger |
+| p2_venue_spread_v1 | FAIL → FAIL | 3,4,5,6,7,8 → 6,8 | 0.62 → 1.54 | 1.16 → 2.02 | 0.0161 → 0.0145 | 12.9 → 4.8 | 1.76 → 4.24 | 0.17 → 0.02 | weights → ledger |
+| p2_venue_spread_v1_always_in | FAIL → FAIL | 2,3,4,6,7,8 → 1,8 | -1.20 → 8.28 | 0.33 → 20.70 | 0.0028 → 0.0119 | 2.2 → 3.2 | -2.45 → 11.61 | 0.57 → 0.00 | weights → ledger |
+
+Read with three qualifications. (1) **Turnover 0.0 and C1's "$1bn
+capacity" are a ledger defect, fixed the same morning with a test:** on a
+bar where any symbol is not tradable the unit-notional sum was 0 × NaN,
+so the whole bar's turnover read NaN and the impact/capacity arithmetic
+saw no trading. Costs, returns and verdicts use a separately masked term
+and are right; only the turnover column and gate 2's capacity line on
+the C1/C5 rows are wrong, and they are not re-run (each is a counted
+trial; the fix is in the engine for the next). (2) **Carry books move
+most**, in the direction the review predicted: C1 v1 always-in gross
+Sharpe 5.1 → 7.9, v2 3.4 → 4.5, gate-6 p 0.99 → 0.11 — per-leg dollar
+P&L at the coin's own prices instead of the ratio's second-order return,
+funding on the marked notional, and the coin's drift re-hedged daily
+(cost drag 1.3% → 2.8%/yr on v2). v2 still fails gate 6 (p 0.11 > 0.05);
+its verdict does not move. (3) **The cross-venue always-in control is an
+open item**: net Sharpe −1.2 → 8.3, gross 0.3 → 20.7, failing only at
+gate 1's ceiling. On the three majors alone the two engines agree on
+gross (1.70 vs 1.65) and the ledger loses on costs (net 1.56 → −0.94;
+counted smoke `ledger_engine_smoke`), so the anomaly lives in the broad
+top-80 universe — a leg price derived from the ratio on a name with a
+bad print is the suspect. Gate 1 caught it as "not a plausible edge",
+which is what the ceiling is for; it is diagnosed before the ledger
+becomes the default engine, not after. E1/E2 move little (E2's net
+−1.04 → −0.25 as the round-trip exits fill at the session open; still a
+gross-negative family). C2's family row improves (t 1.8 → 4.2, gate 6 p
+0.02) and still fails gates 6 and 8 — the same open item applies to it
+and it is not read as a result. **Decision:** the ledger is not made the
+default until (3) is closed; C6 runs on it tonight as registered, on
+single-leg perps, which the item does not touch.
+
 **18 September 2026 (Opus 5) — the position/cash ledger is built
 (`qr/research/ledger.py`, `docs/26`).** Review 22's first ticket: an
 engine that holds `qty`, `cash` and `nav` and derives weights, beside the

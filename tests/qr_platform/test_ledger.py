@@ -395,3 +395,14 @@ def test_the_leakage_probe_reads_the_same_on_both_engines_at_zero_cost():
         ledger = leakage_probe(panel, strategy, FREE, engine="ledger")
         np.testing.assert_allclose(ledger["gross_sharpe"].to_numpy(), weights["gross_sharpe"].to_numpy(), rtol=1e-9)
         assert ledger.attrs["spike_z"] == pytest.approx(weights.attrs["spike_z"], rel=1e-9)
+
+
+def test_turnover_is_finite_when_a_symbol_is_not_tradable_on_the_bar():
+    panel = edge_world(n_symbols=4, years=1, seed=1)
+    fields = {k: v.copy() for k, v in panel.fields.items()}
+    for k in fields:
+        fields[k].iloc[:100, 0] = np.nan  # one symbol lists 100 days late
+    late = Panel(fields, "1d")
+    res = run_backtest(late, BuyAndHold(rebalance_on="W"), CostModel.binance_perp(), engine="ledger")
+    assert not np.isnan(res.turnover).any()
+    assert res.turnover.sum() > 0 and res.stats()["ann_turnover"] > 0

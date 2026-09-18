@@ -327,7 +327,11 @@ def run_ledger(
                 )
             )
         cash -= float(fees.sum())
-        unit_notional = float(np.abs(delta * at[0]).sum())
+        # a symbol that is not allowed has a NaN price and a zero delta: 0 x NaN
+        # is NaN, and one such symbol on a bar turned the whole bar's turnover
+        # into NaN (found on the real perp panels, 18 September 2026 — the
+        # night5 table's "turnover 0.0" and a $1bn capacity for C1)
+        unit_notional = float(np.where(moved, np.abs(delta * at[0]), 0.0).sum())
         return fees, unit_notional
 
     for t in range(n):

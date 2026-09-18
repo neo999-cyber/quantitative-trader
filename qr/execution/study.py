@@ -154,6 +154,8 @@ CREATE TABLE IF NOT EXISTS study_attempts (seq INTEGER PRIMARY KEY, slot TEXT NO
   side TEXT NOT NULL, outcome TEXT NOT NULL, detail TEXT NOT NULL, client_id TEXT);
 CREATE TABLE IF NOT EXISTS study_marks (client_id TEXT PRIMARY KEY, venue TEXT NOT NULL, symbol TEXT NOT NULL, side TEXT NOT NULL,
   fill_price TEXT NOT NULL, filled_at TEXT NOT NULL, mid_at_place TEXT, mid_after TEXT, marked_at TEXT);
+CREATE TABLE IF NOT EXISTS study_mark_horizons (client_id TEXT NOT NULL, horizon_s INTEGER NOT NULL, mid TEXT NOT NULL, marked_at TEXT NOT NULL,
+  PRIMARY KEY (client_id, horizon_s));
 """
 
 
@@ -406,16 +408,27 @@ class Session:
         if parent is not None:
             self._post_exit(parent, t, taker=(t - parent.filled_at).total_seconds() >= self.config.exit_after_fill_s)
 
+    MARK_HORIZONS_S = (5, 60, 300)  # 60 s is the registered mark (docs/24); 5 and 300 s added 18 Sep 2026 (docs/29)
+
     def _settle_marks(self, t: datetime) -> None:
-        rows = self.journal.db.execute("SELECT client_id, venue, symbol, filled_at FROM study_marks WHERE mid_after IS NULL").fetchall()
+        rows = self.journal.db.execute("SELECT client_id, venue, symbol, filled_at FROM study_marks WHERE marked_at IS NULL").fetchall()
         for cid, venue, symbol, filled_at in rows:
-            if (t - datetime.fromisoformat(filled_at)).total_seconds() >= self.config.mark_after_s:
-                book = self._mark(venue, symbol)
-                if book is None:
-                    continue
-                bid, ask = book
-                self.journal.db.execute("UPDATE study_marks SET mid_after = ?, marked_at = ? WHERE client_id = ?",
-                                        (str((bid + ask) / 2), t.isoformat(), cid))
+            age = (t - datetime.fromisoformat(filled_at)).total_seconds()
+            done = {h for (h,) in self.journal.db.execute("SELECT horizon_s FROM study_mark_horizons WHERE client_id = ?", (cid,)).fetchall()}
+            due = [h for h in self.MARK_HORIZONS_S if h not in done and age >= h]
+            if not due:
+                continue
+            book = self._mark(venue, symbol)
+            if book is None:
+                continue
+            bid, ask = book
+            mid = (bid + ask) / 2
+            for h in due:
+                self.journal.db.execute("INSERT OR IGNORE INTO study_mark_horizons VALUES (?, ?, ?, ?)", (cid, h, str(mid), t.isoformat()))
+                if h == 60:
+                    self.journal.db.execute("UPDATE study_marks SET mid_after = ? WHERE client_id = ?", (str(mid), cid))
+            if len(done | set(due)) == len(self.MARK_HORIZONS_S):
+                self.journal.db.execute("UPDATE study_marks SET marked_at = ? WHERE client_id = ?", (t.isoformat(), cid))
 
     # -- the end of a session -------------------------------------------------
 

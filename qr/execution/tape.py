@@ -52,6 +52,9 @@ import pandas as pd
 __all__ = ["read_tape", "merge_streams", "replay", "summarise", "VirtualOrder"]
 
 HORIZONS_S = (60, 300, 900)
+#: mark-to-mid horizons after a fill, seconds; 60 is the registered one (docs/24),
+#: 5 and 300 were added on 18 September 2026 after the outside reviews (docs/29)
+MARK_HORIZONS_S = (5, 60, 300)
 
 
 def read_tape(path: Path | str) -> Iterator[dict]:
@@ -101,8 +104,15 @@ class VirtualOrder:
     filled_ms: int | None = None
     fill_price: float | None = None
     mid_after: float | None = None
+    mids: dict = field(default_factory=dict)  # horizon_s -> mid that many seconds after the fill
     consumed: float = 0.0
     done: bool = False
+
+    def mark_bps(self, horizon_s: int) -> float:
+        mid = self.mids.get(horizon_s)
+        if self.fill_price is None or mid is None or self.fill_price <= 0:
+            return np.nan
+        return self.side * (self.fill_price - mid) / self.fill_price * 1e4
 
     def row(self, mark_after_ms: int) -> dict:
         wait = (self.filled_ms - self.placed_ms) / 1000.0 if self.filled_ms is not None else np.nan
@@ -122,6 +132,8 @@ class VirtualOrder:
             "fill_price": self.fill_price if self.fill_price is not None else np.nan,
             "mid_after": self.mid_after if self.mid_after is not None else np.nan,
             "mark_bps": mark,
+            "mark_5s_bps": self.mark_bps(5),
+            "mark_300s_bps": self.mark_bps(300),
         }
 
 
@@ -142,14 +154,21 @@ def replay(
     rows: list[dict] = []
 
     def settle_marks(symbol: str, now_ms: int) -> None:
+        """Record the mid at each horizon after a fill; a row is emitted once the longest is reached."""
         bid, _, ask, _ = best[symbol]
+        mid = (bid + ask) / 2.0
         keep = []
         for order in marking:
-            if order.symbol == symbol and now_ms >= order.filled_ms + mark_ms:
-                order.mid_after = (bid + ask) / 2.0
-                rows.append(order.row(mark_ms))
-            else:
-                keep.append(order)
+            if order.symbol == symbol:
+                for h in MARK_HORIZONS_S:
+                    if h not in order.mids and now_ms >= order.filled_ms + h * 1000:
+                        order.mids[h] = mid
+                if 60 in order.mids and order.mid_after is None:
+                    order.mid_after = order.mids[60]
+                if now_ms >= order.filled_ms + max(MARK_HORIZONS_S) * 1000:
+                    rows.append(order.row(mark_ms))
+                    continue
+            keep.append(order)
         marking[:] = keep
 
     for kind, record in events:
@@ -231,7 +250,7 @@ def replay(
         rows.append(order.row(mark_ms))
     columns = [
         "symbol", "side", "placed", "hour_utc", "price", "queue_ahead", "mid_at_place",
-        "filled", "wait_s", "fill_price", "mid_after", "mark_bps",
+        "filled", "wait_s", "fill_price", "mid_after", "mark_bps", "mark_5s_bps", "mark_300s_bps",
     ]
     return pd.DataFrame(rows, columns=columns)
 
@@ -250,12 +269,17 @@ def summarise(orders: pd.DataFrame, horizons_s: Iterable[int] = HORIZONS_S) -> d
     by_hour = frame.groupby("hour_utc")[cols].mean()
     by_hour["n"] = frame.groupby("hour_utc").size()
     filled = frame[frame["filled"]]
+    marks = {}
+    for col, h in (("mark_5s_bps", 5), ("mark_bps", 60), ("mark_300s_bps", 300)):
+        if col in filled and filled[col].notna().any():
+            marks[h] = {"median": float(filled[col].median()), "mean": float(filled[col].mean()), "p90": float(filled[col].quantile(0.9))}
     return {
         "by_symbol": by_symbol,
         "by_hour": by_hour,
         "overall": frame[cols].mean(),
         "median_mark_bps": float(filled["mark_bps"].median()) if len(filled) else np.nan,
         "mean_mark_bps": float(filled["mark_bps"].mean()) if len(filled) else np.nan,
+        "marks_by_horizon": marks,
         "wait_quantiles_s": filled["wait_s"].quantile([0.25, 0.5, 0.75, 0.9]) if len(filled) else pd.Series(dtype=float),
         "orders": int(len(frame)),
     }

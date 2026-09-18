@@ -67,7 +67,8 @@ def main() -> int:
         lines += [f"## {venue}", "",
                   f"Orders {s['orders']}; fill probability at 60/300/900 s: "
                   + " / ".join(f"{s['overall'][f'fill_{h}s']:.1%}" for h in (60, 300, 900)) + ".",
-                  f"Adverse-selection mark on fills: median **{s['median_mark_bps']:.2f} bps**, mean {s['mean_mark_bps']:.2f} bps.",
+                  f"Adverse-selection mark on fills: median **{s['median_mark_bps']:.2f} bps**, mean {s['mean_mark_bps']:.2f} bps (60 s, the registered horizon). "
+                  + "By horizon (median / mean / p90 bps): " + "; ".join(f"+{h}s {m['median']:.2f} / {m['mean']:.2f} / {m['p90']:.2f}" for h, m in sorted(s["marks_by_horizon"].items())) + ".",
                   "Wait to fill (s), quantiles 25/50/75/90: " + " / ".join(f"{v:.0f}" for v in s["wait_quantiles_s"].to_numpy()) + ".",
                   "", "### By symbol and side", "", "```", s["by_symbol"].round(3).to_string(), "```",
                   "", "### By UTC hour", "", "```", s["by_hour"].round(3).to_string(), "```", ""]

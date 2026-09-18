@@ -78,10 +78,13 @@ def test_a_fill_is_closed_by_a_maker_exit_then_by_the_taker_after_an_hour_from_t
     kinds = sorted(w.kind for w in s.working.values())
     assert kinds == ["entry", "exit_maker"]
     assert journal.positions("acct")[("fake", "SUIUSDT")] == D("14.2")
-    clock.advance(60)
-    s.tick()  # the mark one minute after the fill is recorded
+    clock.advance(5)
+    s.tick()  # the +5 s mark
+    clock.advance(55)
+    s.tick()  # the +60 s mark (the registered one)
     row = journal.db.execute("SELECT mid_at_place, mid_after FROM study_marks").fetchone()
     assert row == ("0.70005", "0.70005")
+    assert sorted(h for (h,) in journal.db.execute("SELECT horizon_s FROM study_mark_horizons").fetchall()) == [5, 60]
     # the maker exit rests its TTL and is re-posted, until an hour from the fill the taker takes it
     clock.advance(840)
     s.tick()  # a new slot also places the next scheduled entry (SELL, resting)

@@ -26,17 +26,22 @@ def test_a_resting_bid_fills_when_the_queue_ahead_is_consumed_and_marks_one_minu
         _trade(first + 2_000, "X", 100.1, 2.0, False),   # taker buys at the ask: irrelevant to the bid
         _trade(first + 3_000, "X", 100.0, 6.0, True),    # queue gone: the buy fills at 100.0
     ]
+    book += [_book(first + 8_000, "X", 99.98, 3.0, 100.0, 3.0)]  # 5 s after the fill the mid is 99.99
     book += [_book(first + 63_000, "X", 99.9, 3.0, 100.0, 3.0)]  # a minute later the mid is 99.95
+    book += [_book(first + 305_000, "X", 99.8, 3.0, 100.0, 3.0)]  # five minutes later 99.90
     book += [_book(first + 2 * slot, "X", 99.9, 3.0, 100.0, 3.0)]  # expire the unfilled sell
     orders = replay(merge_streams(book, trades), slot_s=900, ttl_s=900, mark_after_s=60)
     buy = orders[(orders.side == "buy")].iloc[0]
     assert buy.filled and buy.wait_s == pytest.approx(3.0) and buy.fill_price == 100.0
     assert buy.mid_after == pytest.approx(99.95)
     assert buy.mark_bps == pytest.approx((100.0 - 99.95) / 100.0 * 1e4)  # 5 bps against the buyer
+    assert buy.mark_5s_bps == pytest.approx((100.0 - 99.99) / 100.0 * 1e4)
+    assert buy.mark_300s_bps == pytest.approx((100.0 - 99.90) / 100.0 * 1e4)
     sell = orders[(orders.side == "sell")].iloc[0]
     assert not sell.filled and pd.isna(sell.wait_s)
     s = summarise(orders)
     assert s["orders"] == 2 and s["overall"]["fill_900s"] == 0.5 and s["median_mark_bps"] == pytest.approx(5.0)
+    assert set(s["marks_by_horizon"]) == {5, 60, 300} and s["marks_by_horizon"][300]["median"] == pytest.approx(10.0)
 
 
 def test_a_print_through_the_level_fills_the_whole_queue_and_bybit_side_is_read():
@@ -46,7 +51,7 @@ def test_a_print_through_the_level_fills_the_whole_queue_and_bybit_side_is_read(
     book = [_book(t0, "Y", 50.0, 100.0, 50.1, 100.0), _book(first, "Y", 50.0, 100.0, 50.1, 100.0)]
     trades = [{"t": first + 500, "T": first + 500, "s": "Y", "p": "50.2", "q": "1", "S": "Buy"}]  # a buy through the ask
     assert not taker_sold(trades[0])
-    book += [_book(first + 61_000, "Y", 50.0, 100.0, 50.1, 100.0)]
+    book += [_book(first + 61_000, "Y", 50.0, 100.0, 50.1, 100.0), _book(first + 301_000, "Y", 50.0, 100.0, 50.1, 100.0)]
     orders = replay(merge_streams(book, trades), slot_s=900, ttl_s=900)
     sell = orders[orders.side == "sell"].iloc[0]
     assert sell.filled and sell.wait_s == pytest.approx(0.5)

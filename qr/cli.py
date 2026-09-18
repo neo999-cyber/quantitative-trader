@@ -63,6 +63,7 @@ FAMILIES = {
     "late_day_momentum": "LateDayMomentum",
     "oi_reversal": "OIReversal",
     "unlock_fade": "UnlockFade",
+    "perp_pairs": "PerpPairs",
 }
 
 
@@ -1859,10 +1860,10 @@ def _family_class(name: str):
     carry family lives beside the carry unit in `qr.strategies.carry`, which
     imports helpers from the library and so cannot be imported *by* it.
     """
-    from qr.strategies import auction, carry, intraday, library, oi, unlocks
+    from qr.strategies import auction, carry, intraday, library, oi, pairs, unlocks
 
     cls_name = FAMILIES[name]
-    for module in (library, carry, auction, intraday, oi, unlocks):
+    for module in (library, carry, auction, intraday, oi, unlocks, pairs):
         if hasattr(module, cls_name):
             return getattr(module, cls_name)
     raise KeyError(f"no strategy class {cls_name!r} for family {name!r}")

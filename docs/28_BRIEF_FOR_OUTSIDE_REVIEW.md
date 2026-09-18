@@ -240,6 +240,8 @@ any further literature-sourced fast-cycle idea (hit rate 0 of 18).
 
 ## 10. The honest position (what the authors think, for the reviewer to test)
 
+**The objective, in one line (so no prompt wording misleads a reviewer):** not "no losses" — a system whose maximum drawdown is capped by rule, whose risk of ruin is measured (gate 10/11), and in which every loss is the priced cost of testing a positive-expected-value hypothesis. `centaur/` (a pre-project discretionary assistant on Yahoo data, never run live) is frozen and outside the funnel; nothing here depends on it.
+
 - Eighteen ideas across crypto spot, ETFs, perps, single stocks and a
   scheduled-flow mechanism: eighteen fails. The machine has caught its
   own defects three times; the answer has not moved.

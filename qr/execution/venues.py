@@ -174,6 +174,14 @@ class BinanceUSDM:
         })
         return self._order(r)
 
+    def close_taker(self, client_id: str, symbol: str, side: str, qty: Decimal, price: Decimal) -> Order:
+        """Reduce-only IOC limit through the touch: the study's 60-minute fallback exit."""
+        r = self._signed("POST", "/fapi/v1/order", {
+            "symbol": symbol, "side": side, "type": "LIMIT", "timeInForce": "IOC",
+            "quantity": str(qty), "price": str(price), "newClientOrderId": client_id, "reduceOnly": "true",
+        })
+        return self._order(r)
+
     def cancel(self, symbol: str, client_id: str) -> Order:
         return self._order(self._signed("DELETE", "/fapi/v1/order", {"symbol": symbol, "origClientOrderId": client_id}))
 
@@ -257,6 +265,13 @@ class BybitLinear:
             "price": str(price), "timeInForce": "PostOnly", "orderLinkId": client_id, "reduceOnly": bool(reduce_only),
         })
         # create returns ids only; the state comes from a read
+        return self.order(symbol, client_id, venue_order_id=r.get("orderId"))
+
+    def close_taker(self, client_id: str, symbol: str, side: str, qty: Decimal, price: Decimal) -> Order:
+        r = self._call("POST", "/v5/order/create", {
+            "category": "linear", "symbol": symbol, "side": side.capitalize(), "orderType": "Limit", "qty": str(qty),
+            "price": str(price), "timeInForce": "IOC", "orderLinkId": client_id, "reduceOnly": True,
+        })
         return self.order(symbol, client_id, venue_order_id=r.get("orderId"))
 
     def cancel(self, symbol: str, client_id: str) -> Order:
@@ -369,6 +384,19 @@ class FakeVenue:
             self.timeout_after_accept = False
             raise VenueTimeout("accepted, then the response was lost")
         return o
+
+    def close_taker(self, client_id, symbol, side, qty, price) -> Order:
+        if client_id in self.orders:
+            return self.orders[client_id]
+        held = self.pos.get(symbol, Decimal(0))
+        signed = qty if side == "BUY" else -qty
+        if held == 0 or (held > 0) == (signed > 0) or abs(signed) > abs(held):
+            raise VenueError("reduce-only would not reduce")
+        bid, ask = self.books[symbol]
+        touch = ask if side == "BUY" else bid
+        o = Order(f"v{len(self.orders)+1}", client_id, symbol, side, "NEW", qty, Decimal(0), touch)
+        self.orders[client_id] = o
+        return self._exec(o, qty)  # a taker through the touch fills at once
 
     def cancel(self, symbol, client_id) -> Order:
         o = self.orders[client_id]

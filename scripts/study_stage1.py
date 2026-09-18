@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -34,8 +35,10 @@ def venues_for(config: StudyConfig) -> dict:
         out["binance"] = BinanceUSDM(secrets.require(f"BINANCE_{tag}_KEY"), secrets.require(f"BINANCE_{tag}_SECRET"),
                                      base=BinanceUSDM.TESTNET if config.testnet else BinanceUSDM.MAINNET)
     if "bybit" in config.symbols:
+        # BYBIT_TESTNET_HOST=demo selects Bybit's in-account Demo Trading host (api-demo.bybit.com)
+        host = {"demo": BybitLinear.DEMO}.get(os.environ.get("BYBIT_TESTNET_HOST", "testnet"), BybitLinear.TESTNET)
         out["bybit"] = BybitLinear(secrets.require(f"BYBIT_{tag}_KEY"), secrets.require(f"BYBIT_{tag}_SECRET"),
-                                   base=BybitLinear.TESTNET if config.testnet else BybitLinear.MAINNET)
+                                   base=host if config.testnet else BybitLinear.MAINNET)
     return out
 
 

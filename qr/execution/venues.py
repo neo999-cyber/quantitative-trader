@@ -218,7 +218,12 @@ class BinanceUSDM:
 
 class BybitLinear:
     name = "bybit"
+    #: testnet.bybit.com's web sign-up is geo-refused for UAE addresses
+    #: ("Restricted IP Address", 18 Sep 2026); Bybit's Demo Trading inside a
+    #: real account issues demo keys that work only against api-demo.bybit.com.
+    #: Either host is a rehearsal venue; `base` picks it.
     TESTNET = "https://api-testnet.bybit.com"
+    DEMO = "https://api-demo.bybit.com"
     MAINNET = "https://api.bybit.com"
     STATUS = {"New": "NEW", "PartiallyFilled": "PARTIALLY_FILLED", "Filled": "FILLED", "Cancelled": "CANCELED",
               "PartiallyFilledCanceled": "CANCELED", "Rejected": "REJECTED", "Deactivated": "EXPIRED", "Untriggered": "NEW"}

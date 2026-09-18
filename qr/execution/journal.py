@@ -47,8 +47,8 @@ __all__ = ["Intent", "Journal", "TRANSITIONS", "NavUncertain"]
 
 TRANSITIONS: dict[str, set[str]] = {
     "STAGED": {"SUBMITTING", "CANCELLED"},
-    "SUBMITTING": {"ACKED", "PARTIAL", "FILLED", "REJECTED", "UNKNOWN"},
-    "UNKNOWN": {"ACKED", "PARTIAL", "FILLED", "REJECTED", "CANCELLED"},  # by reconciliation only
+    "SUBMITTING": {"ACKED", "PARTIAL", "FILLED", "REJECTED", "EXPIRED", "UNKNOWN"},  # EXPIRED: a post-only that would have crossed
+    "UNKNOWN": {"ACKED", "PARTIAL", "FILLED", "REJECTED", "CANCELLED", "EXPIRED"},  # by reconciliation only
     "ACKED": {"PARTIAL", "FILLED", "CANCEL_REQUESTED", "UNKNOWN", "EXPIRED"},
     "PARTIAL": {"PARTIAL", "FILLED", "CANCEL_REQUESTED", "UNKNOWN", "EXPIRED"},
     "CANCEL_REQUESTED": {"PARTIAL", "FILLED", "CANCELLED", "UNKNOWN"},

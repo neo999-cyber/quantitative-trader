@@ -136,3 +136,19 @@ def test_a_new_session_rebuilds_its_working_set_from_the_journal(tmp_path):
     assert cid in fresh.working and fresh.working[cid].kind == "entry"
     problems = fresh.close_all()  # reconciles the fill, closes the position, verifies flat
     assert problems == [] and fake.positions() == {} and journal.positions("acct") == {}
+
+
+def test_a_reposted_exit_gets_a_fresh_client_id(tmp_path):
+    fake, journal, config = make(tmp_path)
+    start(journal, config, {"fake": fake}, f"{config.digest()} STUDY", now=T0)
+    clock = Clock()
+    s = Session(journal, config, {"fake": fake}, now=clock, log=lambda m: None)
+    fake.fill_on_place = D("14.2")
+    s.tick()  # entry filled, maker exit posted
+    for _ in range(3):  # three TTLs: the maker exit is cancelled and re-posted each time, at a moving price
+        clock.advance(900)
+        fake.books["SUIUSDT"] = (fake.books["SUIUSDT"][0] + D("0.0001"), fake.books["SUIUSDT"][1] + D("0.0001"))
+        s.tick()
+    exits = journal.db.execute("SELECT COUNT(*) FROM intents WHERE action = 'EXIT'").fetchone()[0]
+    errors = journal.db.execute("SELECT COUNT(*) FROM audit WHERE kind = 'error'").fetchone()[0]
+    assert exits >= 3 and errors == 0

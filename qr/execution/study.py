@@ -359,7 +359,11 @@ class Session:
             del self.working[w.intent.client_id]
             return
         ins = self._instrument(venue, symbol)
-        n = sum(1 for x in self.working.values() if x.parent == w.intent.client_id) + 1
+        # exits are numbered from the journal, not from memory: a counter over the
+        # working set reset once an earlier exit left it, and the re-post reused the
+        # first exit's client id with a new price (refused; rehearsal take 3, 18 Sep)
+        n = self.journal.db.execute("SELECT COUNT(*) FROM intents WHERE account = ? AND action = 'EXIT' AND signal_id LIKE ?",
+                                    (self.config.account, f"{w.intent.signal_id}:exit_%")).fetchone()[0] + 1
         if taker:
             price = ins.round_price(ask * D("1.002")) if side == "BUY" else ins.round_price(bid * D("0.998"))
             intent = Intent(self.config.account, venue, symbol, side, str(held), str(price), False, True, self.config.version,

@@ -683,6 +683,29 @@ first — a rewrite of the runner core, specified in `docs/25`, and the
 prerequisite for the maker study's stage 1. No family was re-run; every
 change's direction on the closed verdicts is stated in `docs/25`.
 
+**18 September 2026, 16:35 Dubai — C7 `p2_perp_pairs_v1`: verdict FAIL
+at gate 3; the tenth candidate, the one both outside reviews proposed.**
+Registered seq 800–801 the same afternoon (twenty frozen linked perp
+pairs, rolling OLS hedge, z-score entry, half-life filter, 8 variants;
+random-pairs control), run on `--engine ledger` against cash, 2020-01 →
+2025-08, nine counted runs (11:34 → 12:33 UTC). Best variant (lookback
+60, entry 2.5σ, hold 5): **net Sharpe 0.40, gross 0.63, t = 1.01**, 63%
+of gross survives costs, DSR 0.11 over 8, permutation p 0.50, PBO 0.02 but
+SPA p 0.39 vs cash, gate 8: "the entire result is five trades", alpha t
+0.80 with beta 0.04 to BTC. **The random-pairs control loses** (net
+−0.32, gross negative, t −0.88, 0 of 9 CV paths positive), so the
+reversion is not a property of the z-score construction — the linked
+pairs do carry something the unlinked ones do not — but that something
+is not distinguishable from noise on its own: half the permuted worlds
+earn as much, and the deflated Sharpe is what the best of eight would
+give by chance. Read as the memo's prior said: positive, fragile, the
+control clearly worse, gates 3/4/6 failing. What would make a second
+version worth registering is not a different grid but a *reason* the
+spread should revert on a particular day — an event on one leg — and
+that is C3's question (liquidations) and C6's (unlocks), both already
+tested or registered. Counter: ten registered, ten failed. Trial log
+822 records / 2,277 trials, chain verified.
+
 **18 September 2026, 07:30 Dubai — C6 `p2_unlock_fade_v1`: verdict FAIL
 at gate 2, and at 3, 4, 5, 6, 8 with `--all-gates`.** The ninth candidate
 (registered seq 679–681 the evening before, run on `--engine ledger`,

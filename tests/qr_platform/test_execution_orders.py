@@ -114,7 +114,7 @@ def test_binance_signs_the_query_and_sends_gtx_post_only():
     v = BinanceUSDM("k", "s", transport=t)
     o = v.place_post_only("c", "SUIUSDT", "BUY", D("10"), D("0.7"))
     method, url, headers, _ = t.calls[0]
-    assert method == "POST" and url.startswith("https://testnet.binancefuture.com/fapi/v1/order?")
+    assert method == "POST" and url.startswith("https://demo-fapi.binance.com/fapi/v1/order?")
     assert "timeInForce=GTX" in url and "signature=" in url and headers["X-MBX-APIKEY"] == "k"
     assert "reduceOnly" not in url and o.status == "NEW"
 

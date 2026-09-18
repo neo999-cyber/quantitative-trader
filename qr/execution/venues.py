@@ -11,8 +11,9 @@ so tests run against `FakeVenue`, which implements the same interface in
 memory and can be told to time out after accepting, to fill partially, or
 to fill during a cancel — the races the journal must survive.
 
-Base URLs default to the **testnets** (`testnet.binancefuture.com`,
-`api-testnet.bybit.com`); mainnet is a constructor argument that the
+Base URLs default to the **testnets** (`demo-fapi.binance.com` — Binance's
+futures demo environment, keyed from the main account's API Management —
+and `api-testnet.bybit.com`); mainnet is a constructor argument that the
 study runner passes only under the owner's mandate (`docs/24` stage 1).
 
 Every response is returned normalised as small dicts; the raw payload is
@@ -117,7 +118,11 @@ class Transport:
 
 class BinanceUSDM:
     name = "binance"
-    TESTNET = "https://testnet.binancefuture.com"
+    #: Binance folded the futures testnet into "Demo Trading" inside the main
+    #: account (demo.binance.com/en/futures) in 2025-26; a demo API key is made
+    #: under the main account's API Management and works only against this host.
+    #: testnet.binancefuture.com now redirects to the main site (18 Sep 2026).
+    TESTNET = "https://demo-fapi.binance.com"
     MAINNET = "https://fapi.binance.com"
 
     def __init__(self, key: str, secret: str, base: str = TESTNET, transport: Transport | None = None, recv_window: int = 5000) -> None:

@@ -6,8 +6,8 @@
     .venv/bin/python scripts/study_stage1.py close    --config study/stage1.json      # cancel and close everything now
 
 The config is a JSON `StudyConfig`. Keys come from `~/.qr/secrets.env`:
-`BINANCE_TESTNET_KEY/SECRET`, `BYBIT_TESTNET_KEY/SECRET` when `testnet` is
-true; `BINANCE_STUDY_KEY/SECRET`, `BYBIT_STUDY_KEY/SECRET` (trade-only, no
+`BINANCE_TESTNET_KEY/SECRET` (a Binance *Demo Trading* API key, demo.binance.com),
+`BYBIT_TESTNET_KEY/SECRET` (testnet.bybit.com) when `testnet` is true; `BINANCE_STUDY_KEY/SECRET`, `BYBIT_STUDY_KEY/SECRET` (trade-only, no
 withdrawal, IP-restricted) when it is false — and mainnet additionally
 requires `--i-have-the-owners-yes` on the command line. Nothing here prints
 a key. The journal is `~/qr/lake/study/stage1.sqlite`.

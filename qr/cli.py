@@ -466,9 +466,11 @@ def _add_engine_arg(parser) -> None:
     parser.add_argument(
         "--engine",
         choices=("weights", "ledger"),
-        default="weights",
-        help="the accounting every backtest runs on: the weight-space runner, or the "
-        "position/cash ledger (quantities, cash, per-leg fills; docs/26). Recorded in the trial log.",
+        default="ledger",
+        help="the accounting every backtest runs on: the position/cash ledger (quantities, cash, "
+        "per-leg fills; docs/26) — the default since 19 September 2026, after the clean eleven-run "
+        "comparison (docs/20) — or the weight-space runner, kept to reproduce Programme 1 and 2 reports. "
+        "Recorded in the trial log.",
     )
 
 
@@ -1827,8 +1829,16 @@ def cmd_backtest(args) -> int:
     print(table(pd.DataFrame([{"metric": k, "value": v} for k, v in stats.items()])))
 
     if args.crosscheck:
-        comparison = crosscheck.compare(panel, result, costs)
-        print(f"\nsecond engine agrees: {comparison.agrees} (max relative error {comparison.max_relative_error:.2e})")
+        # the share ledger cross-checks the weight runner; on the ledger engine the
+        # cross-check is the weight runner itself (docs/20, 19 September 2026)
+        if result.meta.get("engine") == "ledger":
+            other = run_backtest(panel, strategy, costs, universe, charge_impact=args.impact, engine="weights")
+            both = pd.concat([result.equity, other.equity], axis=1).dropna()
+            err = float(((both.iloc[:, 0] - both.iloc[:, 1]).abs() / both.iloc[:, 1].abs()).max()) if len(both) else float("nan")
+            print(f"\nsecond engine agrees: {err <= 5e-3} (weight runner vs ledger, max relative error {err:.2e})")
+        else:
+            comparison = crosscheck.compare(panel, result, costs)
+            print(f"\nsecond engine agrees: {comparison.agrees} (max relative error {comparison.max_relative_error:.2e})")
     if args.leakage:
         print("\n## gate 1 leakage probe\n")
         probe = leakage_probe(panel, strategy, costs, universe)

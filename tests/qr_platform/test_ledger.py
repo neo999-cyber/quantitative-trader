@@ -371,7 +371,9 @@ def test_the_cli_takes_the_engine_flag():
 
     args = build_parser().parse_args(["gates", "--family", "tsmom", "--engine", "ledger"])
     assert _engine_kwargs(args, {"risk_free": 0.04}) == {"engine": "ledger", "risk_free": 0.04}
-    assert _engine_kwargs(build_parser().parse_args(["gates", "--family", "tsmom"]), {"risk_free": 0.04}) == {}
+    # the ledger is the CLI default since 19 September 2026; the runner is opt-in
+    assert _engine_kwargs(build_parser().parse_args(["gates", "--family", "tsmom"]), {"risk_free": 0.04}) == {"engine": "ledger", "risk_free": 0.04}
+    assert _engine_kwargs(build_parser().parse_args(["gates", "--family", "tsmom", "--engine", "weights"]), {"risk_free": 0.04}) == {}
 
 
 def test_impact_on_the_ledger_matches_the_runners_to_the_account_it_compounds():

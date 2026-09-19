@@ -683,6 +683,59 @@ first — a rewrite of the runner core, specified in `docs/25`, and the
 prerequisite for the maker study's stage 1. No family was re-run; every
 change's direction on the closed verdicts is stated in `docs/25`.
 
+**19 September 2026, 06:30 Dubai — night8: the clean engine comparison
+(`docs/25` step 8, second pass) and the ledger becomes the default.** The
+eleven frozen grids re-run on the ledger after the cash-interest and
+NaN-turnover fixes (17:36 → 02:23 UTC, C1 v2 hourly 6 h 10 m of it).
+**Every verdict FAIL on both engines.** Trial log 932 records / 2,466
+trials, chain verified. Weight runner → ledger:
+
+| hypothesis | verdict | failed gates | net Sharpe | gross Sharpe | cost drag/yr | turnover/yr | gate 3 t | gate 6 p | engine |
+|---|---|---|---|---|---|---|---|---|---|
+| p2_auction_imbalance_v1 | FAIL → FAIL | 2,3,4,5,6,7,8 → 2,3,4,5,7,8 | 0.66 → 0.65 | 1.33 → 1.47 | 0.0096 → 0.0111 | 31.9 → 36.8 | 1.84 → 1.79 | 0.10 → 0.08 | weights → ledger |
+| p2_auction_imbalance_v1_mirror | FAIL → FAIL | 2,3,4,6,7,8 → 2,3,4,6,7,8 | -0.07 → -0.20 | 0.91 → 0.67 | 0.0255 → 0.0280 | 85.0 → 93.4 | -0.19 → -0.52 | 0.30 → 0.64 | weights → ledger |
+| p2_funding_carry_v1 | FAIL → FAIL | 1 → — | 8.85 → 6.11 | 9.69 → 7.78 | 0.0100 → 0.0315 | 6.7 → 21.0 | 9.66 → 7.60 | 0.00 → 0.00 | weights → ledger |
+| p2_funding_carry_v1_always_in | FAIL → FAIL | 6,8 → 8 | 4.76 → 4.84 | 5.13 → 6.32 | 0.0077 → 0.0268 | 5.1 → 17.9 | 5.75 → 5.14 | 0.12 → 0.01 | weights → ledger |
+| p2_funding_carry_v2 | FAIL → FAIL | 6 → 6 | 3.09 → 3.14 | 3.36 → 3.85 | 0.0127 → 0.0278 | 8.5 → 18.5 | 15.02 → 16.93 | 0.99 → 0.19 | weights → ledger |
+| p2_late_day_momentum_v1 | FAIL → FAIL | 2,3,4,5,6,7,8 → 2,3,4,5,6,7,8 | -1.04 → -1.07 | -0.31 → -0.35 | 0.0203 → 0.0207 | 67.6 → 68.9 | -2.63 → -2.71 | 0.80 → 0.77 | weights → ledger |
+| p2_late_day_momentum_v1_reverse | FAIL → FAIL | 2,3,4,6,7,8 → 2,3,4,6,7,8 | -0.90 → -0.91 | 0.11 → 0.11 | 0.0338 → 0.0349 | 112.5 → 116.3 | -2.48 → -2.50 | 0.56 → 0.57 | weights → ledger |
+| p2_oi_reversal_v1 | FAIL → FAIL | 3,4,5,6,8 → 3,4,5,6,8 | 0.84 → 0.83 | 1.07 → 1.03 | 0.0463 → 0.0417 | 71.3 → 64.2 | 1.68 → 1.67 | 0.35 → 0.38 | weights → ledger |
+| p2_oi_reversal_v1_unconditioned | FAIL → FAIL | 2,3,4,6,7,8 → 2,3,4,6,7,8 | -0.34 → -0.36 | -0.23 → -0.26 | 0.0645 → 0.0569 | 99.2 → 87.5 | -0.80 → -0.85 | 0.92 → 0.96 | weights → ledger |
+| p2_venue_spread_v1 | FAIL → FAIL | 3,4,5,6,7,8 → 3,4,5,6,7,8 | 0.62 → 0.54 | 1.16 → 1.01 | 0.0161 → 0.0145 | 12.9 → 11.6 | 1.76 → 1.50 | 0.17 → 0.12 | weights → ledger |
+| p2_venue_spread_v1_always_in | FAIL → FAIL | 2,3,4,6,7,8 → 2,3,4,6,7,8 | -1.20 → -5.13 | 0.33 → 0.20 | 0.0028 → 0.0119 | 2.2 → 9.5 | -2.45 → -8.01 | 0.57 → 0.04 | weights → ledger |
+
+What the ledger changes, now that interest is out of gross: **only the
+carry books, and only through costs and exact leg P&L.** Daily dollar
+re-sizing of a two-leg unit trades the coin's drift the ratio hid —
+turnover 6.7 → 21 (C1 v1), 8.5 → 18.5 (v2), cost drag 1.0% → 3.2% and
+1.3% → 2.8%/yr — and the per-leg P&L replaces the ratio's second-order
+return: v1 gross Sharpe 9.7 → 7.8, v2 3.4 → 3.9. E1, E2, C5 move by
+hundredths. The cross-venue always-in control reads −5.13 net: a unit
+whose gross is ~0 re-hedged daily is pure cost, which is the honest
+number for it. Against the first pass (`reports/ledger_engine/`, interest
+in gross) every crypto row is lower, the E rows are unchanged, and C2's
+"improvement" is gone — as `docs/20` of the 18th said it would be.
+
+**One row deserves a plain reading: C1 v1.** On the clean ledger its
+gross Sharpe 7.8 sits under gate 1's ceiling of 8 that killed it on the
+runner, and it now passes gates 2, 3, 4, 6 and 8 (t 7.6, DSR 1.0,
+permutation p 0.005, 152 round trips). It still fails — WARNs at 1, 5, 7
+with no justification — and the warnings are the finding, not a
+formality: gate 1's **shuffled-ticker placebo p = 0.67** says attaching
+the same weights to random perps earns the same, i.e. the return is the
+funding any perp pays, not the rule's selection; gate 7's WFE 0.25 says
+what edge the rule has decays out of sample. That is `docs/23`'s verdict
+on C1 restated by the engine: hold-the-carry is real, the timing rule
+adds nothing. It is not to be justified away with a note; it is the
+reason the maker re-registration targets the *holding*, not this rule.
+
+**Decision: the ledger is the default engine from today** (`qr gates` /
+`qr backtest --engine ledger` by default; `--engine weights` kept to
+reproduce Programme 1 and 2 reports; the CLI cross-check on the ledger is
+the runner itself). Every registration since 17 September already ran on
+it. The comparison is now clean and recorded; the eleven verdicts stand
+on both engines.
+
 **18 September 2026, 16:35 Dubai — C7 `p2_perp_pairs_v1`: verdict FAIL
 at gate 3; the tenth candidate, the one both outside reviews proposed.**
 Registered seq 800–801 the same afternoon (twenty frozen linked perp

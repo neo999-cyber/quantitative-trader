@@ -376,3 +376,41 @@ Outputs: `reports/p3/p3_threshold_wedge_v1_insample_{summary.json,trades.parquet
   in Simple Earn); **no participation until five events are measured**, as
   §4 said, and no BNB is bought for it — that would be an owner decision
   against a measured number, not a promoter's APR.
+
+## 11. Launchpool, measured from Binance's own numbers — 21 September 2026
+
+Not five events forward: Binance's public Launchpool endpoint carries
+every completed pool with the whole pool's stake, the reward per staked
+coin and the per-user cap (`qr/data/launchpool.py`, mirrored under
+`mirror/binance/launchpool/`, 179 pools 2020 → March 2026; listing prices
+from spot daily klines). Measured, for the **stablecoin pools** (FDUSD,
+USDC, USD1, U — the ones that fit a tier-1 stake), one stake in the best
+pool per project, tokens valued at the listing day's close:
+
+| Year | projects | pool days | yield on the stake, summed | median APR *during* a pool |
+|---|---|---|---|---|
+| 2020 | 9 | 256 | 7.95% | 12% |
+| 2021 | 14 | 418 | 9.62% | 6% |
+| 2022 | 3 | 90 | 0.58% | 1% |
+| 2023 | 2 | 42 | 2.05% | 148% |
+| 2024 | 2 | 5 | 1.26% | 110% |
+| 2025 | 9 | 35 | **2.03%** | 22% |
+| 2026 to date | 1 | 2 | 0.07% | 13% |
+
+- **The "84% APY" is the rate during a two-day pool, annualised.** The
+  stake earns it for 2–3 days a few times a year; summed, 2025 paid
+  **2.0% for the year** and 2026 has paid 0.07% so far. The tokens fall
+  a median **11% by day 7** after listing, so "sell at listing" is the
+  number, not "hold".
+- **No small-size advantage.** The per-user cap is 10% of the pool's
+  hourly reward; it binds at a stake of $30–260 million. Rewards are
+  linear in the stake below that. The claim in §2 tier 4 is withdrawn.
+- **What it is:** 1–2% a year on top of tier 1 in a busy year, ~0 in a
+  quiet one, principal untouched (the stablecoin sits in Binance custody
+  either way; ~0.4% of Simple Earn interest forgone on pool days). Worth
+  taking when a stablecoin pool is announced and the owner is already on
+  Binance; not a reason to move money. The announcement recorder flags
+  each new pool; participation is the owner's action each time.
+- HODLer Airdrops (BNB-based, §10) remain unmeasured — Binance publishes
+  no pool total for them; the estimate in this session's discussion
+  (0.1–0.2% of BNB per event) stands as an estimate.

@@ -295,3 +295,60 @@ that text.
 - **Not done, by rule**: no registration, no wallet, no USDC moved, no
   Simple Earn subscription (owner action), no Launchpool recorder yet
   (needs the Earn page's Launchpool tab confirmed first).
+
+## 9. P3-A in-sample result — 21 September 2026: **FAIL** on the registered rule
+
+Run once, counted (trial log seq 933; engine `scripts/p3a_wedge.py`,
+built after registration). In-sample: 7,073 markets ending before 1 June
+2026, 6,632 with usable daily history. One market per asset × settlement
+date collapses the weekly ladders to **586 trades** at `k` = 5.
+
+| Run | n | edge / share | clustered t | win | hold | book Sharpe |
+|---|---|---|---|---|---|---|
+| **family k5, to resolution** | 586 | **+2.63 pt** | **2.04** | 0.51 | 3.7 d | −0.28 |
+| family k5, T = 7 d | 586 | +2.59 | 2.01 | 0.51 | 3.0 d | −0.21 |
+| family k8, to resolution | 561 | +1.44 | 1.02 | 0.52 | 3.6 d | −0.48 |
+| family k8, T = 7 d | 561 | +1.41 | 1.00 | 0.52 | 2.9 d | −0.49 |
+| mirror k5 (buy under-priced) | 583 | −1.54 | −1.03 | 0.48 | 4.1 d | +0.34 |
+| mirror k8 | 534 | −2.70 | −1.71 | 0.50 | 4.5 d | +0.16 |
+| placebo k5 (realised vol) | 588 | −0.91 | −0.71 | 0.50 | 4.2 d | −0.77 |
+| placebo k8 | 563 | −0.33 | −0.25 | 0.53 | 4.3 d | −0.43 |
+| naive short ≤ 20¢ | 515 | +1.75 | 2.78 | 0.98 | 10.7 d | +0.27 |
+
+Gates over the four family variants: best net Sharpe −0.21, HAC t −0.33,
+DSR 0.28, PBO 0.29.
+
+**Against the registered falsifiers:** mean edge at `k` = 5 is 2.63 points
+— **below the 3-point bar**; clustered t 2.04 — **below 3**; the book
+Sharpe is negative, not above 1; DSR 0.28 — gate 4 fails. The family does
+beat the naive short per share (2.63 vs 1.75) and the mirror is negative
+(so the wedge is one-sided, as the bias says), and **the placebo does not
+match it** (−0.9 pt): whatever is there comes from DVOL, not from "sell
+lottery tickets". That is the one finding worth keeping.
+
+**What the breakdown says (descriptive, not a new test):** the edge is in
+BTC (+4.6 pt, t 2.4) and in `reach` (+5.2) and `above` (+3.3) markets;
+`dip` markets go the other way (−5.7 pt: the model under-prices downside
+touches — the smile the model deliberately omits). It is concentrated in
+**2026 (+5.6 pt over 242 trades) against +0.5 pt in 2024–25**, which is
+the period the paper measured; and in fills between 20¢ and 50¢. The book
+loses because dollar sizing (`$25 / (1 − fill)`) puts the most shares on
+the high-priced contracts, exactly where the edge is negative.
+
+**Why the book and the per-share numbers disagree, stated so no one
+"fixes" it into a pass:** the memo froze $25 of capital per market. A
+version sized in shares, or restricted to BTC `reach` markets in 2026,
+would look better — and would be a rule written after seeing the data. It
+is not run.
+
+**Status:** Programme 3's counter is at one registered, one failed. The
+holdout (June–September 2026) is **not opened**: the in-sample verdict
+failed, and opening it would spend the one look on a family that did not
+earn it. If the owner wants a second version, the honest inputs are
+(1) the intraday recording now running (the paper's 4.2-hour half-life
+says the daily print sees the residue), (2) a smile-aware model for `dip`
+markets, and (3) share-based sizing — each a new memo with a new
+counter, registered before any run. Nothing else changes: no wallet, no
+USDC moved, nothing registered.
+
+Outputs: `reports/p3/p3_threshold_wedge_v1_insample_{summary.json,trades.parquet,book_returns.parquet}` in the lake.

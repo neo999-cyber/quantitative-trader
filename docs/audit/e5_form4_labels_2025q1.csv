@@ -1,0 +1,101 @@
+n,accession,symbol,label,reason
+1,0000110471-25-000050,WWW,Q,open market weighted average
+2,0000314489-25-000094,BUSE,Q,open market weighted average
+3,0000712537-25-000054,FCF,Q,open market; restricted-stock note is about holdings
+4,0000721994-25-000100,LKFN,Q,open market by spouse
+5,0000796343-25-000058,ADBE,Q,open market weighted average
+6,0000833079-25-000073,MTH,Q,open market
+7,0000842633-25-000029,TRS,Q,own holding company (Trend) controlled by the director; borderline
+8,0000935836-25-000074,ZYME,N,institution (EcoR1 Capital LLC) as reporting owner
+9,0000947871-25-000120,SION,N,fund purchase in the IPO
+10,0000950142-25-000503,CMPO,N,purchase by a private-equity holding vehicle
+11,0000950170-25-008021,TKO,N,10b5-1 plan of Endeavor Operating Company (flag not set at submission level)
+12,0000950170-25-009100,NONE,N,issuer not traded; round-dollar private purchase
+13,0000950170-25-011937,VGAS,N,PIPE by Diamondback Energy (entity)
+14,0000950170-25-012348,ASH,Q,open market
+15,0000950170-25-019789,NWFL,Q,open market; award notes are about holdings
+16,0000950170-25-022582,MRP,Q,open market
+17,0000950170-25-026611,HZO,Q,open market
+18,0000950170-25-027056,VNDA,Q,open market weighted average
+19,0000950170-25-031133,FLYW,Q,open market weighted average
+20,0000950170-25-032162,PSN,Q,open market
+21,0000950170-25-033562,FTDR,Q,open market via own revocable trust
+22,0000950170-25-033880,GLDD,Q,open market
+23,0000950170-25-035906,IHRT,Q,open market weighted average
+24,0000950170-25-036247,OBDC,Q,open market
+25,0000950170-25-036321,SEPN,Q,open market weighted average
+26,0000950170-25-037581,BLND,N,institution (Haveli Investments LP) as reporting owner
+27,0000950170-25-043902,EU,Q,open market by spouse (CAD converted)
+28,0000950170-25-045022,CTGO,Q,open market weighted average
+29,0000950170-25-046952,OPK,Q,own trust vehicle of the CEO; borderline
+30,0001004980-25-000016,PCG,Q,open market; DRIP note is about RSU holdings
+31,0001005229-25-000059,CMCO,Q,open market; restricted-stock note is about holdings
+32,0001062993-25-003341,LAMR,Q,open market
+33,0001062993-25-003840,OSUR,Q,open market stated
+34,0001062993-25-005039,VRME,N,ambiguous: price footnote describes RSU vesting
+35,0001062993-25-006599,RLJ,Q,open market
+36,0001104659-25-002054,ACXP,N,registered direct offering
+37,0001104659-25-016645,PPTA,Q,open market weighted average
+38,0001104659-25-021102,N/A,N,issuer not traded; round-dollar purchase
+39,0001104659-25-030072,OKLO,Q,open market
+40,0001127602-25-004645,NSP,Q,open market
+41,0001127602-25-006272,ALLE,Q,open market via family trust
+42,0001127602-25-006578,MAIA,N,securities purchase agreement (private)
+43,0001127602-25-008327,MAIA,N,securities purchase agreement (private)
+44,0001127602-25-009377,BKU,Q,open market weighted average
+45,0001140361-25-009366,TROX,Q,open market via own living trust
+46,0001171200-25-000026,MGLD,Q,CEO's living trust is the reporting owner
+47,0001175107-25-000002,CRGY,Q,open market stated
+48,0001200461-25-000009,SUNS,Q,open market direct
+49,0001200461-25-000013,SUNS,Q,family foundation the insider presides over; borderline
+50,0001213900-25-002157,AMST,N,public offering under an underwriting agreement
+51,0001213900-25-010029,N/A,N,issuer not traded; round-dollar purchase
+52,0001225208-25-000014,NONE,N,issuer not traded; round-dollar purchase
+53,0001225208-25-003626,NCDL,Q,open market (filed 14 months late; acceptance time governs)
+54,0001287032-25-000056,PSEC,Q,open market (routine buyer; the routine filter is separate)
+55,0001320461-25-000049,CPS,Q,open market
+56,0001366868-25-000048,GSAT,Q,own company (Thermo) of the chairman; borderline
+57,0001415889-25-001574,VYNE,Q,open market weighted average
+58,0001415889-25-000041,SPG,N,dividend reinvestment on restricted stock
+59,0001415889-25-002287,TLSI,Q,open market via own trust
+60,0001415889-25-002760,ETNB,N,fund purchase (RA Capital)
+61,0001415889-25-003351,TECX,N,private placement (Regulation D)
+62,0001415889-25-005622,PDFS,Q,open market via own trust
+63,0001415889-25-008029,ONTF,N,purchase by a fund (nature: By Fund)
+64,0001415889-25-008372,OMCL,Q,open market weighted average
+65,0001435109-25-000001,ASA,Q,open market weighted average
+66,0001435109-25-000002,ASA,Q,open market weighted average
+67,0001437749-25-002381,OVLY,Q,open market via own LLC
+68,0001437749-25-003438,FRD,Q,open market
+69,0001437749-25-006175,DMLP,Q,open market via own LLC
+70,0001437749-25-009171,WSR,Q,open market
+71,0001477932-25-000288,COSM,N,debt exchange agreement
+72,0001493152-25-000211,ACUT,Q,own vehicle (Panetta Partners) of the director; borderline
+73,0001493152-25-001103,GLSI,Q,open market
+74,0001493152-25-002717,ANIX,Q,open market
+75,0001493152-25-005709,AEI,Q,open market weighted average
+76,0001493152-25-006415,AREN,N,privately negotiated purchase from another director
+77,0001520006-25-000084,MTDR,Q,open market; ESPP note is about holdings
+78,0001520006-25-000096,MTDR,Q,open market; ESPP note is about holdings
+79,0001524358-25-000067,VAC,Q,open market stated
+80,0001524358-25-000069,VAC,Q,open market stated
+81,0001562180-25-001224,UFCS,Q,open market
+82,0001567619-25-000214,ODFL,N,purchase inside a 401(k) plan
+83,0001571123-25-000048,SAIC,Q,open market
+84,0001590895-25-000088,CZR,Q,open market
+85,0001598665-25-000019,HRTG,Q,open market
+86,0001628280-25-005390,SLM,Q,open market weighted average; DRIP note is about holdings
+87,0001628280-25-006912,NE,Q,open market weighted average
+88,0001628280-25-008674,HII,Q,open market weighted average
+89,0001628280-25-009744,CWBC,N,employee stock purchase plan
+90,0001628908-25-000046,EVH,Q,open market via own trust
+91,0001683168-25-001654,TREE,Q,open market weighted average
+92,0001694426-25-000041,DK,Q,open market via own LP
+93,0001799742-25-000003,KNX,Q,open market
+94,0001809104-25-000103,ALIT,Q,open market weighted average
+95,0001840502-25-000022,TBLA,Q,open market weighted average via trust
+96,0001868941-25-000019,FLNC,Q,open market
+97,0001868941-25-000029,FLNC,Q,open market stated
+98,0001868941-25-000031,FLNC,Q,open market stated
+99,0001964333-25-000080,BHRB,Q,open market via family trust
+100,0001999371-25-000179,NONE,N,issuer not traded; round-dollar purchase

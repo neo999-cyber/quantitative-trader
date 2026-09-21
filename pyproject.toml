@@ -19,12 +19,38 @@ dependencies = [
 [project.optional-dependencies]
 ai = ["anthropic>=1.0"]
 dev = ["pytest>=7.0"]
+# The research platform (`qr`). Kept optional so the discretionary `centaur`
+# assistant still installs on a machine with none of the heavy stack.
+qr = [
+    "pyarrow>=15",
+    "duckdb>=1.0",
+    "scipy>=1.11",
+    "databento>=0.40",
+]
+# The validation engine's statistics. Installing this WITHOUT the plotly pin
+# below silently breaks vectorbt: skfolio requires plotly>=6, vectorbt 1.1
+# imports plotly's removed scattermapbox trace. skfolio needs plotly 6 only for
+# its own plotting, so pinning to 5 keeps both working; `qr doctor` reports the
+# vectorbt import status so a repeat cannot go unnoticed.
+gates = [
+    "arch>=7.0",
+    "statsmodels>=0.14",
+    "skfolio>=1.0",
+    "jsharpe>=0.1",
+    "plotly<6",
+]
+research = [
+    "vectorbt>=1.0",
+    # vectorbt 1.1 still imports plotly's removed scattermapbox trace.
+    "plotly<6",
+]
 
 [project.scripts]
 centaur = "centaur.cli:main"
+qr = "qr.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["centaur*"]
+include = ["centaur*", "qr*"]
 
 [tool.setuptools.package-data]
 centaur = ["data/*.csv"]

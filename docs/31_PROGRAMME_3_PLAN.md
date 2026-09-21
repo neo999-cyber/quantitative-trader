@@ -352,3 +352,27 @@ counter, registered before any run. Nothing else changes: no wallet, no
 USDC moved, nothing registered.
 
 Outputs: `reports/p3/p3_threshold_wedge_v1_insample_{summary.json,trades.parquet,book_returns.parquet}` in the lake.
+
+## 10. 21 September, later — v2 registered; the Launchpool → HODLer Airdrops finding
+
+- **`p3_threshold_wedge_v2_intraday` registered** on the owner's yes,
+  seq 934, doc sha256 `2d413ed8…`. Read once on 27 October from the
+  recording (21 Sep → 26 Oct), if ≥ 30 asset × settlement-date clusters
+  have a fill; else deferred to 30 November. Programme 3's counter: two
+  registered, one failed, one waiting on data. One registration left.
+- **Yield recorder** (`qr-yield.timer`, daily) live: DefiLlama pools,
+  FRED DTB3, Binance announcements (catalogues 48/93/128) with article
+  bodies. First day: syrupUSDC 5.07%, Aave v3 USDC 3.62%, USDT 3.99%.
+- **Launchpool has effectively been replaced by HODLer Airdrops** in the
+  2026 announcement stream (12 watched articles in the last 50 per
+  catalogue: all HODLer Airdrops or Alpha trading competitions, no
+  Launchpool). The mechanism: Binance takes *retroactive* snapshots of
+  BNB held in Simple Earn over a past window; a new token gives ~1% of
+  its supply (AVNT: 10M tokens) to those holders pro rata, capped per
+  user; the tokens arrive before listing and can be sold at listing.
+  **The staked asset is BNB, not a stablecoin** — the yield rides on the
+  BNB price, so this is tier 2–3, not the tier-1 parking the ladder was
+  for. The recorder now measures each event (tokens × listing price ÷ BNB
+  in Simple Earn); **no participation until five events are measured**, as
+  §4 said, and no BNB is bought for it — that would be an owner decision
+  against a measured number, not a promoter's APR.

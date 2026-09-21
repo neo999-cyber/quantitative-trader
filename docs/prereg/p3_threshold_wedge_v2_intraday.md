@@ -1,9 +1,9 @@
-# Pre-registration (DRAFT, not registered): `p3_threshold_wedge_v2_intraday` — the same wedge, on the recorded intraday book
+# Pre-registration: `p3_threshold_wedge_v2_intraday` — the same wedge, on the recorded intraday book
 
 *Drafted 21 September 2026 after v1's in-sample fail (`docs/31` §9), from
-the owner's choice of "the intraday version". Registered only on the
-owner's yes to this text, and before any line of the Polymarket or
-Deribit recording is read for a wedge. What v1 showed and is therefore
+the owner's choice of "the intraday version", and **registered the same
+day on the owner's yes** to this text, before any line of the Polymarket
+or Deribit recording was read for a wedge. What v1 showed and is therefore
 known: the daily wedge is +2.6 points a share at k = 5 (t 2.0), one-sided
 (the mirror loses), not reproduced by realised vol (the placebo loses),
 concentrated in BTC `reach`/`above` markets and in 2026, and negative on

@@ -222,3 +222,35 @@ outflow report · Pendle Print, Coin Bureau · Aavescan USDC, Morpho vaults,
 Ondo USDY, Franklin FOBXX · Binance FZE VARA licence, UAE transition FAQ,
 *Virtual Assets Product Offering on Binance Dubai* · Launchpool figures:
 CoinGecko category, promoter guides (flagged as promoter figures).
+
+## 7. Owner's answers (21 September 2026) and the decisions taken
+
+1. **Binance Dubai futures: approved** — the owner passed the Product
+   Suitability Assessment on 21 September; USDⓈ-M futures are open to the
+   account. Stage 1 of the maker-fill study can run here. Earn products
+   (Simple Earn, Launchpool): to be confirmed from the Earn page.
+2. **Self-custody wallet for a Polymarket live stage: yes** — only after
+   P3-A/P3-B pass their kill tests, and funded to the study cap, never more.
+3. **Yield ladder, decided on the owner's "you suggest":** tiers 1–2 only.
+   Idle USDC sits in Binance Simple Earn *flexible* (no lock-up, promos
+   capped per user); Launchpool measured before any participation; tier 3
+   (sUSDe-type funding-carry risk) **out**; Pendle/mainnet DeFi **out** at
+   this size (gas and lock-up buy nothing on $2k). Honest expectation:
+   $0–60 a year over cash. It is parking, not a result.
+4. **Capital split, decided on "best for the project, I don't mind losing
+   some":** of the ~$2,000 — **$200 studies bucket** (the only money that
+   can be lost: stage 1's $25 stop, a Polymarket live stage at ≤ $100, the
+   rest reserve for closes), **$1,300 idle yield** (tier 1, withdrawable
+   any day), **$500 untouched** in fiat or USDC outside any product. No
+   study may draw on the other two buckets; moving a dollar between
+   buckets is an owner decision recorded here.
+5. **Tangible result: the 31 October deliverable in §4** stands as the
+   definition.
+6. Tax/reporting: none applies.
+7. **Polymarket book recorder on the Hetzner box: yes.**
+
+**What starts now ($0, nothing registered, no money moves):** the
+Polymarket catalogue and daily-history loader, the Deribit DVOL loader,
+the usable-market count, the P3-A memo draft, and the Polymarket book
+recorder. Registration of P3-A waits for the memo and the owner's yes to
+that text.

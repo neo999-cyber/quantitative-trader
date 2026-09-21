@@ -218,6 +218,8 @@ async def run_polymarket(rec: Recorder, refresh: float, verbose: bool, smoke: fl
         yes = {m["yes_token"] for m in markets}
         ids = sorted(yes)  # YES only: the CLOB folds NO orders into the YES book
         (rec.out / "catalogue.json").write_text(json.dumps({"at": time.time(), "markets": markets}))
+        with (rec.out / "catalogue.jsonl").open("a", encoding="utf-8") as fh:  # every refresh kept: a market that ends drops out of the next one
+            fh.write(json.dumps({"at": time.time(), "markets": markets}, separators=(",", ":")) + "\n")
         print(f"[polymarket] {len(markets)} active markets, {len(ids)} tokens", flush=True)
         if not ids:
             await asyncio.sleep(min(refresh, 300))

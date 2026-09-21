@@ -24,14 +24,20 @@ Two venues, both public, no key, standard library plus `websockets`:
 
 Each line: `{"venue","recorded_at","raw"}` — the venue's own message.
 Deribit's is untouched; Polymarket's is *compacted* (`compact`): whitespace
-and the venue's per-message `hash` removed, and in a `price_change` the
+and the venue's per-message `hash` removed; in a `price_change` the
 mirrored NO-token entry dropped (it is the YES entry at 1 − price with the
-side flipped, same size; the CLOB emits both for every order). Nothing
-else is changed and the mapping is stated here so a reader can invert it. Files: `<out>/<venue>/YYYY-MM-DD/HH.jsonl.gz`, UTC hours,
+side flipped, same size; the CLOB emits both for every order); and — the
+one lossy step, measured on 21 September — a `price_change` entry is kept
+only when it **moves that token's best bid or ask** or sits **within
+`--near` (2¢) of the mid**. The raw feed is ~630,000 price changes an hour
+for 160 tokens, 93% of them deep-book bot churn; keeping the top of book
+and the 2¢ band is 40% of the bytes, and the hourly full `book` snapshots
+carry the rest of the depth. `book`, `last_trade_price` and
+`tick_size_change` are never dropped. Files: `<out>/<venue>/YYYY-MM-DD/HH.jsonl.gz`, UTC hours,
 gzip-appended (one member per process start), flushed every two seconds:
 the raw Polymarket feed is ~2.5 GB a day for 300 tokens, which the box
 cannot hold for a quarter; gzip and YES-only tokens (the CLOB merges the
-NO side into the YES book) bring it to ~200 MB a day. Reconnects on any
+NO side into the YES book) bring it to ~200 MB a day after the top-of-book filter. Reconnects on any
 error with a growing pause.
 
     python scripts/record_polymarket.py --venue polymarket --out /root/pm/data
@@ -128,24 +134,43 @@ def active_markets() -> list[dict]:
     return out
 
 
-def compact(raw: str, yes_tokens: set[str]) -> str:
-    """Polymarket message without whitespace, hashes, or the NO-side mirror of a price change."""
+def compact(raw: str, yes_tokens: set[str], last_tob: dict, near: float = 0.02) -> str | None:
+    """Polymarket message without whitespace, hashes, the NO-side mirror, or deep-book churn; None when nothing is left."""
     try:
         msg = json.loads(raw)
     except json.JSONDecodeError:
         return raw
     msgs = msg if isinstance(msg, list) else [msg]
+    out = []
     for m in msgs:
         if not isinstance(m, dict):
+            out.append(m)
             continue
         m.pop("hash", None)
         if m.get("event_type") == "price_change" and isinstance(m.get("price_changes"), list):
-            keep = [c for c in m["price_changes"] if str(c.get("asset_id")) in yes_tokens]
-            if keep:
-                m["price_changes"] = keep
+            keep = []
             for c in m["price_changes"]:
+                aid = str(c.get("asset_id"))
+                if aid not in yes_tokens:
+                    continue
                 c.pop("hash", None)
-    return json.dumps(msg, separators=(",", ":"))
+                tob = (c.get("best_bid"), c.get("best_ask"))
+                moved = last_tob.get(aid) != tob
+                last_tob[aid] = tob
+                try:
+                    mid = (float(tob[0]) + float(tob[1])) / 2
+                    close = abs(float(c["price"]) - mid) <= near
+                except (TypeError, ValueError):
+                    close = True
+                if moved or close:
+                    keep.append(c)
+            if not keep:
+                continue
+            m["price_changes"] = keep
+        out.append(m)
+    if not out:
+        return None
+    return json.dumps(out if isinstance(msg, list) else out[0], separators=(",", ":"))
 
 
 class Recorder:
@@ -183,10 +208,11 @@ class Recorder:
             self._fh.close()
 
 
-async def run_polymarket(rec: Recorder, refresh: float, verbose: bool, smoke: float | None) -> None:
+async def run_polymarket(rec: Recorder, refresh: float, verbose: bool, smoke: float | None, near: float = 0.02) -> None:
     import websockets
     t_end = time.monotonic() + smoke if smoke else None
     backoff = 2.0
+    last_tob: dict = {}
     while True:
         markets = active_markets()
         yes = {m["yes_token"] for m in markets}
@@ -216,7 +242,9 @@ async def run_polymarket(rec: Recorder, refresh: float, verbose: bool, smoke: fl
                         continue
                     if raw == "PONG":
                         continue
-                    rec.write(compact(raw if isinstance(raw, str) else raw.decode(), yes))
+                    line = compact(raw if isinstance(raw, str) else raw.decode(), yes, last_tob, near)
+                    if line is not None:
+                        rec.write(line)
                     if verbose and rec.lines % 200 == 0:
                         print(f"[polymarket] {rec.lines} lines", flush=True)
         except Exception as exc:  # noqa: BLE001
@@ -276,6 +304,7 @@ def main(argv=None) -> int:
     ap.add_argument("--out", type=Path, default=DEFAULT_OUT)
     ap.add_argument("--refresh", type=float, default=3600.0, help="seconds between token-list rebuilds (polymarket)")
     ap.add_argument("--smoke", type=float, default=None, help="run this many seconds and stop")
+    ap.add_argument("--near", type=float, default=0.02, help="keep price changes within this of the mid (polymarket); top-of-book moves are always kept")
     ap.add_argument("--verbose", action="store_true")
     ap.add_argument("--print-systemd", action="store_true")
     a = ap.parse_args(argv)
@@ -297,7 +326,7 @@ def main(argv=None) -> int:
     for s in (signal.SIGINT, signal.SIGTERM):
         signal.signal(s, _stop)
     try:
-        coro = run_polymarket(rec, a.refresh, a.verbose, a.smoke) if a.venue == "polymarket" else run_deribit(rec, a.verbose, a.smoke)
+        coro = run_polymarket(rec, a.refresh, a.verbose, a.smoke, a.near) if a.venue == "polymarket" else run_deribit(rec, a.verbose, a.smoke)
         loop.run_until_complete(coro)
     except (asyncio.CancelledError, KeyboardInterrupt):
         pass

@@ -254,3 +254,42 @@ Polymarket catalogue and daily-history loader, the Deribit DVOL loader,
 the usable-market count, the P3-A memo draft, and the Polymarket book
 recorder. Registration of P3-A waits for the memo and the owner's yes to
 that text.
+
+## 8. Build log — 21 September 2026 (all $0, nothing registered, no money moved)
+
+- **Loaders**: `qr/data/polymarket.py` (Gamma `public-search` discovery
+  over fourteen fixed queries, rule-based classification into
+  reach/dip/above with the strike and asset, eligibility filter, daily
+  CLOB `prices-history` per YES token, all mirrored under
+  `mirror/polymarket/`) and `qr/data/deribit.py` (DVOL daily OHLC, paged,
+  mirrored, written as `reference/dvol_BTC` / `reference/dvol_ETH`).
+  Tests on fixtures, no network.
+- **The count** (the memo's first build task): **9,048 eligible markets**
+  — resolved, classifiable, horizon ≥ 7 days, volume ≥ $10k, race markets
+  ("$70k or $90k first") excluded: BTC 4,486 (above 3,300 / dip 561 /
+  reach 625), ETH 3,870, SOL 692; 7,818 weekly and 1,117 monthly-or-longer;
+  median volume $141k; resolutions November 2021 → 20 September 2026 with
+  96% in 2025–26. Sixty times the memo's minimum. The resolved-YES rate is
+  38%; nothing else about outcomes or prices was read. Daily YES histories
+  are being pulled for every eligible market (first 500: 491 with data).
+- **DVOL**: BTC and ETH, 2,008 days each, 2021-03-24 → 2026-09-21.
+- **Memo drafted, not registered**: `docs/prereg/p3_threshold_wedge_v1.md`
+  — the model (Φ(d₂) terminal; reflection-principle touch), the rule
+  (sell YES on a wedge ≥ k, maker, 1-point haircut, one market per
+  asset × settlement date, $25 × 5), the grid (k ∈ {5, 8} × T ∈ {resolution,
+  7 d}), three controls (mirror, realised-vol placebo, naive short of
+  everything ≤ 20¢), clustered t by asset × end date, holdout June →
+  September 2026, and the stated limit of daily data. **Awaits the owner's
+  yes to the text.** The engine script `scripts/p3a_wedge.py` is not built
+  until then, so no wedge can be looked at before registration.
+- **Recorders live on the Hetzner box** (`~/pm/`, own venv, standard
+  library + `websockets`, nothing else installed): `qr-pm-polymarket`
+  (CLOB market channel for the YES token of every active BTC/ETH/SOL
+  threshold market, 160 at start, list refreshed hourly; messages
+  compacted as documented in `scripts/record_polymarket.py`; ~200 MB a day
+  gzipped) and `qr-pm-deribit` (DVOL and price indices at the venue's
+  cadence). Disk: 25 GB free at start; check `df` when the tape is
+  mirrored on 1 October and stop `qr-tape-*` once the 14 days are copied.
+- **Not done, by rule**: no registration, no wallet, no USDC moved, no
+  Simple Earn subscription (owner action), no Launchpool recorder yet
+  (needs the Earn page's Launchpool tab confirmed first).

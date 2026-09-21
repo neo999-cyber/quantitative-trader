@@ -279,9 +279,11 @@ that text.
   asset × settlement date, $25 × 5), the grid (k ∈ {5, 8} × T ∈ {resolution,
   7 d}), three controls (mirror, realised-vol placebo, naive short of
   everything ≤ 20¢), clustered t by asset × end date, holdout June →
-  September 2026, and the stated limit of daily data. **Awaits the owner's
-  yes to the text.** The engine script `scripts/p3a_wedge.py` is not built
-  until then, so no wedge can be looked at before registration.
+  September 2026, and the stated limit of daily data. **Registered the
+  same day on the owner's yes** — `qr trial prereg`, seq 932, doc sha256
+  `8568e870…`; the engine script `scripts/p3a_wedge.py` did not exist at
+  registration, so no wedge was seen before it. Programme 3's counter is
+  at one.
 - **Recorders live on the Hetzner box** (`~/pm/`, own venv, standard
   library + `websockets`, nothing else installed): `qr-pm-polymarket`
   (CLOB market channel for the YES token of every active BTC/ETH/SOL

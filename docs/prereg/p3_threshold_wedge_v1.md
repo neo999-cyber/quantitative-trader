@@ -1,9 +1,9 @@
-# Pre-registration (DRAFT, not registered): `p3_threshold_wedge_v1` — selling the Polymarket wedge over the options-implied probability
+# Pre-registration: `p3_threshold_wedge_v1` — selling the Polymarket wedge over the options-implied probability
 
-*Drafted 21 September 2026 from `docs/31` §1.3. **Not registered.** It is
-registered only when the owner says yes to this text, and only through
+*Drafted 21 September 2026 from `docs/31` §1.3 and **registered the same
+day on the owner's yes** to this text, through
 `qr trial prereg --file docs/prereg/p3_threshold_wedge_v1.md`, before any
-wedge is computed. What was read before drafting, and nothing more: the
+wedge was computed and before the engine script existed. What was read before drafting, and nothing more: the
 market catalogue (counts, horizons, volumes, the resolved-YES rate of 38%)
 and the DVOL series' length. No market price was compared with any model
 probability.*

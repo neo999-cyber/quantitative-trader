@@ -414,3 +414,24 @@ pool per project, tokens valued at the listing day's close:
 - HODLer Airdrops (BNB-based, §10) remain unmeasured — Binance publishes
   no pool total for them; the estimate in this session's discussion
   (0.1–0.2% of BNB per event) stands as an estimate.
+
+## 12. P3-B (liquidity rewards) — sized from the first five hours of book, 21 September 2026
+
+A measurement, not a candidate; nothing registered. Polymarket publishes
+every market's reward pool (`clob.polymarket.com/rewards/markets/current`,
+mirrored: 16,096 markets share **$144k a day**, median **$3 a day** per
+market). Of the 159 crypto threshold markets being recorded, **42 have a
+pool, each $5 a day**, max spread 4.5¢, minimum size 20 shares. From
+1,240 recorded book snapshots (mid between 10¢ and 90¢), with the
+published quadratic score, $100 resting on *each* side 1¢ from the mid —
+the whole $200 studies bucket in one market — would hold a median
+**0.59%** of the score (q75 2.2%, q90 7.9%; the median market has $24k
+resting within the band). That is **3¢ a day per market** at the median,
+39¢ on the thinnest tenth. Polymarket pays nothing below **$1 a day**;
+five markets at the median earn 15¢. **P3-B cannot clear the payout
+floor at this account size** except by sitting alone in the thinnest
+markets, where the adverse selection on the filled side is the whole
+question — and that needs weeks of prints, not hours. Parked: the
+recording continues; it is re-sized on 27 October with the v2 read, from
+the same tape, and only a number above the floor after adverse selection
+gets a memo. Programme 3's counter stays at two of three.

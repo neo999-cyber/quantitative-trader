@@ -44,7 +44,13 @@ def iter_events(mirror: Path, start: pd.Timestamp | None = None, end: pd.Timesta
     heads: list[tuple[float, str, dict]] = []
     for _, venue, f in files:
         with gzip.open(f, "rt", encoding="utf-8") as fh:
-            for line in fh:
+            while True:
+                try:
+                    line = fh.readline()
+                except EOFError:   # the hour still being written: a truncated last member
+                    break
+                if not line:
+                    break
                 try:
                     d = json.loads(line)
                     raw = json.loads(d["raw"])

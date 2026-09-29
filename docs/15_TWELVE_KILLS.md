@@ -1,0 +1,477 @@
+# What twelve self-kills say
+
+*13 September 2026. Three autopilot nights: one crypto with the original
+briefs, then one ETF and one crypto with briefs written for each market.
+Twelve candidates, twelve kills, none of them by the harness.*
+
+## The result
+
+Every candidate was killed **by the memo itself** — `triage()`'s own checks
+never had to fire. The reasons were specific, and they were right. Sorted by
+what actually stopped each one:
+
+**The payer trades an instrument we cannot trade (7 of 12).**
+
+| candidate | the objection |
+|---|---|
+| `perp_funding_carry_spot_only_v1` | "the transfer is real but structurally out of reach: funding is paid on perps" |
+| `quarterly_expiry_window_v1` | "the forced trade is real but delta-neutral in aggregate: rollers roll" |
+| `balanced_fund_month_end_rebalance_v1` | "the named forced trader does not trade our instruments" |
+| `quarter_end_window_dressing_v1` | "no forced trader whose obligation maps onto a directional spot position" |
+| `december_tax_loss_wash_sale_v1` | "the mechanism is imported from equities and does not survive translation" |
+| `turn_of_month_flow_v1` | "the forced trader is an equities-market-structure artefact" |
+| `index_recon_forced_basket_v1` | "the mechanism is real but acts on the constituents" |
+
+**The mechanism holds and the data is not in the lake (3 of 12).**
+`liquidation_cascade_aftermath_v1`, `token_unlock_cliff_window_v1` ("blocked on
+data, not on logic — passes Q1 and Q2"), `bond_fund_redemption_credit_etf_v1`.
+
+**Nobody is actually forced (2 of 12).** `cme_weekend_closure_monday_open_v1`
+("a venue constraint, not an obligation") and
+`mm_inventory_reversal_overnight_v1`.
+
+## The finding
+
+Only two of twelve failed because the *idea* was wrong. The other ten failed
+on **access**: the forced trader is in a market this project cannot reach, or
+the evidence of their forcing is in a dataset it does not hold.
+
+That is a different answer from the one the nine pattern families gave, and a
+more useful one. "Who is forced to trade?" turns out to have plenty of good
+answers in crypto — they are simply all in the **derivatives** market. Funding
+is paid on perpetuals. Liquidations happen to leveraged positions. Expiry
+rolls happen in futures and options. This project trades **spot**, and spot is
+where the people who are *not* forced trade.
+
+The equity side is the same shape with a different cause. Balanced funds,
+pension flows, index trackers and tax-loss sellers are all real forced
+traders, and they trade **individual securities**. The twelve-fund ETF basket
+sits one level up from where the obligation bites, and the memos said so
+without being prompted: the flow that moves SPY's constituents is diluted
+almost to nothing by the time it reaches SPY.
+
+## What this does not mean
+
+**It is not the stopping rule.** That rule counts candidates that went
+*through the full gates* and failed — eight of those and the answer is "no
+edge is accessible". These twelve never reached a pre-registration, so the
+count is untouched, and `qr policy show` still reads 0 of 8. That is the
+design working: dying at a memo costs a page of text and is not evidence about
+whether an edge exists.
+
+**It is not a mistuned bar.** The kill prompt is deliberately harsh, so twelve
+for twelve deserves suspicion — but the objections are substantive and
+checkable one by one, not the same lazy clause twelve times. Re-reading them,
+each is a claim about the world that a person would have to argue with on the
+merits.
+
+**It is not "the briefs were bad" a second time.** The first night's briefs
+genuinely were wrong — equities mechanisms aimed at a crypto universe. The
+second and third used briefs written for each market and produced the same
+structural answer. Rewriting them a third time would be iterating on an input
+that is not the binding constraint.
+
+## The decision this surfaces
+
+The binding constraint is **instrument access and data**, not idea generation.
+There are three honest responses and they are not equivalent.
+
+**1. Get the data, keep trading spot.** Binance futures `fundingRate` and
+`openInterestHist` are public and free. They do not let this project *collect*
+funding, but they are the best available signal for when the crowded side is
+paying — and a spot book can express "the levered crowd is long and paying to
+stay long" as a directional view. This is the cheapest step: an ingestor, no
+new venue, no new cost model, no new account. It also unblocks the three
+candidates that failed only on data.
+
+**2. Trade perpetuals.** This is where the payers are, and it is the honest
+reading of every crypto kill above. It is also `PLAN.md`'s Phase 4 and a much
+larger step: a funding leg in the cost model, a margin model, liquidation risk
+of our own, and a product that can lose more than it holds. Not at $1,000, and
+not before the gate 10/11 sizing mathematics has been reviewed.
+
+**3. Accept that spot-only has no forced-trader edge and say so.** Defensible,
+and it is the finding these nights point at. It would mean the honest answer
+for this account is an index fund, arrived at faster and for a better reason
+than the stopping rule would have given.
+
+The ordering is: **(1) now, because it is free and it tests whether (2) is
+worth it.** If funding and open interest carry no usable signal in spot, then
+(2) is a large investment with no evidence behind it and (3) becomes the
+answer. If they do, (2) has a reason.
+
+## What changed in the code because of this
+
+`Night.shopping_list()` counted only `blocked` candidates, and triage honours
+a self-kill first — so a model that *notices* the data is missing kills its own
+candidate, and the dataset it named was thrown away. The first two real nights
+reported "0 blocked on data" and an empty shopping list while three memos said
+"blocked on data" in as many words. It now counts every candidate that named a
+missing dataset, killed ones included, ranked by how many ran into each.
+
+The verdicts are unchanged, which is the point: whether an idea survives and
+whether its data exists are different questions, and only the second one
+belongs on a shopping list.
+
+
+---
+
+## Addendum — the ingestor exists (13 September 2026, overnight)
+
+Option 1 is built. `qr data funding-pull` and `qr data funding-ingest` bring
+Binance perpetual funding and open interest into the lake as **daily features
+on the spot panel**, and `FundingTilt` is the crude primitive the autopilot can
+compile a memo to.
+
+Three things were kept deliberately narrow, because the objection that killed
+these candidates was right and must not be quietly walked back:
+
+* **Nothing collects funding.** No spot position earns it. The claim the
+  feature supports is "the levered crowd is positioned this way and paying for
+  it", which is a fact about *positioning* that spot prices may or may not
+  reflect. A memo proposing to collect it should still be killed at question 1.
+* **The join cannot widen the universe.** A perp with no spot pair contributes
+  nothing; the spot panel decides the index and the symbol set. A feature must
+  never smuggle in an instrument the cost model has never priced.
+* **A pair with no perp carries NaN, not zero.** Zero funding is a claim about
+  the market; absence is not.
+
+`features.available("funding_rate")` is now true — this project *can* have the
+data — and a second check asks whether this *lake* has it, because conflating
+those two would send a sound mechanism to a kill test with no data, where it
+produces a strategy holding nothing. That looks exactly like a strategy that
+found nothing, and the two conclusions could not be further apart.
+
+**Unverified, and stated as such.** The bucket paths and CSV column names are
+written from Binance's published layout and have never met the live bucket;
+this repository is developed where that bucket is unreachable. Both parsers
+fail loudly and quote the header they actually received. The first real pull is
+the verification — if it errors with a column list, that list is the
+correction.
+
+
+---
+
+## Addendum — the bar now has a second half (14 September 2026)
+
+Twenty-six self-kills in, one ambiguity kept coming back. Is *"leveraged longs
+are paying funding on the perpetual"* a mechanism for a **spot** strategy?
+
+The forced trader is real and the payment is real, and neither of those is a
+reason for the spot price to move. The perpetual is a different instrument. A
+memo that steps from one to the other is **asserting** a link rather than
+naming one, and the funding candidates were passing question 1 on the strength
+of that step.
+
+Three ways out were on the table:
+
+* **(a) strict** — only forced flow in the market being traded counts;
+* **(b) loose** — a forced trader anywhere counts;
+* **(c) strict, plus a named transmission** — adopted.
+
+(b) was rejected because of what it admits. "Retail gets margin-called, so buy
+the dip" clears a loose bar, and it compiles to `reversal_v1`, which has
+already been pre-registered and failed with SPA *p* = 0.853. A bar that admits
+a family the project has already rejected is not a bar.
+
+Under **(c)** the memo answers a sixth question, and it is now question 2:
+**which market is the forced trader forced in, and what mechanically carries
+their flow into ours?** Name the arbitrageur or the hedge, or say the forced
+flow is in this market already.
+
+* *"Funding is high, therefore spot falls"* — killed.
+* *"Liquidations force perp selling; basis arbitrageurs are long spot against
+  short perp and sell spot to stay hedged; the spot book is thinner
+  overnight"* — proceeds. It names a trader obliged to act in **spot**, and the
+  claim is checkable.
+
+The strict half is not an empty set, which is what made (c) affordable. Spot
+ETF creations and redemptions, miner treasury selling, token unlocks and
+spot-margin liquidations are all forced flow in the spot book itself and need
+no transmission at all. The briefs that produced ten access-kills were wrong;
+the bar was not.
+
+**In the code.** `MEMO_SCHEMA` and `MechanismMemo` carry a `transmission`
+field, `as_markdown()` renders it as section 2 — so it is inside the document
+gate 0 hashes, not commentary alongside it — and `triage()` kills a memo three
+ways without consulting the model's verdict: an empty transmission, one drawn
+from `NON_MECHANISMS`, or one that names no agent in the market being traded
+(`TRANSMISSION_AGENTS`). That last check is a stem list and it fails closed. A
+memo killed by it can be rewritten to name the agent it meant, and the kill
+reason says so; the alternative is accepting "spot follows the perp", which is
+the sentence this whole addendum exists to refuse.
+
+### The clause that was missing (14 September 2026, the same day)
+
+The transmission bar was tested the night it shipped, on briefs that **named
+the transmission for the model** — cash-and-carry arbitrageurs must buy spot to
+put the trade on and sell spot to take it off — precisely so the memo could not
+dodge the question by phrasing.
+
+Both were killed, on a ground the bar did not contain:
+
+> "No forced trader: a delta-neutral carry book facing low funding…"
+> "The cash-and-carry arbitrageur's spot buying is discretionary."
+
+Which is correct, and it is the more useful half of the idea. Question 2 asked
+for an agent in the market being traded. It did not ask whether **that agent is
+itself forced**. A carry arbitrageur is delta-neutral and profit-seeking:
+nothing fixes the date, the size or the price at which they unwind. They will
+exit when it pays them to, which is the definition of not being forced. A
+transmission whose transmitter is discretionary transmits nothing.
+
+So the clause, now in `SYSTEM_PROMPT` and in the schema: **the transmitting
+agent must itself be under an obligation** — a hedge that must be maintained, a
+margin call, a mandate. A profit motive is not an obligation.
+
+`triage()` is not changed, and cannot be. Whether an agent is obliged or merely
+motivated is a question about the world, not about the memo's structure; there
+is no keyword for it. This one is enforced in the prompt and by the reader,
+which is worth stating plainly rather than pretending the harness checks it.
+
+### Seven ETF memos about crypto (14 September 2026)
+
+The first ETF night under the transmission bar returned seven kills, and the
+first candidate was called `balanced_fund_month_end_rebalance_crypto_v1`.
+
+`propose()` was handed the brief and nothing else. It was never told what was
+being traded — and the feature registry it *is* shown talks about perpetual
+funding and the crypto Fear & Greed index, so the model inferred Binance spot.
+It then killed month-end rebalancing on the grounds that no 60/40 mandate
+rebalances into altcoins, quarter-end window dressing for having no forced
+actor in crypto, and December tax-loss selling because crypto has no wash-sale
+rule. **Every one of those is correct about crypto and backwards for the market
+the run was actually pointed at**, which is twelve US ETFs including SPY, TLT,
+LQD and HYG — precisely what a 60/40 mandate holds.
+
+It is the same bug as the first crypto night, inverted. Then the briefs named
+payers who trade the wrong market; now the briefs were right and the *market*
+was never named. Both times the memos were sound and the framing was wrong,
+which is the failure mode to expect from a stage that reasons well about
+whatever it is given.
+
+**The fix.** `propose()` now takes a `market` argument and **raises if it is
+empty**, because a default would let this happen again quietly. The CLI builds
+it from the run's own configuration: the instrument and what cannot be traded
+with it, the universe **listed by ticker** (twelve names ending in SPY and TLT
+cannot be read as a Binance pair list), the cost model as one sentence a memo
+can reason about, and the account. `run_night` carries it to every memo, and a
+test asserts it arrives.
+
+**The night is void, not informative.** Those seven candidates say nothing
+about the ETF basket, and the ETF side has still never been asked the question
+under the current bar.
+
+---
+
+## The first kill test (14 September 2026)
+
+Forty-six candidates in, one reached Stage 3.
+
+`turn_of_quarter_long_spy_v1` — mandated quarterly rebalancing, expressed as
+long the basket across the quarter boundary — passed triage, ran on the
+discovery side of the ETF panel, and **failed on costs**:
+
+> 3.2 bps per round trip against 2.0 bps of cost — 1.6x, and the bar is 3x.
+
+Read what that says. The effect **exists**, and in the direction the memo
+committed to before it ran; the first of the kill test's three checks passed.
+It is simply not three times its own costs, which is the bar the research
+policy fixed in advance, and 1.6x is not close enough that the gap is noise.
+
+**The bar does not move.** A 1.6x result is exactly the observation that makes
+a 2x bar tempting, which is why the multiple was pre-committed with the policy
+and why `qr policy show` reads it back from the chain rather than from a
+config file. Lowering it now would be choosing the threshold after seeing the
+number, and every gate downstream is built on the assumption that nobody did
+that.
+
+What the run did prove is that the funnel works end to end: a brief became a
+memo, the memo committed to a sign, triage let it through, the sandbox
+measured it, and the measurement killed it — without spending a
+pre-registration or touching validation data. That path had never been walked
+before.
+
+### The bug in the same night
+
+Two of the six were killed by `crude version does not build: unknown event
+'turn_of_month'`. The brief says "turn of month"; the primitive catalogue
+advertised *"month/quarter end, turn of month, year end"*; and `EVENTS` has
+never contained `turn_of_month`. The model asked for the word it was offered.
+
+Triage was right to kill them — silently dropping a parameter the memo meant
+is how a backtest comes to be run on something other than the idea — but the
+defect was upstream, in the question. The catalogue now renders its vocabulary
+**from `EVENTS` itself** and says what the idiom is: the turn of the month is
+`month_end` with `after` > 0, which straddles the boundary. A test asserts
+every value the prompt offers constructs, and that the missing one is named
+only to be denied.
+
+No new event was added, deliberately. `turn_of_month` as an alias for
+`month_end` would be a second way to say the same thing, and a grid sweeping
+both would run identical variants twice — paying gate 4's deflation for
+nothing.
+
+### And the kill test was measuring against the wrong cost
+
+The event fix worked: both turn-of-month candidates reached Stage 3 on the
+next night, and both died at the floor — *"costs take the whole gross return at
+this account size"*. Three kill tests now, and they agree that the calendar
+effect is present in this basket and cannot pay for itself at $1,000.
+
+Reading the code that produced them turned up a defect that flattered the
+closest candidate:
+
+    round_trip_cost_bps = 2.0 * costs.linear_bps
+
+For the IBKR model `linear_bps` is 1.0, so every candidate was scored against
+**2.0 bps** — which omits the per-share commission and the $0.35 per-order
+minimum. On a $1,000 account a single order at the floor is 35 bps. So
+*"3.2 bps per round trip against 2.0 bps of cost — 1.6x, and the bar is 3x"*
+measured a real effect against a cost that left out the term that decides
+whether it is tradeable.
+
+It stayed invisible because check 3 catches the floor separately: the verdicts
+were right and the stated reason was wrong, which is the hardest kind of error
+to notice and the same shape as the one `docs/16` found in the sizing
+mathematics — a number that was correct for a quantity nobody meant.
+
+Two fixes, both narrowing:
+
+* **The cost is read off the backtest**, not recomputed from the cost model,
+  so commission, spread, the per-order floor and borrow are all in it.
+* **The gross side is a simple sum**, matching the per-bar sum on the cost
+  side. It was the compounded total return over a sixteen-year panel divided
+  by a per-trade cost — a numerator with sixteen years of compounding in it and
+  a denominator with none. That ratio was not a cost multiple.
+
+Both make the bar harder, which is the direction an unverified cost assumption
+should err in. **The 1.6x figure should not be quoted**; the corrected run has
+not been done.
+
+### The corrected number, and the only question it leaves
+
+With the real cost charged:
+
+> `turn_of_month_payroll_bid_v1` — **4.8 bps per round trip against 7.5 bps of
+> cost — 0.6x**, and the bar is 3x.
+
+Not 1.6x. **0.6x**: the effect is smaller than the cost of capturing it, and it
+would have to be five times larger to clear the bar. The old figure flattered
+it by about a factor of three, which is roughly what the compounded-numerator
+error produces on its own over a sixteen-year panel.
+
+So the ETF calendar is, at $1,000, a real effect that costs more to harvest
+than it pays. That is a finding with a name, and it is much more useful than
+"nothing worked".
+
+**One question is left, and it is the only one that could change the
+decision.** The 7.5 bps is dominated by the $0.35 per-order minimum, which is
+35 bps of a $1,000 order and 0.35 bps of a $100,000 one. A cost death
+therefore has two diagnoses that call for opposite actions:
+
+* the effect is too small to be worth anything, at any size; or
+* the effect is fine and **this account** cannot reach it.
+
+`killtest.cost_ladder()` now answers that directly: the same crude version, the
+same panel, the same committed sign, re-costed at $1,000 / $10,000 / $100,000,
+printed by the night whenever a candidate dies at `costs` or `floor`. It is a
+sensitivity read in the sense `docs/11` fixed — nothing is written, no trial is
+counted, because nothing is being searched.
+
+Note what the answer cannot be. The gross effect is a property of the panel and
+does not move with the account, so the ladder's numerator is 4.8 bps at every
+rung. Clearing a 3x bar needs the cost below 1.6 bps. Whether the IBKR tiered
+model gets there at $100,000 is now a measurement rather than an argument.
+
+---
+
+## The account was the binding constraint (14 September 2026)
+
+The ladder, on `turn_of_month_payroll_flow_v1`:
+
+    at $  1,000: 4.8 bps against 7.5 bps — 0.6x
+    at $ 10,000: 4.8 bps against 1.2 bps — 3.9x
+    at $100,000: 4.8 bps against 0.5 bps — 9.5x
+
+The $0.35 per-order minimum was doing all of the damage. The same effect, the
+same panel, the same committed sign: **dead at $1,000, clears the pre-committed
+3x bar at $10,000, and is 9.5x its costs at $100,000.**
+
+This is the first time anything in this project has said *the account is the
+constraint rather than the idea*, and it qualifies Step 0's headline. `docs/11`
+tested nine families that had no edge to rescue, and concluded that no deposit
+rescues any of them. That remains true of those nine. It does not generalise to
+a candidate that has an effect: this one is below its cost floor at $1,000 and
+comfortably above it at ten times that.
+
+**What it does not say.** Clearing a cost bar is necessary, not sufficient, and
+the crude version here is *long the basket inside a window, flat outside it* —
+long-only equity exposure whose gate 5 benchmark is buy-and-hold. Buy-and-hold
+beat every one of the nine families (`docs/06`, `docs/08`). A strategy can be
+9.5x its trading costs and still be a worse way to own the same basket, because
+the comparison is not against zero.
+
+So the ladder now also reports, at each rung, the crude version's Sharpe and
+total return **against holding the same universe** — `versus_holding()`. Three
+things about it, in order of importance:
+
+1. **It decides nothing.** No bar moved, no candidate is killed on it, and a
+   test asserts the verdict string never mentions it. Gate 5 settles this with
+   an SPA test and a reality-check p-value; two summary numbers on discovery
+   data are a weaker instrument and must not be dressed up as the gate.
+2. **It is free, and the alternative is not.** Finding this out at gate 5
+   instead costs one of two weekly promotions, one of the eight candidates on
+   the stopping rule, and a permanent rise in gate 4's deflation bar for every
+   family that follows.
+3. **It was added after seeing a candidate clear the bar, which is worth
+   stating plainly.** The asymmetry is the defence: this can only make a
+   promotion look less attractive, never more. A check added after a good
+   result that *helped* the candidate would be indefensible, and none was
+   added.
+
+### And the answer to gate 5's question is no
+
+Three candidates reached the ladder on the next night, and they converged on
+two strategies — the month-end window at 4.8 bps and the quarter-end window at
+3.4 bps, rediscovered under different names. The comparison against holding the
+same basket, at every rung:
+
+| candidate | $1,000 | $10,000 | $100,000 |
+|---|---|---|---|
+| turn of month | −0.84 | −0.14 | −0.10 |
+| turn of quarter | −0.79 | −0.40 | −0.40 |
+
+*(Sharpe of the crude version minus Sharpe of buy-and-hold, discovery side.)*
+
+**Negative everywhere.** At $100,000 the turn-of-month window is 9.5x its
+trading costs and still a worse risk-adjusted way to own the same twelve funds
+than holding them. That is gate 5's question — the one that killed all nine
+pre-registered families — answered on free data before a promotion was spent,
+and answered in the same direction as every other time this project has asked
+it.
+
+It is a point estimate on discovery data and not an SPA test. But gate 5 needs
+the strategy to *beat* buy-and-hold with a reality-check p-value, and a
+candidate that is behind on the point estimate has no route to that.
+
+**So the account was the binding constraint on the cost bar and not on the
+outcome.** Both things are true and only the second one decides anything: at
+$10,000 this candidate can afford to trade, and what it can afford to trade is
+worse than doing nothing.
+
+### One more unreadable number, fixed
+
+The comparison was first printed as `total -645.0%` — the difference of two
+compounded terminal wealths. Arithmetically right, and useless: dominated by
+the benchmark's compounding, impossible to sanity-check, and **not monotonic in
+account size** (−645%, −499%, −601%) even though the strategy's net can only
+improve as costs fall. Whether that non-monotonicity was real or an artefact
+could not be read off the number, which is the problem with it.
+
+It now prints two terminal wealths side by side — *$1 becomes $X against $Y* —
+and the Sharpes likewise. Same information, and a reader can tell at a glance
+whether it is plausible. A number nobody can sanity-check is a number that
+hides its own errors; that is the third time in two days that the most
+encouraging figure in a run turned out to be measuring something other than
+what it said.

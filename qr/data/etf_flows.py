@@ -1,0 +1,419 @@
+"""ETF creation and redemption flow, recorded forward because it cannot be bought back.
+
+`fund_flows` was the most-requested dataset across the autopilot nights, and it
+is the only named mechanism whose forced trader trades **the same instrument
+this project trades**. When an ETF takes in money it does not buy at its
+leisure: an authorised participant delivers a basket and receives new shares,
+and the fund's share count rises that day. The daily change in shares
+outstanding, times NAV, *is* the creation/redemption flow. Nobody is guessing
+at sentiment; a share was issued or it was not.
+
+## Why this is recorded rather than downloaded
+
+There is no free historical series. Issuers publish **today's** share count;
+history is a paid product (Intrinio, EODHD, ETF Global). Tiingo has a Mutual
+Fund API, and the plan this project pays for answers `403 — You do not have
+permission`, so whether it even carries the field is unknown and paying to find
+out is the wrong order.
+
+So it is recorded daily and accumulates. That is slower, and it buys a property
+worth more than the wait: **data you record yourself is point-in-time by
+construction.** No revision, no restatement, no look-ahead, because you cannot
+record what you do not yet know. It is the same reason the perpetual funding
+data was trustworthy the moment it landed.
+
+The cost of the wait is honest and should be stated: a year of collection is
+~250 daily observations, which is a workable sample for a *daily* flow signal
+and a hopeless one for a month-end effect — twelve month-ends is not a test of
+anything.
+
+## Why the parser is written to fail loudly
+
+**None of these URLs could be verified from the environment this was written
+in**, which has no egress to issuer sites. The shape below is written from the
+documented pattern; the first run on a networked machine is the verification,
+exactly as it was for the Binance funding bucket. So every parser quotes the
+payload it actually received, and `--dump` saves the raw response, because a
+discovery run that prints "failed" without showing what arrived wastes the
+round trip it cost.
+"""
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Iterable, Sequence
+
+#: The seven basket members BlackRock runs. One issuer, one endpoint, a
+#: majority of the universe: the cheapest possible first step, and if the shape
+#: is wrong it is wrong once rather than in four different ways.
+ISHARES_TICKERS: tuple[str, ...] = ("IWM", "EFA", "EEM", "TLT", "IEF", "LQD", "HYG")
+
+#: The product screener returns every US iShares fund in one document. Chosen
+#: over per-fund pages because those need a numeric product id per ticker,
+#: which is five more things to get wrong before anything can be tested.
+ISHARES_SCREENER = (
+    "https://www.ishares.com/us/product-screener/product-screener-v3.1.jsn"
+    "?dcrPath=/templatedata/config/product-screener-v3/data/en/us-ishares"
+    "/ishares-product-screener-backend-config&siteEntryPassthrough=true"
+)
+
+#: Field names to hunt for, in any spelling an issuer might use. A match is
+#: reported rather than trusted: `sharesOutstanding` and `totalNetAssets` mean
+#: what we want; something merely containing "shares" may not.
+SHARE_KEYS = ("sharesoutstanding", "shares_outstanding", "sharesout", "sharecount")
+ASSET_KEYS = ("totalnetassets", "total_net_assets", "netassets", "fundnetassets", "aum")
+NAV_KEYS = ("nav", "navamount", "netassetvalue")
+
+
+class FlowSourceError(RuntimeError):
+    """The response did not contain what the parser needed, and says what it did."""
+
+
+@dataclass(frozen=True)
+class ShareCount:
+    """One fund's share count on one observation date."""
+
+    observed_utc: str
+    ticker: str
+    shares_outstanding: float | None
+    total_net_assets: float | None
+    nav: float | None
+    source: str
+    #: "reported" when the issuer published a share count, "derived" when it
+    #: was computed as net assets / NAV. Recorded rather than assumed, because
+    #: the two have different error behaviour and a later reader must be able
+    #: to tell which one a row is.
+    shares_basis: str = "reported"
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "observed_utc": self.observed_utc,
+            "ticker": self.ticker,
+            "shares_outstanding": self.shares_outstanding,
+            "total_net_assets": self.total_net_assets,
+            "nav": self.nav,
+            "source": self.source,
+            "shares_basis": self.shares_basis,
+        }
+
+
+def _number(value: Any) -> float | None:
+    """A figure from a vendor payload, which may be nested, formatted or absent.
+
+    Issuers wrap numbers in `{"r": 1234.5, "d": "1,234.5"}` shapes often enough
+    that reaching for the raw value first and the display string second is
+    worth the four lines. A display string is parsed only after the commas and
+    currency marks are stripped, and anything still unparseable is `None`
+    rather than a zero — an absent share count is not a fund with no shares.
+    """
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        for key in ("r", "raw", "value"):
+            if key in value:
+                return _number(value[key])
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    text = str(value).strip().replace(",", "").replace("$", "").replace("%", "")
+    if not text or text in {"-", "--", "N/A", "NA"}:
+        return None
+    try:
+        return float(text)
+    except ValueError:
+        return None
+
+
+def _pick(record: dict, wanted: Sequence[str]) -> float | None:
+    for key, value in record.items():
+        if key.lower().replace(" ", "") in wanted:
+            number = _number(value)
+            if number is not None:
+                return number
+    return None
+
+
+def parse_ishares(payload: Any, tickers: Iterable[str] = ISHARES_TICKERS) -> list[ShareCount]:
+    """Pull share counts out of the iShares product screener document.
+
+    The screener nests one record per fund under a product id. The ticker lives
+    under a key this parser does not assume the name of, because that is
+    precisely the kind of detail written blind and discovered wrong: any string
+    field whose value matches a wanted ticker identifies the record.
+    """
+    observed = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    wanted = {t.upper() for t in tickers}
+
+    # Walk the whole document rather than assuming its nesting. The first
+    # attempt guessed at the depth and mistook each figure's `{"r": .., "d": ..}`
+    # wrapper for a fund record, which is exactly the kind of detail that
+    # cannot be got right without the live payload. A record is identified by
+    # what it *contains* — a ticker we asked for — not by where it sits.
+    records: list[dict] = []
+    others: list[dict] = []
+
+    def walk(node: Any) -> None:
+        if isinstance(node, dict):
+            if any(isinstance(v, str) and v.upper() in wanted for v in node.values()):
+                records.append(node)
+            elif len(node) > 2:
+                others.append(node)
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value)
+
+    walk(payload)
+
+    if not records:
+        top = sorted(payload)[:20] if isinstance(payload, dict) else type(payload).__name__
+        raise FlowSourceError(
+            f"no fund records in the screener response: none of {sorted(wanted)} appear as a "
+            f"value anywhere in it. Top level: {top}. "
+            + (f"A representative object had fields {sorted(others[0])[:40]}." if others else "")
+        )
+
+    out: list[ShareCount] = []
+    seen: set[str] = set()
+    for record in records:
+        ticker = next(
+            (
+                str(v).upper()
+                for v in record.values()
+                if isinstance(v, str) and v.upper() in wanted
+            ),
+            None,
+        )
+        if ticker is None or ticker in seen:
+            continue
+        seen.add(ticker)
+        shares = _pick(record, SHARE_KEYS)
+        assets = _pick(record, ASSET_KEYS)
+        nav = _pick(record, NAV_KEYS)
+        basis = "reported"
+        if shares is None and assets is not None and nav:
+            # The screener publishes net assets and NAV but no share count, so
+            # the count is their quotient — which is the same identity the flow
+            # itself rests on, since net assets are shares times NAV by
+            # definition. Nothing is being estimated; a division is being done.
+            shares = assets / nav
+            basis = "derived"
+        out.append(
+            ShareCount(
+                observed_utc=observed,
+                ticker=ticker,
+                shares_outstanding=shares,
+                total_net_assets=assets,
+                nav=nav,
+                source="ishares_product_screener",
+                shares_basis=basis,
+            )
+        )
+
+    missing = [s.ticker for s in out if s.shares_outstanding is None and s.total_net_assets is None]
+    if missing:
+        sample = sorted(records[0])[:40] if records else []
+        raise FlowSourceError(
+            f"found {len(out)} funds but no share count or net assets for {missing}. "
+            f"Fields available on the first record: {sample}. "
+            "If the figure is there under another name, add it to SHARE_KEYS/ASSET_KEYS."
+        )
+    return out
+
+
+def recorded_dates(path: Path) -> set[str]:
+    """The UTC dates already in the record, read without pandas.
+
+    Read cheaply on purpose: this runs on every scheduled attempt, including
+    the many that will do nothing, and a collector that loads a dataframe to
+    decide whether to skip is a collector that gets removed from cron.
+    """
+    if not path.exists():
+        return set()
+    dates = set()
+    with path.open(encoding="utf-8") as handle:
+        for line in handle:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                dates.add(json.loads(line)["observed_utc"][:10])
+            except (json.JSONDecodeError, KeyError, TypeError):
+                continue
+    return dates
+
+
+def already_recorded_today(path: Path, now: datetime | None = None) -> bool:
+    """Has a row been written for today already?
+
+    The schedule this is meant for cannot be a single daily alarm. A laptop
+    asleep at 22:00 never fires one, and a missed day cannot be recovered
+    later — the share count for a past day is not published anywhere. So the
+    collector is designed to be run *often* and to do nothing most of the time,
+    which is only safe if repetition is harmless.
+
+    Harmless, not forbidden: `--force` still appends, because a second reading
+    in a day is a fact about the day and the file is append-only by design.
+    """
+    today = (now or datetime.now(timezone.utc)).date().isoformat()
+    return today in recorded_dates(path)
+
+
+def append(path: Path, counts: Sequence[ShareCount]) -> int:
+    """Append today's observations. Append-only, because a correction is a lie here.
+
+    The whole value of recording forward is that each line is what was true
+    when it was written. A collector that rewrote yesterday's number would
+    reintroduce exactly the revision problem this exists to avoid.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        for count in counts:
+            handle.write(json.dumps(count.as_dict(), sort_keys=True) + "\n")
+    return len(counts)
+
+
+def load(path: Path):
+    """Everything recorded so far, as a frame; empty if collection has not started."""
+    import pandas as pd
+
+    if not path.exists():
+        return pd.DataFrame(columns=["observed_utc", "ticker", "shares_outstanding",
+                                     "total_net_assets", "nav", "source"])
+    rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    frame = pd.DataFrame(rows)
+    if not frame.empty:
+        frame["observed_utc"] = pd.to_datetime(frame["observed_utc"], utc=True, format="mixed")
+    return frame.sort_values(["ticker", "observed_utc"]).reset_index(drop=True)
+
+
+def daily_flow(frame):
+    """Shares created or redeemed since the previous observation, per fund.
+
+    The first observation of each fund has no predecessor and yields NaN, not
+    zero: "we do not know" and "nothing was created" are different claims, and
+    only one of them is true on day one.
+    """
+    import pandas as pd
+
+    if frame.empty:
+        return frame.assign(shares_change=pd.Series(dtype=float), flow_usd=pd.Series(dtype=float))
+    out = frame.sort_values(["ticker", "observed_utc"]).copy()
+    out["shares_change"] = out.groupby("ticker")["shares_outstanding"].diff()
+    out["flow_usd"] = out["shares_change"] * out["nav"]
+    return out
+
+
+def fetch(url: str = ISHARES_SCREENER, timeout: int = 60, dump: Path | None = None) -> Any:
+    """Get the screener document. Needs network; the cloud sandbox has none.
+
+    `dump` writes the raw bytes before parsing. That is not a debugging luxury:
+    this parser was written against a documented shape nobody here could load,
+    so the first run is a discovery run, and a discovery run that reports
+    "failed" without keeping what arrived has to be paid for twice.
+    """
+    import urllib.request
+
+    request = urllib.request.Request(
+        url,
+        headers={
+            # Issuer sites serve a consent page to clients that look like
+            # scrapers. This is not evasion of a paywall — the document is
+            # public and free — it is asking for the JSON rather than the
+            # marketing page.
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+            "Accept": "application/json, text/plain, */*",
+        },
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        raw = response.read()
+    if dump is not None:
+        dump.parent.mkdir(parents=True, exist_ok=True)
+        dump.write_bytes(raw)
+    text = raw.decode("utf-8", "replace").lstrip("\ufeff").strip()
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise FlowSourceError(
+            f"the screener did not return JSON ({exc}). First 300 characters:\n{text[:300]}"
+        ) from exc
+
+
+def significant_digits(value: float | None) -> int:
+    """How many digits a figure carries. Kept, but it is the wrong question here.
+
+    It was written to ask whether the source publishes enough precision to show
+    a daily flow, and applied to net assets it answered 17 — an all-clear for a
+    bad reason. The screener does not publish net assets and a share count
+    independently: it publishes a share count, and net assets are that count
+    times a four-decimal NAV. The trailing digits are arithmetic, not
+    information, and a check reading them is measuring its own multiplication.
+
+    `share_quantum` asks the question this was meant to ask.
+    """
+    if value is None or value != value or value == 0:
+        return 0
+    text = f"{abs(float(value)):.17g}"
+    if "e" in text or "E" in text:
+        text = text.split("e")[0].split("E")[0]
+    digits = text.replace(".", "").replace("-", "").lstrip("0")
+    return len(digits.rstrip("0")) or 1
+
+
+#: Steps to test for, largest first. Stops at a thousand shares: finer than
+#: that and the granularity cannot bind on a fund of this size anyway.
+QUANTA: tuple[float, ...] = (1e6, 5e5, 1e5, 5e4, 1e4, 5e3, 1e3)
+
+
+def share_quantum(counts: Sequence[ShareCount], tolerance: float = 5.0) -> float | None:
+    """The step the published share counts actually move in.
+
+    The number that decides whether this dataset can show a flow. A count
+    quantised to 50,000 shares can only report creations in multiples of
+    50,000 — which is fine if that is the size of a creation unit and useless
+    if it is a rounding convention.
+
+    `tolerance` is in shares and absorbs the float error from dividing net
+    assets by a four-decimal NAV; that error is a couple of shares in several
+    hundred million, so anything larger is real structure.
+    """
+    shares = [c.shares_outstanding for c in counts if c.shares_outstanding]
+    if not shares:
+        return None
+    for step in QUANTA:
+        if all(abs(v - round(v / step) * step) <= tolerance for v in shares):
+            return step
+    return None
+
+
+def precision_warning(counts: Sequence[ShareCount], flow_fraction: float = 0.001) -> str:
+    """A sentence when the published counts are too coarse to show a day's flow.
+
+    `flow_fraction` is what a daily creation plausibly is as a share of a fund:
+    a tenth of a percent. If the step the source moves in is larger than that,
+    ordinary days read as zero and busy ones as a jump, and **no amount of
+    collecting fixes it** — the information was never published. Better known
+    on day one than after a year of cron jobs.
+    """
+    step = share_quantum(counts)
+    if step is None:
+        return ""
+    tight = [
+        (c.ticker, c.shares_outstanding)
+        for c in counts
+        if c.shares_outstanding and step > c.shares_outstanding * flow_fraction
+    ]
+    if not tight:
+        return ""
+    listed = ", ".join(
+        f"{t} ({step:,.0f} of {v:,.0f} shares = {step / v:.2%})" for t, v in tight[:5]
+    )
+    return (
+        f"WARNING: share counts move in steps of {step:,.0f}, which is larger than a "
+        f"plausible day's creation ({flow_fraction:.1%}) for {listed}.\n"
+        "Most days would read as zero flow and the rest as a jump. Collecting for longer "
+        "does not fix a step the source never published below."
+    )

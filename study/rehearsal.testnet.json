@@ -1,0 +1,25 @@
+{
+  "account": "stage1-testnet",
+  "symbols": {
+    "binance": [
+      "SUIUSDT",
+      "DOGEUSDT",
+      "ONDOUSDT"
+    ]
+  },
+  "hours_utc": [
+    0,
+    24
+  ],
+  "slot_s": 120,
+  "ttl_s": 120,
+  "exit_after_fill_s": 300,
+  "mark_after_s": 60,
+  "max_order_usd": "10",
+  "max_gross_usd": "50",
+  "stop_loss_usd": "25",
+  "days": 10,
+  "testnet": true,
+  "version": "stage1-rehearsal-15min",
+  "session_expires_at": "2026-09-18T10:40:49.924013+00:00"
+}

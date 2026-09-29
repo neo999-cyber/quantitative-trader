@@ -48,9 +48,61 @@ Realistic: first honest verdict ~1 week after go, 10 days with one fix cycle. Th
 - The discipline: pre-registration + trial log stay in even in the minimal build. Speed without them is p-hacking.
 
 ## Resolved 11 Sept 2026 (evening)
-- **Residency: Dubai.** Binance.com is available (VARA-licensed), so the crypto trial models **Binance spot** end to end: bucket data, Binance fee schedule (base 0.10% taker, lower with BNB or VIP tiers — verify the current schedule before the cost model is frozen), Binance as the paper/live venue. No US restrictions apply.
+- **Residency: Dubai.** Binance.com is available (VARA-licensed), so the crypto trial models **Binance spot** end to end: bucket data, Binance fee schedule, Binance as the paper/live venue. No US restrictions apply.
+- **Fee tier verified 11 Sept 2026** against the account's own fee panel: 30-day volume 0.00 USD → **VIP0 with the BNB discount on, 0.07500% maker and taker**. With a 2 bps half-spread that is **9.5 bps per side, 19 bps a round trip**, and gate 2 tests it again at double. This is the frozen cost model for the trial (`CostModel.trial()`).
 - **Accounts already held:** Binance (a few transactions over the years) and Interactive Brokers (same). IBKR is the equities/ETF/futures venue for later phases; its official MCP is connected in the cloud session. Alpaca is not needed.
 - The Centaur rulebook's Rule 3 regime inputs (SPY/QQQ/VIX/DXY) and the ETF-basket second trial will use IBKR market data or Tiingo, not yfinance.
+
+## Build progress
+
+- **Day 1–2 done (11 Sept 2026).** Data layer, strategy interface, cost model, two-engine backtest runner and hash-chained trial log are in on `claude/admiring-ptolemy-tfp528`; 152 tests, all offline. Details and the laptop commands: `docs/02_DATA_LAYER.md`. Cost model frozen at the verified VIP0+BNB tier. Details and the laptop commands: `docs/02_DATA_LAYER.md`.
+- **Day 2–3 done (11 Sept 2026).** Gates 0–9, the Hypothesis Report generator and the synthetic self-test are in; 283 tests. **The self-test passes**: searched-over noise is rejected by the deflation gates (4 and 5), a planted Sharpe-1.7 edge survives all nine. Writing it found three real bugs in the engine — gate 1 was testing the wrong signature for look-ahead, gate 5 over-rejected interchangeable variants, and the planted edge was so strong it tested nothing. Details: `docs/03_VALIDATION_ENGINE.md`.
+- **Day 4–5 done (11 Sept 2026).** All four families built, pre-registered and run through all nine gates by one command (`qr families`); 327 tests. Details: `docs/04_FOUR_FAMILIES.md`. The run was a **dry run on synthetic data** and says nothing about crypto — but it works end to end, and `tsmom_v1` passing gates 0–7 and then dying at the holdout with Sharpe −1.05 is a fair demonstration of why gate 9 exists. **Waiting on you:** run `qr data pull` on the laptop (the sandbox cannot reach Binance), then `qr families` against the real lake.
+- **Day 6–7 done (11 Sept 2026).** Audited the engine against `PLAN.md` §4 line by line rather than tuning it against synthetic reports. Three configured thresholds were read by nothing; Hansen SPA, the shuffled-ticker placebo, per-regime Sharpe and a capacity estimate were specified and missing; gate 6 was not re-optimising (which took its p-value on searched-over noise from 0.06 to 0.78) and gate 8 was dropping the best five *bars* rather than the best five *trades*. The self-test then caught two calibration errors of mine in the fixes. Details: `docs/05_GATE_AUDIT.md`.
+
+- **The real run, 12 September 2026. All four families FAIL.** 734 Binance
+  pairs pulled and QA'd on the laptop, top-30 point-in-time universe,
+  2018–2024 in sample, 2025 onward as an untouched holdout. Not one of 425
+  variants beats buy-and-hold of the same basket (SPA p = 0.83–0.91); HAC
+  t-statistics of 1.08–1.93 against a 2.5 floor; deflated Sharpes of
+  0.50–0.78 against 0.95; holdout Sharpes of −0.55, −0.82 and −0.39 for the
+  three real families. The best variant of 200 on real crypto scored 0.749,
+  worse than the best of 200 the same search finds on **pure synthetic
+  noise** (1.058). Full verdict and the scoring of the four pre-registered
+  predictions — five of which were wrong, all about the *mechanism* of
+  failure rather than the verdict — in `docs/06_TRIAL_VERDICT.md`.
+- **Four engine defects fixed afterwards (12 September 2026).** The run
+  exposed four numbers that meant something other than what they said: gate 1
+  failing all four families for bars the panel had already withheld from them,
+  a capacity estimate double-charging the spread, gate 6's null unfair to a
+  vol-targeted strategy, and a walk-forward efficiency dividing by a number
+  passing through zero. All four fixed, 24 regression tests, 401 total.
+  Details and what was deliberately *not* changed: `docs/07_ENGINE_FIXES.md`.
+  None of them touches the verdict, which is the reason it was safe to fix
+  them now.
+
+- **Confirmation run done (12 September 2026).** Re-run after the fixes: all
+  four families FAIL again, all four now stopping at **gate 3** rather than
+  gate 1, with every number the verdict rests on unchanged. Four of five
+  predictions written before the run were right; the capacity one was wrong and
+  corrected a claim in `docs/07_ENGINE_FIXES.md`. Gate 9 could not be re-run —
+  the first run had already opened the holdout, which is the gate working
+  correctly and an oversight in how the re-run was specified. Details:
+  `docs/06_TRIAL_VERDICT.md`.
+
+- **Two more defects fixed (12 September 2026).** Investigating the control
+  family's lag-spike warning found the strategy clean and the *statistic*
+  broken — another ratio dividing by a Sharpe that passes through zero, the
+  same shape as the walk-forward-efficiency bug, now a difference in standard
+  errors. And every backtest was computing over all 734 symbols in the lake to
+  hold at most thirty; restricting the panel to symbols the universe ever
+  admits is **4.5x faster and bit-identical**. `docs/07_ENGINE_FIXES.md` §5-6.
+
+## Decision, 12 September 2026
+
+**Do not spend the $1,000.** The rule agreed on 11 September applies as
+written: all four failed, so the next step is the **ETF-basket trial**, which
+costs nothing. The platform did the job it was built for — it said no.
 
 ## Before "go" (still thinking)
 - Review GitHub repos the user will share; each gets a one-by-one assessment in `docs/research/06_repo_reviews.md`: adopt / borrow / reference / skip, and where it changes `PLAN.md`.

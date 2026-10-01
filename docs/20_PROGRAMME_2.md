@@ -573,6 +573,35 @@ metrics start 2021-12, so the sample cannot grow backwards) or on a
 second venue's OI (Bybit's is mirrored for funding only) — a new
 pre-registration, not a re-run.
 
+**1 October 2026, 11:30 Dubai — the two reads that were waiting on data.**
+
+*Stage 0 of the maker-fill study (`docs/24`): PASS.* The 14-day tape
+(17 Sep 07:31 → 1 Oct 03:10 UTC, 13.9 GB, both venues) replayed with the
+registered floor queue model (behind the whole displayed size, consumed
+by prints only): **Binance 52,780 virtual orders, 15-minute fill 96.3%**
+(60 s: 83.8%, 300 s: 93.2%), **median adverse-selection mark at 60 s
+0.92 bps** (mean 0.72, p90 17.9); Bybit 52,587 orders, 93.2% and
+1.63 bps. Both clear the rule (≥ 70%, < 2 bps). Weakest names: BEAT
+(84%/87% at 15 min, mark 5.4 bps) and XAUT (83%/77%); sells fill less
+than buys everywhere and carry the positive mark (1–3 bps) — the
+direction the tape drifted over the fortnight. Hour-of-day is flat
+(fill 95–97% at 15 min every hour). Report:
+`reports/maker_stage0/stage0_summary_2026-10-01.md`. **Consequence, as
+written in `docs/24`:** stage 1 (ten trading days of post-only orders
+under $10, $50 max open, $25 budget, Binance only after the Bybit
+geoblock) may now be put to the owner; its decision rule is fixed (live
+fill within 10 points of 96%). Nothing is placed without that yes and
+live keys in `~/.qr/secrets.env`. The two tape recorders are stopped; the
+box copy of the tape is kept until the owner says to delete it.
+
+*C3 `p2_liquidation_fade_v1` (seq 799): the minimum is reached.* Under
+the frozen definition (`qr/research/liq_events.py`), **615 merged
+events on the eighteen names** in 13.8 days (44 a day; ZEC 83, SOL 81,
+XRP 72, NEAR 66; buy/sell 302/313; median burst $125k at 8.8 σ), plus 185
+on BTC/ETH for the control. The study engine
+(`scripts/c3_liquidation_fade.py`) is built and tested on fixtures; it
+**has not run** — the memo says "runs once" and that once is the owner's.
+
 **17 September 2026, 14:30 Dubai — C2 `p2_venue_spread_v1`: verdict FAIL
 at gate 3 (and 4, 5, 6).** Registered seq 624 (control 625) after the
 owner's yes on the unit read (`docs/prereg/p2_venue_spread_v1.md`: 942

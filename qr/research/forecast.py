@@ -98,7 +98,7 @@ def features(df: pd.DataFrame) -> pd.DataFrame:
     X["logrv_1"] = np.log(df["rv"].clip(lower=1e-10))
     X["logrv_5"] = np.log(df["rv"].rolling(5).mean().clip(lower=1e-10))
     X["logrv_21"] = np.log(df["rv"].rolling(21).mean().clip(lower=1e-10))
-    return X
+    return X.replace([np.inf, -np.inf], np.nan)   # a log of a zero print (open interest, on-chain gaps) is a missing value, not a number
 
 
 def targets(df: pd.DataFrame) -> pd.DataFrame:

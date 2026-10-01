@@ -489,3 +489,46 @@ is the point: the owner can change a rate and see what it takes for a
 tier to beat 4%. **The ladder decision for 31 October is therefore
 written as a choice between the T-bill and Binance-resident cash, not
 between DeFi tiers.**
+
+## 14. 1 October 2026 — P3-C `p3_forecastability_v1`: **FAIL** on every pair (seq 938)
+
+Run once on the registered rules (a first run, seq 936, was voided the
+same hour: the Chronos arm's history included the target day's own
+return, a look-ahead the memo's leak rule caught at "Sharpe 5 on daily
+direction"; fixed, guarded by a test, noted at seq 937). In-sample test
+months January 2023 → May 2026, 1,227 forecast days per pair, 43
+features, nine (target, model) pairs, every control run.
+
+| Target | Model | Out of sample | vs its benchmark | Money test (net Sharpe) |
+|---|---|---|---|---|
+| direction, 1 d | ridge / logit | 48.6% | base rate 49.2%, t −0.6 | −1.35 |
+| | gradient boosting | 49.9% | t +0.4 | −1.24 |
+| | Chronos (zero-shot) | 48.6% | t −0.3 | −0.30 |
+| return, 7 d | ridge | R² −0.70 | DM t −4.8 vs the random walk | −0.93 |
+| | gradient boosting | R² −0.67 | t −5.5 | −0.88 |
+| | Chronos | R² −0.01 | t −0.9 | +0.02 |
+| variance, 1 d | ridge | QLIKE 0.610 | worse than DVOL (t −2.8) and GARCH | — |
+| | **gradient boosting** | **0.416** | **beats GARCH (t 3.4); DVOL 0.473, t 2.0 — below the bar of 3** | — |
+| | Chronos | 0.477 | equal to DVOL (t −0.1) | — |
+
+Gates over the six tradeable pairs: best net Sharpe +0.02, DSR 0.07, PBO
+0.50. Permuted-target controls sit at the base rate everywhere; the
+extra-lag check changes nothing that was passing (nothing was).
+
+**Reading.** Tomorrow's direction and next week's return are not
+forecastable from any of it — not from price, funding, open interest,
+options, sentiment, stablecoin supply, the chain or the dollar — by a
+linear model, a tree ensemble, or a foundation model, over three and a
+half years out of sample; the models that try lose 20–35% a year after
+costs. Volatility *is* forecastable: gradient boosting on the same
+inputs beats the textbook GARCH decisively, and comes close to the
+options market — and does not beat it. **For the third time in this
+project, the market's own number (here DVOL) is the best forecast
+available.** The holdout stays shut. Programme 3's three registrations
+are spent: P3-A v1 failed, P3-A v2 reads on 27 October, P3-C failed.
+
+**What this closes.** The "virtual world" question, for this account:
+a model of everything observable does not forecast the price, and the
+one thing it forecasts (volatility) is already published free by the
+options market. A simulator is the right tool for *what breaks*
+(§13 B), not for *what happens next*.

@@ -147,7 +147,7 @@ class ChronosArm:
 
     def forecast(self, history: np.ndarray, steps: int) -> np.ndarray:
         ctx = self.torch.tensor(history[-self.context:], dtype=self.torch.float32)
-        q, mean = self.pipe.predict_quantiles(context=[ctx], prediction_length=steps, quantile_levels=[0.5])
+        q, mean = self.pipe.predict_quantiles([ctx], prediction_length=steps, quantile_levels=[0.5])
         return mean[0].numpy()
 
 

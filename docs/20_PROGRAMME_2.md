@@ -573,6 +573,29 @@ metrics start 2021-12, so the sample cannot grow backwards) or on a
 second venue's OI (Bybit's is mirrored for funding only) — a new
 pre-registration, not a re-run.
 
+**1 October 2026, 14:00 Dubai — C3 `p2_liquidation_fade_v1`: verdict FAIL (seq 939).**
+Run once on the owner's yes, at 615 merged events on the eighteen names
+(13.8 days of OKX + Bybit bursts ≥ $50k and ≥ 5 σ; Binance mid from the
+tape; 185 BTC/ETH events as the control; 615 matched placebo stamps).
+Signed reversion of the Binance mid after the burst, mean (median) in
+bps, SE clustered by symbol × hour:
+
+| | 1 min | 5 min | 15 min | 60 min |
+|---|---|---|---|---|
+| events (18 names) | −0.5 (−1.2), t −0.3 | −0.2 (+3.3), t −0.1 | **−1.6 (+1.6), t −0.4** | −10.9 (0.0), t −1.5 |
+| placebo stamps | −0.2 | −1.9 | −1.7 | −2.1 |
+| BTC/ETH control | −0.6 | −1.1 | +0.2 | +7.3 |
+
+The pre-move exists (median −27 bps into the burst over the prior five
+minutes: the overshoot is real), and nothing comes back: reversion is
+indistinguishable from zero and from the placebo at every horizon, and
+the deep-book control behaves the same. Of the four registered
+falsifiers, the first ("reversion ≤ 0 at every horizon") and the second
+("placebo indistinguishable") both hold. By direction: buy: 15-min -2.0 bps, sell: 15-min -1.2 bps.
+**C3 is closed.** Per the memo, the liquidation recorders keep running
+only if another use is named — the owner's call. Programme 2's count:
+eleven registered, eleven failed. Outputs: `reports/c3/`.
+
 **1 October 2026, 11:30 Dubai — the two reads that were waiting on data.**
 
 *Stage 0 of the maker-fill study (`docs/24`): PASS.* The 14-day tape

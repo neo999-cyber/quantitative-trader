@@ -1,9 +1,9 @@
-# Pre-registration (DRAFT, not registered): `p3_forecastability_v1` — can anything we can observe forecast Bitcoin?
+# Pre-registration: `p3_forecastability_v1` — can anything we can observe forecast Bitcoin?
 
 *Drafted 1 October 2026 on the owner's decision to spend Programme 3's
-third and last registration on this question. Registered only on the
-owner's yes to this text, through `qr trial prereg --file`, before any
-model is fitted. What was looked at before drafting: which inputs exist
+third and last registration on this question, and **registered the same
+day on the owner's yes** to this text (and to the foundation-model arm's
+download), through `qr trial prereg --file`, before any model was fitted. What was looked at before drafting: which inputs exist
 and from when (coverage dates only). No target was computed and no input
 was plotted against a return.*
 

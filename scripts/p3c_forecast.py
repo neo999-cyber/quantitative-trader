@@ -89,7 +89,7 @@ def main(argv=None) -> int:
     models = [m for m in fc.MODELS if not (a.no_chronos and m == "chronos")]
     chronos = fc.ChronosArm() if "chronos" in models else None
     rf = pd.Series(df["tbill"].to_numpy() / 100, index=df.index).ffill()
-    panel = lake.load_panel(["BTCUSDT"], "1d", start="2020-09-01", market="futures-um")
+    panel = lake.load_panel(["BTCUSDT"], "1d", start="2020-09-01", market="futures/um")
     garch = fc.garch_forecasts(Y["ret1"], pd.date_range(t0, t1, freq="D", tz="UTC"))
     results, forecasts, nets, vol_preds = {}, [], {}, {}
     started = time.time()

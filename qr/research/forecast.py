@@ -31,10 +31,13 @@ HOLDOUT = (pd.Timestamp("2026-06-01", tz="UTC"), pd.Timestamp("2026-09-30", tz="
 def load_inputs(lake, mirror: Path) -> pd.DataFrame:
     """One row per UTC day: price, funding, OI, realised variance (from hourly spot), DVOL, sentiment, stablecoins, on-chain, macro."""
     ref = lake.paths.reference
-    perp = lake.read_klines("BTCUSDT", "1d", market="futures-um")
-    df = pd.DataFrame({"close": perp["close"], "high": perp["high"], "low": perp["low"], "volume": perp["quote_volume"] if "quote_volume" in perp else perp["volume"],
-                       "funding": perp.get("funding_rate"), "oi": perp.get("open_interest_usd", perp.get("open_interest"))})
+    perp = lake.read_klines("BTCUSDT", "1d", market="futures/um")          # the perpetual's bars
+    deriv = lake.read_klines("BTCUSDT", "1d", market="futures-um")        # its funding and open interest
+    df = pd.DataFrame({"close": perp["close"], "high": perp["high"], "low": perp["low"], "volume": perp["quote_volume"]})
     df.index = df.index.normalize()
+    deriv.index = deriv.index.normalize()
+    df["funding"] = deriv["funding_rate"].reindex(df.index)
+    df["oi"] = deriv["open_interest_usd"].reindex(df.index)
     h = lake.read_klines("BTCUSDT", "1h", market="spot")["close"]
     tail = mirror / "p3" / "btc_1h_tail_2026-09.parquet"
     if tail.exists():

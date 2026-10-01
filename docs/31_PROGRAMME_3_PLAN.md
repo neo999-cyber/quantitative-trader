@@ -435,3 +435,57 @@ question — and that needs weeks of prints, not hours. Parked: the
 recording continues; it is re-sized on 27 October with the v2 read, from
 the same tape, and only a number above the floor after adverse selection
 gets a memo. Programme 3's counter stays at two of three.
+
+## 13. 1 October 2026 — the "virtual world", made into two bounded pieces
+
+The owner's question ("why can't we calculate the fluctuations from ten
+years of everything, the way weather is forecast?") was answered in the
+session (physics vs. adaptive agents; observable vs. hidden state; 4,000
+days vs. "every parameter") and turned into the two things it can
+honestly be here. Decided: the **third and last Programme 3
+registration goes to A**; B is built alongside for the ladder.
+
+**A. `p3_forecastability_v1` — drafted, not registered**
+(`docs/prereg/p3_forecastability_v1.md`). Three targets on BTC (1-day
+direction, 7-day return, 1-day variance); every point-in-time, $0 input
+the project can get (price, funding, open interest, DVOL, Fear & Greed
+since 2018, stablecoin supply since 2017, on-chain since 2009, FRED
+macro); three model families (ridge/logit floor, gradient-boosted trees,
+a zero-shot time-series foundation model); expanding walk-forward from
+2021-03 with monthly refits and a 7-day purge; nine variants; the bars
+are the base rate, the random walk and **DVOL**, each with t ≥ 3, then
+the money test through the ledger; controls are permuted targets and a
+one-day extra lag. Prior: direction and the 7-day return fail; the vol
+model beats GARCH and not DVOL. **Two yeses outstanding:** the text, and
+the ~2.3 GB `torch` + Chronos download for the foundation-model arm (if
+declined, six variants, stated in the memo).
+
+**B. The ladder stress simulator — built** (`qr/research/stable_stress.py`,
+`scripts/stable_stress.py`, table at `reports/p3/ladder_stress.md`). Not
+a forecast: a one-year Monte Carlo over *named* events per tier, every
+rate and loss size in one editable table with its historical anchor
+(FTX, SVB/USDC $0.88, Maple 2022, USDe $0.65, UST), three replays. On
+$1,300, 20,000 simulated years:
+
+| Tier | Instrument | Yield | Expected | P(loss > 10%) | CVaR 5% |
+|---|---|---|---|---|---|
+| 0 | T-bill (IBKR) | 4.0% | **+4.0%** | 0% | +4.0% |
+| 1 | Binance Simple Earn USDC/USDT | 3.0% | +1.1% | 2.5% | −30% |
+| 1 | Aave v3 USDC (L2) | 3.6% | +1.3% | 4.1% | −36% |
+| 2 | syrupUSDC (Maple) | 5.0% | −0.3% | 7.9% | −49% |
+| 3 | sUSDe (Ethena) | 8.0% | +1.2% | 12.4% | −55% |
+| 3 | Pendle PT on sUSDe | 7.0% | −3.1% | 16.8% | −77% |
+| 2 | BNB for HODLer Airdrops | 9.0% (est.) | +7.7% | 50.5% | −76% |
+
+What the table says, with the assumptions as written: **the T-bill wins
+every stablecoin tier in expectation** — the stated yields above it are
+smaller than the expected cost of the tail that pays them (custody
+~1.5%/yr at a 1-in-40 venue failure; contracts ~1.5%/yr; credit;
+carry). Tier 1 on Binance costs ~3% a year against the T-bill and is
+justified only by money that has to sit on Binance anyway (stage 1,
+Launchpool pools). BNB's +7.7% is a coin-flip on BNB's price (58% of
+years lose), not a yield. The numbers move with the assumptions, which
+is the point: the owner can change a rate and see what it takes for a
+tier to beat 4%. **The ladder decision for 31 October is therefore
+written as a choice between the T-bill and Binance-resident cash, not
+between DeFi tiers.**

@@ -76,3 +76,21 @@ def test_vol_scoring_and_garch_run():
     g = fc.garch_forecasts(Y["ret1"], pd.date_range(t0, t1, freq="D", tz="UTC"))
     s = fc.score_vol(f, Y["rv_next"], df["dvol"], g)
     assert s["n"] > 40 and np.isfinite(s["dm_t_vs_dvol"]) and np.isfinite(s["dm_t_vs_garch"])
+
+
+class _LastValueArm:
+    """A stand-in for Chronos: forecasts the last value of the history it is given."""
+
+    def forecast(self, history, steps):
+        return np.repeat(history[-1], steps)
+
+
+def test_chronos_arm_sees_only_known_returns():
+    # with a leak (tomorrow's return in the history) a last-value arm would be ~100% right; without it, ~50% on noise
+    df = _inputs(seed=5)
+    X, Y = fc.features(df), fc.targets(df)
+    f = fc.walk_forward(X, Y, "direction", "chronos", pd.Timestamp("2023-06-01", tz="UTC"), pd.Timestamp("2025-03-31", tz="UTC"), chronos=_LastValueArm())
+    s = fc.score_direction(f)
+    assert 0.4 < s["accuracy"] < 0.6 and abs(s["t_vs_base"]) < 3
+    f7 = fc.walk_forward(X, Y, "ret7", "chronos", pd.Timestamp("2024-01-01", tz="UTC"), pd.Timestamp("2024-03-31", tz="UTC"), chronos=_LastValueArm())
+    assert fc.score_ret7(f7)["oos_r2"] < 0.2

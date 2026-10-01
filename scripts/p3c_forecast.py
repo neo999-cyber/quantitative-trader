@@ -112,8 +112,8 @@ def main(argv=None) -> int:
             Yp = Y.copy()
             for yr, g in Y.groupby(Y.index.year):
                 Yp.loc[g.index, target] = rng.permutation(g[target].to_numpy())
-            fp = fc.walk_forward(X, Yp, target, model, t0, t1, chronos=chronos) if model != "chronos" else pd.DataFrame()
-            fl = fc.walk_forward(X, Y, target, model, t0, t1, chronos=chronos, lag_extra=1) if model != "chronos" else pd.DataFrame()
+            fp = fc.walk_forward(X, Yp, target, model, t0, t1, chronos=chronos)
+            fl = fc.walk_forward(X, Y, target, model, t0, t1, chronos=chronos, lag_extra=1)
             ctl = {}
             if len(fp):
                 ctl["permuted"] = fc.score_direction(fp) if target == "direction" else (fc.score_ret7(fp) if target == "ret7" else fc.score_vol(fp, Yp["rv_next"], df["dvol"], garch))

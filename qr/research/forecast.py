@@ -174,17 +174,19 @@ def walk_forward(X: pd.DataFrame, y: pd.DataFrame, target: str, model: str, test
         if model == "chronos":
             if chronos is None:
                 raise RuntimeError("the chronos arm needs a ChronosArm")
-            series = data[target].shift(1 if kind != "ret7" else 7)      # the target's own history, known by each test day
+            # the target's own history as known at the close of each test day: `ret1[t]` is TOMORROW's return (the
+            # target), so the known return series is ret1 shifted by one; logrv likewise. Run 936 (1 Oct 2026) fed the
+            # unshifted series and "forecast" direction at Sharpe 5 — caught by the memo's leak rule, fixed here.
+            known_ret = y["ret1"].shift(1 + lag_extra)
+            known_logrv = y["logrv"].shift(1 + lag_extra)
             preds = []
             for t in test.index:
-                hist = series[series.index <= t].dropna().to_numpy()
                 if kind == "ret7":
-                    preds.append(float(chronos.forecast(y.loc[y.index <= t, "ret1"].dropna().to_numpy(), 7).sum()))
+                    preds.append(float(chronos.forecast(known_ret[known_ret.index <= t].dropna().to_numpy(), 7).sum()))
                 elif kind == "direction":
-                    r = y.loc[y.index <= t, "ret1"].dropna().to_numpy()
-                    preds.append(float(chronos.forecast(r, 1)[0]))
+                    preds.append(float(chronos.forecast(known_ret[known_ret.index <= t].dropna().to_numpy(), 1)[0]))
                 else:
-                    preds.append(float(chronos.forecast(hist, 1)[0]))
+                    preds.append(float(chronos.forecast(known_logrv[known_logrv.index <= t].dropna().to_numpy(), 1)[0]))
             pred = np.array(preds)
             if kind == "direction":
                 pred = 1 / (1 + np.exp(-pred / max(np.std(y["ret1"].dropna()), 1e-6) * 2))   # a forecast return into a probability, monotone

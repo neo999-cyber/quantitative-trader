@@ -110,14 +110,14 @@ def clustered(x: pd.Series, cluster: pd.Series) -> dict:
 def placebo_stamps(ev: pd.DataFrame, seed: int = SEED) -> pd.DataFrame:
     """One stamp per event: same symbol, same UTC day and hour, a random minute ≥ 15 min from any burst of that symbol."""
     rng = np.random.default_rng(seed)
-    all_t0 = {b: g.t0.to_numpy() for b, g in ev.groupby("base")}
+    all_t0 = {b: (g.t0.astype("int64").to_numpy() // 10**9) for b, g in ev.groupby("base")}   # seconds since the epoch
     rows = []
     for r in ev.itertuples(index=False):
         hour_start = r.t0.floor("h")
         others = all_t0[r.base]
         for _ in range(60):
             cand = hour_start + pd.Timedelta(seconds=int(rng.integers(0, 3600)))
-            if np.all(np.abs((others - cand.to_datetime64()).astype("timedelta64[s]").astype(int)) >= 900):
+            if np.all(np.abs(others - int(cand.timestamp())) >= 900):
                 rows.append({"base": r.base, "dir": r.dir, "t0": cand, "start": pd.NaT, "usd": float("nan"), "z": float("nan"), "bins": 0, "control": r.control, "placebo": True})
                 break
     return pd.DataFrame(rows)

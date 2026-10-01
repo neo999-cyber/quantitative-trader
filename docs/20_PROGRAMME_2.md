@@ -573,6 +573,20 @@ metrics start 2021-12, so the sample cannot grow backwards) or on a
 second venue's OI (Bybit's is mirrored for funding only) — a new
 pre-registration, not a re-run.
 
+**1 October 2026, 15:30 Dubai — stage 1 approved; live preview clean; first session tomorrow.**
+The owner said yes to stage 1 (`docs/24`), to deleting the box's tape copy
+(done; 28 GB free) and to stopping the liquidation recorders (done). A
+live trade-only, IP-restricted Binance key sits in `~/.qr/secrets.env`
+as `BINANCE_STUDY_KEY/SECRET`; `study/stage1.live.json` is the mandate
+(SUI, DOGE, ONDO, XRP, ADA; $10/order, $50 gross, $25 stop; 07–15 UTC;
+ten trading days). `preview --i-have-the-owners-yes` against mainnet:
+five names quoting at 0.7–4 bps spreads, a $10 order valid on each,
+futures wallet $98 USDT, positions flat, journal PAUSED, config digest
+`3ec7a36a99219d49`. Today's window had 35 minutes left, so the first
+session is **2 October 07:00 UTC (11:00 Dubai)**, started by the owner
+typing the mandate line in the terminal; the decision rule is fixed
+(live 15-minute fill within 10 points of stage 0's 96%).
+
 **1 October 2026, 14:00 Dubai — C3 `p2_liquidation_fade_v1`: verdict FAIL (seq 939).**
 Run once on the owner's yes, at 615 merged events on the eighteen names
 (13.8 days of OKX + Bybit bursts ≥ $50k and ≥ 5 σ; Binance mid from the

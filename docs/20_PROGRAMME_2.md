@@ -581,8 +581,10 @@ as `BINANCE_STUDY_KEY/SECRET`; `study/stage1.live.json` is the mandate
 (SUI, DOGE, ONDO, XRP, ADA; $10/order, $50 gross, $25 stop; 07–15 UTC;
 ten trading days). `preview --i-have-the-owners-yes` against mainnet:
 five names quoting at 0.7–4 bps spreads, a $10 order valid on each,
-futures wallet $98 USDT, positions flat, journal PAUSED, config digest
-`3ec7a36a99219d49`. Today's window had 35 minutes left, so the first
+futures wallet $98 USDT, positions flat, journal PAUSED (the config
+digest printed, `3ec7a36a…`, covers the session's expiry and is
+therefore new at every session: the line to type is the one the `run`
+prompt shows — corrected 2 October). Today's window had 35 minutes left, so the first
 session is **2 October 07:00 UTC (11:00 Dubai)**, started by the owner
 typing the mandate line in the terminal; the decision rule is fixed
 (live 15-minute fill within 10 points of stage 0's 96%).

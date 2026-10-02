@@ -72,7 +72,10 @@ def main(argv=None) -> int:
         theirs = {s: q for s, q in venue.positions().items() if q != 0}
         wallet = venue.balances().get("USDT")
         flat = not theirs
-        agree = theirs == mine and (cash_now is None or wallet is None or abs(wallet - cash_now) < Decimal("0.01"))
+        # the journal's cash moves with open notional, so it equals the wallet only when flat
+        agree = theirs == mine and (not flat or cash_now is None or wallet is None or abs(wallet - cash_now) < Decimal("0.01"))
+        if not flat:
+            net = None
         venue_txt = f"{'FLAT' if flat else 'NOT FLAT ' + str({k: str(v) for k, v in theirs.items()})}, wallet {wallet:.2f}, journal vs Binance {'AGREE' if agree else 'MISMATCH'}"
     except Exception as exc:  # noqa: BLE001
         flat, agree, venue_txt = False, False, f"venue check failed: {type(exc).__name__}: {str(exc)[:80]}"

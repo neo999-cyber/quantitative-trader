@@ -250,3 +250,31 @@ def test_a_standing_mandate_is_typed_once_and_covers_exactly_one_configuration_u
     with pytest.raises(PermissionError, match="ended on"):
         read_standing(config, path, now=datetime(2026, 10, 12, 7, 0, tzinfo=timezone.utc))
     assert read_standing(config, path, now=datetime(2026, 10, 11, 23, 0, tzinfo=timezone.utc))["digest"] == sd
+
+
+def test_close_all_repeats_a_partly_filled_taker_close_until_the_venue_is_flat(tmp_path):
+    fake, journal, config = make(tmp_path)
+    start(journal, config, {"fake": fake}, f"{config.digest()} STUDY", now=T0)
+    s = Session(journal, config, {"fake": fake}, now=Clock(), log=lambda m: None)
+    fake.fill_on_place = D("14.2")
+    s.tick()
+    fake.taker_fills = [D("5.1")]                      # the first IOC fills 5.1 of 14.2 and the rest dies (the box rehearsal, 2 October)
+    problems = s.close_all(pause=lambda _: None)
+    assert problems == [] and fake.positions() == {} and journal.mode() == "PAUSED"
+    kinds = [r[0].rsplit(":", 2)[1] for r in journal.db.execute("SELECT signal_id FROM intents WHERE action = 'EXIT' ORDER BY rowid").fetchall()]
+    assert kinds == ["exit_maker", "exit_taker", "exit_taker"]   # the resting maker exit is cancelled and not re-posted; two taker rounds
+    assert resume(journal, {"fake": fake}, "acct") == []
+
+
+def test_close_all_ends_with_a_market_order_when_the_touch_never_holds_enough(tmp_path):
+    fake, journal, config = make(tmp_path)
+    start(journal, config, {"fake": fake}, f"{config.digest()} STUDY", now=T0)
+    s = Session(journal, config, {"fake": fake}, now=Clock(), log=lambda m: None)
+    fake.fill_on_place = D("14.2")
+    s.tick()
+    fake.taker_fills = [D("1")] * 10                   # every IOC fills one lot only
+    problems = s.close_all(pause=lambda _: None)
+    assert problems == [] and fake.positions() == {}
+    kinds = [r[0].rsplit(":", 2)[1] for r in journal.db.execute("SELECT signal_id FROM intents WHERE action = 'EXIT' ORDER BY rowid").fetchall()]
+    assert kinds == ["exit_maker"] + ["exit_taker"] * Session.CLOSE_ROUNDS + ["exit_market"]
+    assert resume(journal, {"fake": fake}, "acct") == []

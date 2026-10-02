@@ -187,6 +187,13 @@ class BinanceUSDM:
         })
         return self._order(r)
 
+    def close_market(self, client_id: str, symbol: str, side: str, qty: Decimal) -> Order:
+        """Reduce-only market order: `close_all`'s last resort when the IOC through the touch keeps filling in part."""
+        r = self._signed("POST", "/fapi/v1/order", {
+            "symbol": symbol, "side": side, "type": "MARKET", "quantity": str(qty), "newClientOrderId": client_id, "reduceOnly": "true",
+        })
+        return self._order(r)
+
     def cancel(self, symbol: str, client_id: str) -> Order:
         return self._order(self._signed("DELETE", "/fapi/v1/order", {"symbol": symbol, "origClientOrderId": client_id}))
 
@@ -350,6 +357,8 @@ class FakeVenue:
     fee_bps: Decimal = Decimal("2")
     #: answer a cancel of an already-filled order the way Binance does (-2011) instead of returning it
     refuse_cancel_of_filled: bool = False
+    #: quantities the next taker closes fill (an IOC on a thin book fills in part and the rest dies); empty = in full
+    taker_fills: list = field(default_factory=list)
     _seq: int = 0
 
     def instrument(self, symbol: str) -> Instrument:
@@ -408,7 +417,25 @@ class FakeVenue:
         touch = ask if side == "BUY" else bid
         o = Order(f"v{len(self.orders)+1}", client_id, symbol, side, "NEW", qty, Decimal(0), touch)
         self.orders[client_id] = o
-        return self._exec(o, qty)  # a taker through the touch fills at once
+        fill = min(qty, self.taker_fills.pop(0)) if self.taker_fills else qty
+        if fill > 0:
+            o = self._exec(o, fill)  # a taker through the touch fills at once — as much as the book holds there
+        if o.filled < o.qty:         # the remainder of an IOC dies
+            o = Order(o.venue_order_id, o.client_id, o.symbol, o.side, "EXPIRED", o.qty, o.filled, o.price)
+            self.orders[client_id] = o
+        return o
+
+    def close_market(self, client_id, symbol, side, qty) -> Order:
+        if client_id in self.orders:
+            return self.orders[client_id]
+        held = self.pos.get(symbol, Decimal(0))
+        signed = qty if side == "BUY" else -qty
+        if held == 0 or (held > 0) == (signed > 0) or abs(signed) > abs(held):
+            raise VenueError("reduce-only would not reduce")
+        bid, ask = self.books[symbol]
+        o = Order(f"v{len(self.orders)+1}", client_id, symbol, side, "NEW", qty, Decimal(0), ask if side == "BUY" else bid)
+        self.orders[client_id] = o
+        return self._exec(o, qty)    # a market order takes what it needs
 
     def cancel(self, symbol, client_id) -> Order:
         o = self.orders[client_id]

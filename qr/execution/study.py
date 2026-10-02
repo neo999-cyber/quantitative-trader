@@ -248,6 +248,7 @@ class Session:
     last_slot: dict[tuple[str, str], int] = field(default_factory=dict)
     side_toggle: dict[tuple[str, str], int] = field(default_factory=dict)
     open_nav: Decimal | None = None
+    _closing: bool = False
 
     def __post_init__(self) -> None:
         self.journal.db.executescript(SCHEMA)
@@ -414,7 +415,7 @@ class Session:
             if not has_exit:
                 self._post_exit(w, t, taker=(t - w.filled_at).total_seconds() >= self.config.exit_after_fill_s)
 
-    def _post_exit(self, w: _Working, t: datetime, taker: bool) -> None:
+    def _post_exit(self, w: _Working, t: datetime, taker: bool, market: bool = False) -> None:
         venue, symbol = w.venue, w.intent.symbol
         book = self._mark(venue, symbol)
         if book is None:
@@ -434,15 +435,16 @@ class Session:
         if taker:
             price = ins.round_price(ask * D("1.002")) if side == "BUY" else ins.round_price(bid * D("0.998"))
             intent = Intent(self.config.account, venue, symbol, side, str(held), str(price), False, True, self.config.version,
-                            f"{w.intent.signal_id}:exit_taker:{n}", "EXIT", (t + timedelta(minutes=5)).isoformat())
+                            f"{w.intent.signal_id}:exit_{'market' if market else 'taker'}:{n}", "EXIT", (t + timedelta(minutes=5)).isoformat())
             reasons = check_exit(self.journal, intent, self.policy)
             if reasons:
                 self.log(f"taker exit refused for {symbol}: {reasons}")
                 return
             self.journal.stage(intent)
-            self.journal.transition(intent.client_id, "SUBMITTING", "taker reduce-only through the touch")
+            self.journal.transition(intent.client_id, "SUBMITTING", "market reduce-only (close_all's last resort)" if market else "taker reduce-only through the touch")
             try:
-                order = self.venues[venue].close_taker(intent.client_id, symbol, side, held, price)
+                order = (self.venues[venue].close_market(intent.client_id, symbol, side, held) if market
+                         else self.venues[venue].close_taker(intent.client_id, symbol, side, held, price))
             except VenueTimeout as exc:
                 self.journal.transition(intent.client_id, "UNKNOWN", f"timeout: {exc}")
                 self.working[intent.client_id] = _Working(intent, venue, t, "exit_taker", (bid + ask) / 2, parent=w.intent.client_id)
@@ -469,6 +471,8 @@ class Session:
                                                       filled_at=t if state == "FILLED" else None)
 
     def _repost_exit(self, w: _Working, t: datetime) -> None:
+        if self._closing:   # during `close_all` a cancelled maker exit is not re-posted: the taker close follows
+            return
         parent = self.working.get(w.parent) if w.parent else None
         if parent is not None:
             self._post_exit(parent, t, taker=(t - parent.filled_at).total_seconds() >= self.config.exit_after_fill_s)
@@ -497,9 +501,13 @@ class Session:
 
     # -- the end of a session -------------------------------------------------
 
-    def close_all(self) -> list[str]:
-        """Cancel every working entry, close every position with the taker exit, verify flat at the venues."""
+    CLOSE_ROUNDS = 4       # taker rounds before the market order
+    CLOSE_PAUSE_S = 1.5
+
+    def close_all(self, pause: Callable[[float], None] = time.sleep) -> list[str]:
+        """Cancel every working entry, close every position (taker, repeated; then market), verify flat at the venues."""
         t = self.now()
+        self._closing = True
         for cid, w in list(self.working.items()):
             if w.filled_at is None:
                 for step in (cancel, reconcile):   # a fault on one order is logged; the venue check below is the judge
@@ -508,14 +516,30 @@ class Session:
                     except Exception as exc:  # noqa: BLE001
                         self.log(f"close_all: {step.__name__} of {w.intent.symbol} {cid[:8]} failed: {exc!r}")
         self._reconcile_working(t)
-        for cid, w in list(self.working.items()):
-            if w.kind == "entry" and w.filled_at is not None:
-                for x in list(self.working.values()):
-                    if x.parent == cid and x.filled_at is None:
-                        cancel(self.journal, self.venues[x.venue], x.intent)
-                        self.working.pop(x.intent.client_id, None)
-                self._post_exit(w, t, taker=True)
-        self._reconcile_working(t)
+        # The taker close is an IOC through the touch and can fill in part on a thin book (the box rehearsal on the
+        # demo exchange, 2 October 2026, ended 3.4 SUI short of flat). So: repeat it against a fresh book until the
+        # venue is flat, and after CLOSE_ROUNDS send a reduce-only market order for whatever is left.
+        for attempt in range(self.CLOSE_ROUNDS + 1):
+            last = attempt == self.CLOSE_ROUNDS
+            for cid, w in list(self.working.items()):
+                if w.kind == "entry" and w.filled_at is not None:
+                    for x in list(self.working.values()):
+                        if x.parent == cid and x.filled_at is None:
+                            try:
+                                cancel(self.journal, self.venues[x.venue], x.intent)
+                            except Exception as exc:  # noqa: BLE001
+                                self.log(f"close_all: cancel of an exit for {x.intent.symbol} failed: {exc!r}")
+                            self.working.pop(x.intent.client_id, None)
+                    try:
+                        self._post_exit(w, self.now(), taker=True, market=last and hasattr(self.venues[w.venue], "close_market"))
+                    except Exception as exc:  # noqa: BLE001
+                        self.log(f"close_all: exit for {w.intent.symbol} failed: {exc!r}")
+            self._reconcile_working(self.now())
+            if not any(venue.positions() for venue in self.venues.values()):
+                break
+            if not last:
+                self.log(f"close_all: not flat after round {attempt + 1}; repeating the taker close")
+                pause(self.CLOSE_PAUSE_S)
         problems = []
         for name, venue in self.venues.items():
             pos = venue.positions()

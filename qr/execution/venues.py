@@ -348,6 +348,8 @@ class FakeVenue:
     #: fill the remainder while a cancel is being processed
     fill_on_cancel: bool = False
     fee_bps: Decimal = Decimal("2")
+    #: answer a cancel of an already-filled order the way Binance does (-2011) instead of returning it
+    refuse_cancel_of_filled: bool = False
     _seq: int = 0
 
     def instrument(self, symbol: str) -> Instrument:
@@ -410,6 +412,8 @@ class FakeVenue:
 
     def cancel(self, symbol, client_id) -> Order:
         o = self.orders[client_id]
+        if o.status == "FILLED" and self.refuse_cancel_of_filled:
+            raise VenueError("-2011 Unknown order sent.")
         if o.status in ("FILLED", "CANCELED", "REJECTED", "EXPIRED"):
             return o
         if self.fill_on_cancel:

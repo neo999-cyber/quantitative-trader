@@ -155,3 +155,67 @@ def test_a_reposted_exit_gets_a_fresh_client_id(tmp_path):
     exits = journal.db.execute("SELECT COUNT(*) FROM intents WHERE action = 'EXIT'").fetchone()[0]
     errors = journal.db.execute("SELECT COUNT(*) FROM audit WHERE kind = 'error'").fetchone()[0]
     assert exits >= 3 and errors == 0
+
+
+def _raising_sleep(fake, journal, fill=True, exc=KeyboardInterrupt):
+    """A `sleep` that fills the resting entry at the venue (the journal does not know) and then interrupts — the 2 October race."""
+    def sleep(_):
+        if fill:
+            for o in list(fake.orders.values()):
+                if o.status == "NEW":
+                    fake._exec(o, o.qty)
+        raise exc()
+    return sleep
+
+
+def test_an_interrupt_just_after_a_fill_still_ends_flat_and_reconciled(tmp_path):
+    fake, journal, config = make(tmp_path)
+    fake.refuse_cancel_of_filled = True   # Binance answers -2011 to a cancel of a filled order
+    start(journal, config, {"fake": fake}, f"{config.digest()} STUDY", now=T0)
+    s = Session(journal, config, {"fake": fake}, now=Clock(), log=lambda m: None)
+    problems = s.run(poll_s=0, sleep=_raising_sleep(fake, journal))
+    assert problems == [] and fake.positions() == {}
+    assert journal.mode() == "PAUSED" and resume(journal, {"fake": fake}, "acct") == []
+    states = [r[0] for r in journal.db.execute("SELECT state FROM orders").fetchall()]
+    assert set(states) == {"FILLED"} and len(states) == 2   # the entry the journal learned about, and its taker close
+    assert journal.db.execute("SELECT COUNT(*) FROM audit WHERE kind = 'cancel_refused'").fetchone()[0] == 1
+
+
+def test_the_shutdown_cannot_be_interrupted_and_handlers_are_restored(tmp_path):
+    import signal
+
+    fake, journal, config = make(tmp_path)
+    start(journal, config, {"fake": fake}, f"{config.digest()} STUDY", now=T0)
+    seen = []
+    real_cancel = fake.cancel
+
+    def spying_cancel(symbol, client_id):
+        seen.append(signal.getsignal(signal.SIGINT))
+        return real_cancel(symbol, client_id)
+
+    fake.cancel = spying_cancel
+    before = signal.getsignal(signal.SIGINT)
+    s = Session(journal, config, {"fake": fake}, now=Clock(), log=lambda m: None)
+    problems = s.run(poll_s=0, sleep=_raising_sleep(fake, journal, fill=False))
+    assert problems == [] and seen == [signal.SIG_IGN]          # during close_all, Ctrl-C does nothing
+    assert signal.getsignal(signal.SIGINT) is before            # and the handler is back afterwards
+
+
+def test_sigterm_takes_the_same_orderly_path(tmp_path):
+    import os
+    import signal
+
+    fake, journal, config = make(tmp_path)
+    start(journal, config, {"fake": fake}, f"{config.digest()} STUDY", now=T0)
+    s = Session(journal, config, {"fake": fake}, now=Clock(), log=lambda m: None)
+
+    def sleep(_):
+        for o in list(fake.orders.values()):
+            if o.status == "NEW":
+                fake._exec(o, o.qty)
+        os.kill(os.getpid(), signal.SIGTERM)
+
+    problems = s.run(poll_s=0, sleep=sleep)
+    assert problems == [] and fake.positions() == {} and journal.mode() == "PAUSED"
+    why = journal.db.execute("SELECT detail FROM audit WHERE kind = 'mode' ORDER BY seq DESC LIMIT 2").fetchall()
+    assert any("SIGTERM" in w[0] for w in why)

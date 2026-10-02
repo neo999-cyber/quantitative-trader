@@ -573,6 +573,29 @@ metrics start 2021-12, so the sample cannot grow backwards) or on a
 second venue's OI (Bybit's is mirrored for funding only) — a new
 pre-registration, not a re-run.
 
+**2 October 2026, 20:45 Dubai — the shutdown is fixed and the session leaves the terminal; rehearsed on the demo exchange.**
+(1) `Session.run`: Ctrl-C, SIGTERM and SIGHUP all take the orderly path
+(pause entries, cancel, reconcile, taker-close, verify flat), and from
+the moment it starts every further signal is ignored; `close_all`
+survives a fault on one order. Three tests reproduce the 2 October race
+with Binance's `-2011` answer (`FakeVenue.refuse_cancel_of_filled`).
+(2) `scripts/study_stage1.py run --detach`: the mandate is still typed at
+the terminal; the session then runs as a fresh background process (its
+own session id, log under `~/qr/lake/study/logs/`, pid file,
+`caffeinate`), so no keystroke in any window reaches it; `stop` sends
+the orderly stop and waits; `status` and `preview` are read-only.
+(3) `scripts/study_day_report.py` compares the journal with Binance's
+positions and wallet. **What the demo exchange taught, each fixed before
+live:** a forked Python dies silently on macOS once it touches the
+network (→ a fresh process); a journal found in STUDY by a new process is
+paused on open by design, so STUDY cannot be handed to a child (→ the
+child receives the typed mandate over a pipe and starts it itself) and
+`status` was ending the session it reported on (→ read-only sqlite, not
+`Journal(...)`). Final rehearsal: `status`/`preview` during a run left
+the mode at STUDY and the slots continuing; `stop` arrived while two
+orders were filling, both were reconciled and taker-closed, `session
+ended flat`, venue and journal AGREE.
+
 **2 October 2026, 20:10 Dubai — stage 1, day 1 (live, Binance): fills match the tape; one shutdown defect found.**
 The owner started the session at 12:21 Dubai. The first two slots were
 refused by Binance (`-2015`): the API key's futures permission and IP

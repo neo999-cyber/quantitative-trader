@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import signal
 import time
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -437,8 +438,11 @@ class Session:
         t = self.now()
         for cid, w in list(self.working.items()):
             if w.filled_at is None:
-                cancel(self.journal, self.venues[w.venue], w.intent)
-                reconcile(self.journal, self.venues[w.venue], w.intent)
+                for step in (cancel, reconcile):   # a fault on one order is logged; the venue check below is the judge
+                    try:
+                        step(self.journal, self.venues[w.venue], w.intent)
+                    except Exception as exc:  # noqa: BLE001
+                        self.log(f"close_all: {step.__name__} of {w.intent.symbol} {cid[:8]} failed: {exc!r}")
         self._reconcile_working(t)
         for cid, w in list(self.working.items()):
             if w.kind == "entry" and w.filled_at is not None:
@@ -458,13 +462,65 @@ class Session:
         return problems
 
     def run(self, poll_s: int = 5, sleep: Callable[[float], None] = time.sleep) -> list[str]:
-        """Attended loop until the session expiry, then `close_all()`."""
+        """Attended loop until the session expiry, then `close_all()`.
+
+        A stop is orderly whatever asks for it: Ctrl-C, SIGTERM (a kill, a logout) and SIGHUP (the
+        terminal closing) all pause entries and run `close_all()`; and while the shutdown runs,
+        every further signal is ignored. On 2 October 2026 a second Ctrl-C killed the shutdown
+        between a cancel and its reconcile, and a filled entry stayed unknown to the journal — a
+        live $10 short — for three and a half hours.
+        """
         expiry = datetime.fromisoformat(self.config.session_expires_at)
+        restore = _orderly_signals()
         try:
-            while self.now() < expiry and self.journal.mode() == "STUDY":
-                self.tick()
-                sleep(poll_s)
-        except KeyboardInterrupt:
-            self.journal.pause("operator interrupt")
-            self.log("interrupted: entries paused; closing positions")
-        return self.close_all()
+            try:
+                while self.now() < expiry and self.journal.mode() == "STUDY":
+                    self.tick()
+                    sleep(poll_s)
+            except (KeyboardInterrupt, StopRequested) as exc:
+                why = "operator interrupt" if isinstance(exc, KeyboardInterrupt) else f"stop requested ({exc})"
+                self.journal.pause(why)
+                self.log(f"{why}: entries paused; closing positions")
+            _ignore_signals()   # nothing interrupts the shutdown from here
+            return self.close_all()
+        finally:
+            restore()
+
+
+class StopRequested(Exception):
+    """SIGTERM or SIGHUP, turned into the same orderly stop as Ctrl-C."""
+
+
+_STOP_SIGNALS = tuple(getattr(signal, n) for n in ("SIGTERM", "SIGHUP") if hasattr(signal, n))
+
+
+def _orderly_signals() -> Callable[[], None]:
+    """Make SIGTERM/SIGHUP raise `StopRequested`; return a function that restores every handler (SIGINT too)."""
+    saved = {}
+
+    def _raise(signum, frame):
+        raise StopRequested(signal.Signals(signum).name)
+
+    try:
+        saved[signal.SIGINT] = signal.getsignal(signal.SIGINT)
+        for sig in _STOP_SIGNALS:
+            saved[sig] = signal.signal(sig, _raise)
+    except ValueError:   # not the main thread (a test runner): nothing to install, nothing to restore
+        saved = {}
+
+    def restore() -> None:
+        for sig, handler in saved.items():
+            try:
+                signal.signal(sig, handler)
+            except (ValueError, TypeError):
+                pass
+
+    return restore
+
+
+def _ignore_signals() -> None:
+    for sig in (signal.SIGINT, *_STOP_SIGNALS):
+        try:
+            signal.signal(sig, signal.SIG_IGN)
+        except ValueError:
+            return

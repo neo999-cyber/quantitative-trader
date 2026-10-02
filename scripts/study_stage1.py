@@ -4,6 +4,14 @@
     .venv/bin/python scripts/study_stage1.py run      --config study/stage1.json      # asks for the mandate hash
     .venv/bin/python scripts/study_stage1.py resume   --config study/stage1.json      # reconcile after a pause
     .venv/bin/python scripts/study_stage1.py close    --config study/stage1.json      # cancel and close everything now
+    .venv/bin/python scripts/study_stage1.py run      --config study/stage1.json --detach   # as `run`, then leaves the terminal
+    .venv/bin/python scripts/study_stage1.py status   --config study/stage1.json      # is it running, and do the venue and the journal agree
+    .venv/bin/python scripts/study_stage1.py stop     --config study/stage1.json      # orderly stop of a detached session
+
+`--detach` (2 October 2026): the mandate is still typed at the terminal; the session then forks into
+the background with its own log (`~/qr/lake/study/logs/`) and a pid file, so no keystroke in any
+window can reach it — the first live day ended on a stray Ctrl-C. `stop` sends it the same orderly
+stop a Ctrl-C would (pause entries, cancel, reconcile, close, verify flat) and waits for it.
 
 The config is a JSON `StudyConfig`. Keys come from `~/.qr/secrets.env`:
 `BINANCE_TESTNET_KEY/SECRET` (a Binance *Demo Trading* API key, demo.binance.com),
@@ -17,13 +25,17 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
+import signal
+import subprocess
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from qr import secrets
 from qr.config import paths
-from qr.execution.journal import Journal
+from qr.execution.journal import D, Journal
 from qr.execution.study import Session, StudyConfig, preview, resume, start
 from qr.execution.venues import BinanceUSDM, BybitLinear
 
@@ -42,8 +54,10 @@ def venues_for(config: StudyConfig) -> dict:
     return out
 
 
-def load_config(path: str, session_hours: float) -> StudyConfig:
+def load_config(path: str, session_hours: float, expires: str | None = None) -> StudyConfig:
     raw = json.loads(Path(path).read_text())
+    if expires:
+        raw["session_expires_at"] = expires
     raw.setdefault("session_expires_at", (datetime.now(timezone.utc) + timedelta(hours=session_hours)).isoformat())
     raw["hours_utc"] = tuple(raw.get("hours_utc", (7, 15)))
     return StudyConfig(**raw)
@@ -51,27 +65,106 @@ def load_config(path: str, session_hours: float) -> StudyConfig:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("action", choices=["preview", "run", "resume", "close"])
+    ap.add_argument("action", choices=["preview", "run", "resume", "close", "status", "stop", "session"])  # `session` is the detached child of `run --detach`
     ap.add_argument("--config", required=True)
     ap.add_argument("--session-hours", type=float, default=8.0)
     ap.add_argument("--poll", type=int, default=5)
     ap.add_argument("--i-have-the-owners-yes", action="store_true", dest="owners_yes")
     ap.add_argument("--confirm", default=None, help="testnet only: the `<hash> STUDY` line, instead of typing it")
+    ap.add_argument("--detach", action="store_true", help="run: after the mandate is accepted, continue in the background (log + pid file)")
+    ap.add_argument("--expires", default=None, help="internal (`session`): the expiry the mandate was typed for")
     args = ap.parse_args()
 
-    config = load_config(args.config, args.session_hours)
+    config = load_config(args.config, args.session_hours, args.expires)
     if not config.testnet and not args.owners_yes:
         print("mainnet needs --i-have-the-owners-yes (docs/24 stage 1: the owner's explicit yes to the live configuration)", file=sys.stderr)
         return 2
-    venues = venues_for(config)
-    journal_path = Path(paths().root) / "study" / "stage1.sqlite"
+    study_dir = Path(paths().root) / "study"
+    journal_path = study_dir / "stage1.sqlite"
+    pid_path = study_dir / "stage1.pid"
+    log_dir = study_dir / "logs"
     journal_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if args.action == "stop":
+        pid = _read_pid(pid_path)
+        if pid is None or not _alive(pid):
+            print("no running session found (pid file absent or stale); `status` shows the account, `close` flattens it")
+            return 1
+        os.kill(pid, signal.SIGINT)
+        print(f"stop requested (pid {pid}); waiting for the orderly close…", flush=True)
+        for _ in range(120):
+            if not _alive(pid):
+                break
+            time.sleep(2)
+        print("\n".join(_tail(log_dir, 6)))
+        if _alive(pid):
+            print(f"still running after 4 minutes — look at the log in {log_dir}")
+            return 1
+        return 0
+
+    venues = venues_for(config)
+
+    if args.action in ("preview", "status"):
+        # read-only, and deliberately not through `Journal(...)`: its constructor pauses a journal it finds in STUDY
+        # mode (the rule for a crashed session), which would end a session running in the background. Seen on the
+        # demo exchange, 2 October 2026: `status` stopped the session it was asked about.
+        import sqlite3
+        ro = sqlite3.connect(f"file:{journal_path}?mode=ro", uri=True) if journal_path.exists() else None
+        mode = ro.execute("SELECT mode FROM control WHERE id = 1").fetchone()[0] if ro else "PAUSED (no journal yet)"
+        if args.action == "preview":
+            preview(config, venues)
+            print(f"\njournal {journal_path} mode {mode}")
+            return 0
+        pid = _read_pid(pid_path)
+        print(f"session process: {'running, pid ' + str(pid) if pid and _alive(pid) else 'not running'}; journal mode {mode}")
+        held = {(v, sym): q for v, sym, q in ro.execute("SELECT venue, symbol, qty FROM positions WHERE account = ?", (config.account,)).fetchall()} if ro else {}
+        for name, venue in venues.items():
+            theirs = venue.positions()
+            mine = {sym: D(q) for (v, sym), q in held.items() if v == name and D(q) != 0}
+            print(f"{name}: venue positions {theirs or 'flat'}; journal {mine or 'flat'} → {'AGREE' if theirs == mine else 'MISMATCH'}; balances {dict(venue.balances())}")
+        open_orders = ro.execute("SELECT i.symbol, i.side, i.action, o.state FROM intents i JOIN orders o ON o.client_id = i.client_id WHERE i.account = ? "
+                                 "AND o.state NOT IN ('FILLED','CANCELLED','REJECTED','EXPIRED')", (config.account,)).fetchall() if ro else []
+        print(f"orders the journal still considers open: {open_orders or 'none'}")
+        tail = _tail(log_dir, 5)
+        if tail:
+            print("log:\n  " + "\n  ".join(tail))
+        return 0
+
     journal = Journal(journal_path)
 
-    if args.action == "preview":
-        preview(config, venues)
-        print(f"\njournal {journal_path} mode {journal.mode()}")
-        return 0
+    if args.action == "session":
+        # the detached child of `run --detach`: the owner's typed mandate line arrives on stdin
+        say = lambda m: print(f"{datetime.now(timezone.utc):%H:%M:%S} {m}", flush=True)  # noqa: E731
+        typed = sys.stdin.readline().strip() if args.expires else ""
+        if not typed:
+            say("`session` is started by `run --detach` only")
+            return 2
+        diffs = resume(journal, venues, config.account)
+        if diffs:
+            say("cannot start: venues and journal disagree:\n  " + "\n  ".join(diffs))
+            return 1
+        try:
+            start(journal, config, venues, typed)
+        except PermissionError as exc:
+            say(f"not started: {exc}")
+            return 1
+        if shutil.which("caffeinate"):
+            subprocess.Popen(["caffeinate", "-i", "-w", str(os.getpid())], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)   # no sleep while it lives
+        say(f"session started, pid {os.getpid()}, config {config.digest()}, until {config.session_expires_at}")
+        code = 1
+        try:
+            problems = Session(journal, config, venues, log=say).run(poll_s=args.poll)
+            say("session ended flat" if not problems else "SESSION ENDED NOT FLAT — check the venues:\n  " + "\n  ".join(problems))
+            code = 0 if not problems else 1
+        except BaseException as exc:  # noqa: BLE001 — nobody is watching a detached process: the traceback goes in the log
+            import traceback
+            say(f"SESSION CRASHED: {exc!r}\n{traceback.format_exc()}")
+        finally:
+            if _read_pid(pid_path) == os.getpid():
+                pid_path.unlink(missing_ok=True)
+        return code
+
+
     if args.action == "resume":
         diffs = resume(journal, venues, config.account)
         print("venues and journal agree" if not diffs else "MISMATCH:\n  " + "\n  ".join(diffs))
@@ -91,6 +184,34 @@ def main() -> int:
         print("--confirm is for testnet rehearsals; a live study is typed at the terminal", file=sys.stderr)
         return 2
     typed = args.confirm or input(f"\nType `{config.digest()} STUDY` to start this session (anything else aborts): ")
+
+    if args.detach:
+        # A fresh process, not a fork (on macOS a forked Python that touches the network dies without a word), and
+        # the *child* starts the mandate: a journal found in STUDY mode by a new process is paused on open, by design,
+        # so STUDY cannot be handed over. The line typed here goes to the child over a pipe; the child re-reads the
+        # config with the same expiry (the same digest) and calls `start()` with it. (Both learned on the demo
+        # exchange, 2 October 2026.)
+        if typed.strip() != f"{config.digest()} STUDY":
+            print("not started: mandate not confirmed: type the config hash and STUDY exactly", file=sys.stderr)
+            return 1
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_path = log_dir / f"session_{datetime.now(timezone.utc):%Y-%m-%d_%H%M}.log"
+        journal.close()
+        cmd = [sys.executable, str(Path(__file__).resolve()), "session", "--config", str(Path(args.config).resolve()),
+               "--expires", config.session_expires_at, "--poll", str(args.poll)] + (["--i-have-the-owners-yes"] if args.owners_yes else [])
+        with open(log_path, "a") as log_file:
+            child = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=log_file, stderr=subprocess.STDOUT, start_new_session=True, text=True)
+        child.stdin.write(typed.strip() + "\n")
+        child.stdin.close()
+        pid_path.write_text(str(child.pid))
+        time.sleep(6)
+        if child.poll() is not None:
+            print(f"the background session exited at once (code {child.returncode}):\n  " + "\n  ".join(_tail(log_dir, 6)), file=sys.stderr)
+            return 1
+        print(f"STUDY mode until {config.session_expires_at}\nrunning in the background: pid {child.pid}\nlog: {log_path}\n"
+              f"stop it with: scripts/study_stage1.py stop --config {args.config}" + (" --i-have-the-owners-yes" if not config.testnet else ""))
+        return 0
+
     try:
         start(journal, config, venues, typed)
     except PermissionError as exc:
@@ -101,6 +222,30 @@ def main() -> int:
     problems = session.run(poll_s=args.poll)
     print("session ended flat" if not problems else "SESSION ENDED NOT FLAT — check the venues:\n  " + "\n  ".join(problems))
     return 0 if not problems else 1
+
+
+def _read_pid(pid_path: Path) -> int | None:
+    try:
+        return int(pid_path.read_text().strip())
+    except (FileNotFoundError, ValueError):
+        return None
+
+
+def _alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def _tail(log_dir: Path, n: int) -> list[str]:
+    logs = sorted(log_dir.glob("session_*.log")) if log_dir.exists() else []
+    if not logs:
+        return []
+    return logs[-1].read_text().splitlines()[-n:]
 
 
 if __name__ == "__main__":

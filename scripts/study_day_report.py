@@ -80,6 +80,21 @@ def main(argv=None) -> int:
     start, now = (float(snap[0]) if snap else float("nan")), (float(cash_now[0]) if cash_now else float("nan"))
     net = now - start
     open_pos = con.execute("select symbol, qty from positions where account = ? and cast(qty as real) != 0", (a.account,)).fetchall()
+    # the venue's own view, so a journal that has lost track of a position cannot report "none" unchallenged (2 October 2026)
+    venue_line = "Venue check: skipped (no key for this account)."
+    try:
+        from qr import secrets
+        from qr.execution.venues import BinanceUSDM
+        tag, base = ("STUDY", BinanceUSDM.MAINNET) if "live" in a.account else ("TESTNET", BinanceUSDM.TESTNET)
+        venue = BinanceUSDM(secrets.require(f"BINANCE_{tag}_KEY"), secrets.require(f"BINANCE_{tag}_SECRET"), base=base)
+        theirs = {k: v for k, v in venue.positions().items() if v != 0}
+        mine = {r[0]: r[1] for r in open_pos}
+        wallet = float(venue.balances().get("USDT", float("nan")))
+        agree = (not theirs and not mine) and abs(wallet - now) < 0.01
+        venue_line = (f"Venue check: Binance positions {theirs or 'flat'}, wallet {wallet:.4f}; journal positions {mine or 'flat'}, cash {now:.4f} → "
+                      f"**{'AGREE' if agree else 'MISMATCH — run `status`, then `close`'}**.")
+    except Exception as exc:  # noqa: BLE001 — offline or no key: say so rather than fail the report
+        venue_line = f"Venue check: not possible ({type(exc).__name__}: {str(exc)[:80]})."
     slots = att.slot.nunique()
     L = [f"# Stage 1 — {a.day} (UTC), account `{a.account}`", "",
          f"Slots {slots} ({att.slot.min()[11:16]} → {att.slot.max()[11:16]} UTC); entry attempts {len(att)}: **{n} accepted**, {post_only_rej} post-only rejections (would have crossed), "
@@ -96,7 +111,7 @@ def main(argv=None) -> int:
     L += ["", f"Exits: {len(ex_maker)} maker orders — " + ", ".join(f"{k.lower()} {v}" for k, v in ex_maker.state.value_counts().items()) + f"; {len(ex_taker)} taker closes"
           + (" — " + ", ".join(f"{k.lower()} {v}" for k, v in ex_taker.state.value_counts().items()) if len(ex_taker) else "") + ". A maker exit that is not filled within its TTL is cancelled and re-posted; an entry on the other side at the next slot nets what is still open.",
           f"Money: wallet {start:.4f} → {now:.4f} USDT, **net {net:+.4f}**; fees {fees:.4f} on {notional:,.0f} of notional ({fees / notional * 1e4 if notional else float('nan'):.2f} bps a side); realised P&L before fees {net + fees:+.4f}.",
-          f"Open positions in the journal: {open_pos or 'none'}.", "",
+          f"Open positions in the journal: {open_pos or 'none'}.", venue_line, "",
           "By symbol (accepted / filled within 900 s):", ""]
     for sym, g in placed.groupby("symbol"):
         L.append(f"- {sym}: {len(g)} / {int(((g.wait_s <= 900) & g.filled).sum())}; by side " + ", ".join(f"{s} {len(x)}/{int(x.filled.sum())}" for s, x in g.groupby("side")))

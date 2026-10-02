@@ -573,6 +573,15 @@ metrics start 2021-12, so the sample cannot grow backwards) or on a
 second venue's OI (Bybit's is mirrored for funding only) — a new
 pre-registration, not a re-run.
 
+**2 October 2026, 21:45 Dubai — phone notifications on (owner's yes).** A random ntfy.sh topic is in
+`/root/stage1/env` (`QR_NTFY_TOPIC`, 600; the name is not in the repository — whoever knows it can read the
+messages, which carry counts, a fill rate, the day's net and the wallet, never a key). The daily line goes
+out at 15:20 UTC with title `stage 1`; a day with no accepted orders, a not-flat end or a journal/venue
+mismatch goes out as `stage 1 ALERT` at the highest priority, and so does the close-on-failure unit. Push
+path self-tested on the box against a throwaway topic and read back. **No message by 19:30 Dubai is itself
+the alarm** (the box or the timer did not run). The owner was also given the command to trim the box's
+secrets file to the four Binance lines.
+
 **2 October 2026, 21:40 UTC+4 (17:39 UTC) — the owner granted the standing mandate and enabled the timers.**
 Verified on the box, read-only: `/root/.qr/stage1.mandate.json` (600),
 granted 17:39 UTC, **through 2026-10-11**, for SUI/DOGE/ONDO/XRP/ADA,

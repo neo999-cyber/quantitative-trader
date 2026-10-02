@@ -573,6 +573,18 @@ metrics start 2021-12, so the sample cannot grow backwards) or on a
 second venue's OI (Bybit's is mirrored for funding only) — a new
 pre-registration, not a re-run.
 
+**2 October 2026, 21:40 UTC+4 (17:39 UTC) — the owner granted the standing mandate and enabled the timers.**
+Verified on the box, read-only: `/root/.qr/stage1.mandate.json` (600),
+granted 17:39 UTC, **through 2026-10-11**, for SUI/DOGE/ONDO/XRP/ADA,
+$10/$50/$25, 07–15 UTC, mainnet; `qr-stage1.timer` and
+`qr-stage1-summary.timer` enabled, next start Saturday 3 October 07:00
+UTC; account flat, wallet $97.946. Days 2–10 of stage 1 run on the box
+without the laptop. To read a day: `ssh` → `status`, and
+`lake/study/logs/{service,summary}.log`; for the full day report, mirror
+`/root/stage1/lake/study/stage1.sqlite` and run
+`scripts/study_day_report.py --db <mirror>` (its venue check will say
+"not possible" from the laptop — the key is locked to the box).
+
 **2 October 2026, 23:00 Dubai — rehearsed from the box under systemd; one more shutdown gap closed; ready for the owner's grant.**
 The owner trimmed the key at Binance (trusted IP `91.98.172.9`, Spot &
 Margin off — confirmed through `apiRestrictions` from the box; the key no

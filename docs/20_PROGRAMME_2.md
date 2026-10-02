@@ -573,6 +573,30 @@ metrics start 2021-12, so the sample cannot grow backwards) or on a
 second venue's OI (Bybit's is mirrored for funding only) — a new
 pre-registration, not a re-run.
 
+**2 October 2026, 23:00 Dubai — rehearsed from the box under systemd; one more shutdown gap closed; ready for the owner's grant.**
+The owner trimmed the key at Binance (trusted IP `91.98.172.9`, Spot &
+Margin off — confirmed through `apiRestrictions` from the box; the key no
+longer answers from the laptop, which is the intended state) and copied
+the secrets file to the box (600). Rehearsal on the demo exchange, from
+the box, as a transient systemd unit with the live unit's properties:
+**first pass ended NOT FLAT** — `systemctl stop` arrived 22 s after the
+start, two entries had just filled, and the IOC taker close for 8.5 SUI
+filled 5.1 on the demo's thin book; the remainder died and `close_all`
+made one pass only (3.4 SUI short, journal and venue agreeing, exit 1).
+**Fix:** `close_all` repeats the taker close against a fresh book until
+the venue is flat (four rounds) and then sends a reduce-only **market**
+order (`BinanceUSDM.close_market`); a cancelled maker exit is not
+re-posted while closing; two tests (`FakeVenue.taker_fills`). The
+residual was closed with the new loop, and the **second pass was
+clean**: unattended start under the standing mandate, six attempts and
+eight executions, `status` mid-run AGREE, `systemctl stop` → a fill
+arriving during the shutdown reconciled → `session ended flat`, unit
+result `success`, exit 0, flat, AGREE, 1.3 s of CPU and 24 MB. The
+rehearsal's mandate was revoked and its files removed; the live timers
+are installed **disabled** and no standing mandate exists. What remains
+is the owner's: `grant … --through 2026-10-11` over `ssh -t`, then
+`systemctl enable --now qr-stage1.timer qr-stage1-summary.timer`.
+
 **2 October 2026, 21:40 Dubai — unattended sessions on the Hetzner box: built, installed switched off, waiting on the owner's three commands.**
 The owner cannot be at the laptop at 11:00 and asked for (a) sessions
 without their input and (b) no dependence on the laptop or the home

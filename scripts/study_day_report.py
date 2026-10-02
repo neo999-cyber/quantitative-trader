@@ -31,9 +31,10 @@ def main(argv=None) -> int:
     ap.add_argument("--day", default=datetime.now(timezone.utc).strftime("%Y-%m-%d"))
     ap.add_argument("--account", default="stage1-binance-live")
     ap.add_argument("--out", type=Path, default=None)
+    ap.add_argument("--db", type=Path, default=None, help="a journal elsewhere (the box's, mirrored); default <lake>/study/stage1.sqlite")
     a = ap.parse_args(argv)
     p = paths()
-    db = p.root / "study" / "stage1.sqlite"
+    db = a.db or (p.root / "study" / "stage1.sqlite")
     con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
     nxt = (pd.Timestamp(a.day) + pd.Timedelta(days=1)).strftime("%Y-%m-%d")
     att = pd.read_sql_query("select a.seq, a.slot, a.symbol, a.side, a.outcome, a.detail, a.client_id, o.state, o.filled_qty from study_attempts a "

@@ -8,6 +8,15 @@
     .venv/bin/python scripts/study_stage1.py status   --config study/stage1.json      # is it running, and do the venue and the journal agree
     .venv/bin/python scripts/study_stage1.py stop     --config study/stage1.json      # orderly stop of a detached session
 
+    .venv/bin/python scripts/study_stage1.py grant    --config study/stage1.json --through 2026-10-11   # the owner, once: unattended sessions
+    .venv/bin/python scripts/study_stage1.py run      --config study/stage1.json --standing             # an unattended start (a timer's command)
+    .venv/bin/python scripts/study_stage1.py revoke   --config study/stage1.json                        # withdraw the standing mandate
+
+A **standing mandate** (3 October 2026) is the owner's typed authorisation of one exact configuration for a
+bounded period, kept at `~/.qr/stage1.mandate.json` on the machine that runs the sessions. `run --standing`
+starts without a prompt only while that file covers the configuration it is about to run; `grant` is
+interactive and has no flag that stands in for the typing on mainnet.
+
 `--detach` (2 October 2026): the mandate is still typed at the terminal; the session then forks into
 the background with its own log (`~/qr/lake/study/logs/`) and a pid file, so no keystroke in any
 window can reach it — the first live day ended on a stray Ctrl-C. `stop` sends it the same orderly
@@ -36,7 +45,7 @@ from pathlib import Path
 from qr import secrets
 from qr.config import paths
 from qr.execution.journal import D, Journal
-from qr.execution.study import Session, StudyConfig, preview, resume, start
+from qr.execution.study import Session, StudyConfig, grant_standing, preview, read_standing, resume, standing_digest, start, start_under_standing
 from qr.execution.venues import BinanceUSDM, BybitLinear
 
 
@@ -65,7 +74,7 @@ def load_config(path: str, session_hours: float, expires: str | None = None) -> 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("action", choices=["preview", "run", "resume", "close", "status", "stop", "session"])  # `session` is the detached child of `run --detach`
+    ap.add_argument("action", choices=["preview", "run", "resume", "close", "status", "stop", "grant", "revoke", "session"])  # `session` is the detached child of `run --detach`
     ap.add_argument("--config", required=True)
     ap.add_argument("--session-hours", type=float, default=8.0)
     ap.add_argument("--poll", type=int, default=5)
@@ -73,6 +82,8 @@ def main() -> int:
     ap.add_argument("--confirm", default=None, help="testnet only: the `<hash> STUDY` line, instead of typing it")
     ap.add_argument("--detach", action="store_true", help="run: after the mandate is accepted, continue in the background (log + pid file)")
     ap.add_argument("--expires", default=None, help="internal (`session`): the expiry the mandate was typed for")
+    ap.add_argument("--standing", action="store_true", help="run: start under the standing mandate (no prompt); refuses when it does not cover this config today")
+    ap.add_argument("--through", default=None, help="grant: the standing mandate's last day, YYYY-MM-DD (at most three weeks ahead)")
     args = ap.parse_args()
 
     config = load_config(args.config, args.session_hours, args.expires)
@@ -84,6 +95,36 @@ def main() -> int:
     pid_path = study_dir / "stage1.pid"
     log_dir = study_dir / "logs"
     journal_path.parent.mkdir(parents=True, exist_ok=True)
+
+    standing_path = Path(os.environ.get("QR_SECRETS", Path.home() / ".qr" / "secrets.env")).parent / "stage1.mandate.json"
+
+    if args.action == "revoke":
+        if standing_path.exists():
+            standing_path.unlink()
+            print(f"standing mandate withdrawn ({standing_path}); a running session is not affected — `stop` ends it")
+        else:
+            print("there is no standing mandate")
+        return 0
+
+    if args.action == "grant":
+        if not args.through:
+            print("grant needs --through YYYY-MM-DD (the last day of unattended sessions)", file=sys.stderr)
+            return 2
+        preview(config, venues_for(config))
+        sd = standing_digest(config)
+        print(f"\nThis authorises UNATTENDED sessions of exactly this configuration, started by a timer with nobody at a terminal,\n"
+              f"every day through {args.through}. Any change to the configuration ends it; `revoke` withdraws it.")
+        if args.confirm and not config.testnet:
+            print("--confirm is for testnet rehearsals; a live standing mandate is typed at the terminal", file=sys.stderr)
+            return 2
+        typed = args.confirm or input(f"\nType `{sd} STANDING {args.through}` to grant it (anything else aborts): ")
+        try:
+            rec = grant_standing(config, typed, args.through, standing_path)
+        except (PermissionError, ValueError) as exc:
+            print(f"not granted: {exc}", file=sys.stderr)
+            return 1
+        print(f"standing mandate granted through {rec['through']} ({standing_path})")
+        return 0
 
     if args.action == "stop":
         pid = _read_pid(pid_path)
@@ -125,6 +166,11 @@ def main() -> int:
         open_orders = ro.execute("SELECT i.symbol, i.side, i.action, o.state FROM intents i JOIN orders o ON o.client_id = i.client_id WHERE i.account = ? "
                                  "AND o.state NOT IN ('FILLED','CANCELLED','REJECTED','EXPIRED')", (config.account,)).fetchall() if ro else []
         print(f"orders the journal still considers open: {open_orders or 'none'}")
+        try:
+            rec = read_standing(config, standing_path)
+            print(f"standing mandate: covers this configuration through {rec['through']} (granted {rec['granted_at'][:16]})")
+        except PermissionError as exc:
+            print(f"standing mandate: {exc}")
         tail = _tail(log_dir, 5)
         if tail:
             print("log:\n  " + "\n  ".join(tail))
@@ -183,6 +229,21 @@ def main() -> int:
     if args.confirm and not config.testnet:
         print("--confirm is for testnet rehearsals; a live study is typed at the terminal", file=sys.stderr)
         return 2
+    if args.standing:
+        if args.detach:
+            print("--standing runs in the foreground of its supervisor (a systemd unit); use one or the other", file=sys.stderr)
+            return 2
+        try:
+            rec = start_under_standing(journal, config, venues, standing_path)
+        except PermissionError as exc:
+            print(f"not started: {exc}", file=sys.stderr)
+            return 1
+        say = lambda m: print(f"{datetime.now(timezone.utc):%H:%M:%S} {m}", flush=True)  # noqa: E731
+        say(f"session started under the standing mandate (through {rec['through']}), pid {os.getpid()}, config {config.digest()}, until {config.session_expires_at}")
+        problems = Session(journal, config, venues, log=say).run(poll_s=args.poll)
+        say("session ended flat" if not problems else "SESSION ENDED NOT FLAT — check the venues:\n  " + "\n  ".join(problems))
+        return 0 if not problems else 1
+
     typed = args.confirm or input(f"\nType `{config.digest()} STUDY` to start this session (anything else aborts): ")
 
     if args.detach:

@@ -219,3 +219,34 @@ def test_sigterm_takes_the_same_orderly_path(tmp_path):
     assert problems == [] and fake.positions() == {} and journal.mode() == "PAUSED"
     why = journal.db.execute("SELECT detail FROM audit WHERE kind = 'mode' ORDER BY seq DESC LIMIT 2").fetchall()
     assert any("SIGTERM" in w[0] for w in why)
+
+
+def test_a_standing_mandate_is_typed_once_and_covers_exactly_one_configuration_until_its_last_day(tmp_path):
+    from dataclasses import replace
+
+    from qr.execution.study import grant_standing, read_standing, standing_digest, start_under_standing
+
+    fake, journal, config = make(tmp_path)
+    path = tmp_path / "stage1.mandate.json"
+    sd = standing_digest(config)
+    assert sd == standing_digest(replace(config, session_expires_at=(T0 + timedelta(days=3)).isoformat()))  # the per-session expiry is not part of it
+    assert sd != standing_digest(replace(config, max_order_usd="20"))                                      # anything else is
+    with pytest.raises(PermissionError, match="no standing mandate"):
+        start_under_standing(journal, config, {"fake": fake}, path, now=T0)
+    with pytest.raises(PermissionError, match="not granted"):
+        grant_standing(config, "yes please", "2026-10-11", path, now=T0)
+    with pytest.raises(PermissionError, match="at most"):
+        grant_standing(config, f"{sd} STANDING 2026-12-31", "2026-12-31", path, now=T0)
+    assert not path.exists()
+    rec = grant_standing(config, f"{sd} STANDING 2026-10-11", "2026-10-11", path, now=T0)
+    assert rec["through"] == "2026-10-11" and oct(path.stat().st_mode & 0o777) == "0o600"
+    # a session starts with nobody typing, and the journal says under what authority
+    start_under_standing(journal, config, {"fake": fake}, path, now=T0)
+    assert journal.mode() == "STUDY"
+    assert journal.db.execute("SELECT COUNT(*) FROM audit WHERE kind = 'standing_mandate'").fetchone()[0] == 1
+    # a changed configuration is not covered; nor is the day after the last day
+    with pytest.raises(PermissionError, match="different configuration"):
+        read_standing(replace(config, max_gross_usd="500"), path, now=T0)
+    with pytest.raises(PermissionError, match="ended on"):
+        read_standing(config, path, now=datetime(2026, 10, 12, 7, 0, tzinfo=timezone.utc))
+    assert read_standing(config, path, now=datetime(2026, 10, 11, 23, 0, tzinfo=timezone.utc))["digest"] == sd

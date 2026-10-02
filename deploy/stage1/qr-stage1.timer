@@ -1,0 +1,10 @@
+[Unit]
+Description=qr: start the stage 1 session at 07:00 UTC (11:00 Dubai) every day; the standing mandate bounds the period
+
+[Timer]
+OnCalendar=*-*-* 07:00:00 UTC
+Persistent=true
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

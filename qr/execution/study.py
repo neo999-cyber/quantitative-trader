@@ -40,6 +40,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from pathlib import Path
 from typing import Callable
 
 from qr.execution.journal import D, Intent, Journal
@@ -47,7 +48,7 @@ from qr.execution.limits import StudyPolicy, check_entry, check_exit
 from qr.execution.orders import cancel, reconcile, submit
 from qr.execution.venues import Instrument, VenueError, VenueTimeout
 
-__all__ = ["StudyConfig", "Session", "preview", "start", "resume"]
+__all__ = ["StudyConfig", "Session", "preview", "start", "resume", "standing_digest", "grant_standing", "read_standing", "start_under_standing"]
 
 
 @dataclass(frozen=True)
@@ -130,6 +131,69 @@ def start(journal: Journal, config: StudyConfig, venues: dict, typed: str, now: 
     journal.db.execute("INSERT INTO audit (ts, kind, ref, detail) VALUES (?, ?, ?, ?)",
                        (now.isoformat(), "mandate", config.digest(), json.dumps({"config": asdict(config), "venues": sorted(venues)})))
     journal.set_mode("STUDY", f"mandate {config.digest()} confirmed at the terminal; expires {config.session_expires_at}")
+
+
+# -- the standing mandate (unattended sessions) ---------------------------------------------------------------------------
+#
+# A session mandate is typed at the terminal and covers one session. From 3 October 2026 the owner runs the
+# study on a server with nobody at a terminal, so the typing is done once, in advance, for a bounded period:
+# a *standing mandate* names the exact configuration (every field but the per-session expiry) and a last day.
+# Each unattended start checks the file against the configuration it is about to run; any change to the
+# configuration, or the date passing, and the session does not start. Granting is interactive and only the
+# owner's; nothing in the code can write the file without the typed line.
+
+STANDING_MAX_DAYS = 21
+
+
+def standing_digest(config: StudyConfig) -> str:
+    """The configuration without the per-session expiry: what a standing mandate authorises."""
+    body = asdict(config)
+    body.pop("session_expires_at", None)
+    return hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest()[:16]
+
+
+def grant_standing(config: StudyConfig, typed: str, through: str, path, now: datetime | None = None) -> dict:
+    """Write the standing mandate after the owner types `<standing digest> STANDING <YYYY-MM-DD>`."""
+    now = now or datetime.now(timezone.utc)
+    last = datetime.fromisoformat(through).date()
+    if typed.strip() != f"{standing_digest(config)} STANDING {last.isoformat()}":
+        raise PermissionError("standing mandate not granted: type the digest, STANDING and the last day exactly")
+    if last < now.date():
+        raise PermissionError("the last day is already past")
+    if (last - now.date()).days > STANDING_MAX_DAYS:
+        raise PermissionError(f"a standing mandate runs at most {STANDING_MAX_DAYS} days")
+    body = asdict(config)
+    body.pop("session_expires_at", None)
+    record = {"digest": standing_digest(config), "through": last.isoformat(), "granted_at": now.isoformat(), "config": body}
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(record, indent=1))
+    path.chmod(0o600)
+    return record
+
+
+def read_standing(config: StudyConfig, path, now: datetime | None = None) -> dict:
+    """The standing mandate if it covers this exact configuration today; `PermissionError` with the reason otherwise."""
+    now = now or datetime.now(timezone.utc)
+    path = Path(path)
+    if not path.exists():
+        raise PermissionError(f"no standing mandate at {path}")
+    record = json.loads(path.read_text())
+    if record.get("digest") != standing_digest(config):
+        raise PermissionError("the standing mandate is for a different configuration (the config changed since it was granted)")
+    if now.date() > datetime.fromisoformat(record["through"]).date():
+        raise PermissionError(f"the standing mandate ended on {record['through']}")
+    return record
+
+
+def start_under_standing(journal: Journal, config: StudyConfig, venues: dict, path, now: datetime | None = None) -> dict:
+    """An unattended start: verify the standing mandate, record its use, then `start()` with the line it stands for."""
+    now = now or datetime.now(timezone.utc)
+    record = read_standing(config, path, now)
+    journal.db.execute("INSERT INTO audit (ts, kind, ref, detail) VALUES (?, 'standing_mandate', ?, ?)",
+                       (now.isoformat(), record["digest"], f"unattended start under the standing mandate granted {record['granted_at']}, valid through {record['through']}"))
+    start(journal, config, venues, f"{config.digest()} STUDY", now=now)
+    return record
 
 
 def resume(journal: Journal, venues: dict, account: str) -> list[str]:

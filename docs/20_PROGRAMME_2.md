@@ -573,6 +573,40 @@ metrics start 2021-12, so the sample cannot grow backwards) or on a
 second venue's OI (Bybit's is mirrored for funding only) — a new
 pre-registration, not a re-run.
 
+**2 October 2026, 21:40 Dubai — unattended sessions on the Hetzner box: built, installed switched off, waiting on the owner's three commands.**
+The owner cannot be at the laptop at 11:00 and asked for (a) sessions
+without their input and (b) no dependence on the laptop or the home
+network. Both are answered by the box: the execution path is standard
+library only (no pandas), `fapi.binance.com` answers from it in 0.3 s over
+IPv4 (`91.98.172.9`, a fixed address — better for the key than a home
+IP), and the runner lives in `~/stage1/` with its own journal
+(`/root/stage1/lake/study/`), touching nothing else on the machine.
+- **Standing mandate** (`qr/execution/study.py`): the owner types
+  `<standing digest> STANDING <last day>` once (`grant`, interactive, no
+  flag stands in for it on mainnet); the digest covers every field of the
+  configuration except the per-session expiry; `run --standing` starts
+  without a prompt only while the file covers the configuration it is
+  about to run and the day is not past; at most three weeks; `revoke`
+  withdraws it; every unattended start is an audit row.
+- **Units** (`deploy/stage1/`, installed by `scripts/deploy_stage1_box.sh`,
+  **disabled**): `qr-stage1.timer` 07:00 UTC → `qr-stage1.service`
+  (`KillSignal=SIGINT`, so a `systemctl stop` is the orderly close;
+  `Restart=no`); on failure or a not-flat end → `qr-stage1-close.service`
+  (reconcile, flatten, alert); `qr-stage1-summary.timer` 15:20 UTC → one
+  line a day (`scripts/stage1_summary.py`, stdlib), pushed through ntfy
+  only if the owner sets `QR_NTFY_TOPIC` in `/root/stage1/env`.
+- **Rehearsed on the demo exchange** (laptop): refused with no grant
+  (exit 1, "no standing mandate"); granted; a changed config refused; an
+  unattended session started with nobody typing, traded and `ended flat`
+  (exit 0); revoked; refused again.
+- **Left to the owner, by rule** (Claude never starts live trading or
+  handles key values): add `91.98.172.9` to the key's trusted IPs and turn
+  Spot & Margin trading off; `scp` the secrets file to the box; `grant`
+  over `ssh -t`; `systemctl enable --now` the two timers. From then the
+  laptop only reads (`status`, reports on a mirrored journal with
+  `study_day_report.py --db`); **sessions run on the box only** — two
+  runners on one account would each see positions the other opened.
+
 **2 October 2026, 20:45 Dubai — the shutdown is fixed and the session leaves the terminal; rehearsed on the demo exchange.**
 (1) `Session.run`: Ctrl-C, SIGTERM and SIGHUP all take the orderly path
 (pause entries, cancel, reconcile, taker-close, verify flat), and from

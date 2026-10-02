@@ -1,0 +1,10 @@
+[Unit]
+Description=qr: stage 1 — the day's one-line summary (and a push, if the owner set a topic)
+
+[Service]
+Type=oneshot
+WorkingDirectory=/root/stage1
+Environment=QR_ROOT=/root/stage1/lake
+EnvironmentFile=-/root/stage1/env
+ExecStart=/usr/bin/python3 scripts/stage1_summary.py --config study/stage1.live.json
+User=root

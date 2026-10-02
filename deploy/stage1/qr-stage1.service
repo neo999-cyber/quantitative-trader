@@ -1,0 +1,19 @@
+[Unit]
+Description=qr: stage 1 maker-fill study session (live, under the owner's standing mandate)
+After=network-online.target
+Wants=network-online.target
+OnFailure=qr-stage1-close.service
+
+[Service]
+Type=simple
+WorkingDirectory=/root/stage1
+Environment=QR_ROOT=/root/stage1/lake
+EnvironmentFile=-/root/stage1/env
+ExecStart=/usr/bin/python3 scripts/study_stage1.py run --config study/stage1.live.json --i-have-the-owners-yes --standing --session-hours 8.1
+# an orderly stop: the same path as Ctrl-C — pause entries, cancel, reconcile, close, verify flat
+KillSignal=SIGINT
+TimeoutStopSec=300
+Restart=no
+StandardOutput=append:/root/stage1/lake/study/logs/service.log
+StandardError=inherit
+User=root

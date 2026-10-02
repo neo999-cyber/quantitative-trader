@@ -1,0 +1,9 @@
+[Unit]
+Description=qr: stage 1 summary at 15:20 UTC (after the session has closed)
+
+[Timer]
+OnCalendar=*-*-* 15:20:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

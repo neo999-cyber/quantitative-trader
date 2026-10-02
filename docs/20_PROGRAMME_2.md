@@ -573,6 +573,35 @@ metrics start 2021-12, so the sample cannot grow backwards) or on a
 second venue's OI (Bybit's is mirrored for funding only) — a new
 pre-registration, not a re-run.
 
+**2 October 2026, 20:10 Dubai — stage 1, day 1 (live, Binance): fills match the tape; one shutdown defect found.**
+The owner started the session at 12:21 Dubai. The first two slots were
+refused by Binance (`-2015`): the API key's futures permission and IP
+restriction had not been saved; fixed by the owner at 12:33, confirmed
+through `/sapi/v1/account/apiRestrictions`. From 12:45 the study ran 16
+slots: **62 post-only entries accepted, 62 filled within 15 minutes
+(100%; tape 96.3% — inside the 10-point rule)**, 83.9% within 60 s (tape
+83.8%), median wait 3 s (tape 3 s); 5 post-only rejections (the order
+would have crossed), 10 policy refusals (stale mark, $50 cap). Maker fee
+verified at 2.00 bps a side. Marks (median, bps): −0.5 at 5 s, −5.9 at
+60 s, +8.1 at 300 s — one day in a one-directional market on five
+correlated names; not read yet. Money: $98.142 → $97.946, **−$0.196** on
+$1,172 traded ($0.237 fees, +$0.041 price). Report:
+`reports/stage1/day_2026-10-02.md`.
+**The defect.** At 16:30:02 Dubai a Ctrl-C (the owner's, by mistake, from
+other work in the same terminal) arrived 0.5 s after a SUI sell had
+filled; `close_all` requested the cancel, Binance answered `-2011`, and
+a second interrupt killed the process before the reconcile — leaving a
+**short of 8.4 SUI (~$10) on the venue that the journal did not know**
+for three and a half hours. Found at the evening read by comparing the
+journal with `positionRisk`; the owner ran `close` (reconciled the fill,
+closed by taker; `flat at every venue`; journal and Binance agree to the
+cent). No loss (+$0.13 on the position). **Fixes before day 2:** the
+shutdown path ignores further interrupts and always reconciles before
+exit; SIGTERM/SIGHUP take the same path; the session runs detached from
+any terminal (`--detach`, started by the owner, stopped by `stop`); the
+day report compares the journal with the venue. Day 1 counts as a day of
+data (62 orders).
+
 **1 October 2026, 15:30 Dubai — stage 1 approved; live preview clean; first session tomorrow.**
 The owner said yes to stage 1 (`docs/24`), to deleting the box's tape copy
 (done; 28 GB free) and to stopping the liquidation recorders (done). A

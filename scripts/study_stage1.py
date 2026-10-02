@@ -42,7 +42,9 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from qr import secrets
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))   # run from a bare checkout (the box has no installed package)
+
+from qr import secrets  # noqa: E402
 from qr.config import paths
 from qr.execution.journal import D, Journal
 from qr.execution.study import Session, StudyConfig, grant_standing, preview, read_standing, resume, standing_digest, start, start_under_standing

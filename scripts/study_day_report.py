@@ -84,6 +84,8 @@ def main(argv=None) -> int:
     # the venue's own view, so a journal that has lost track of a position cannot report "none" unchallenged (2 October 2026)
     venue_line = "Venue check: skipped (no key for this account)."
     try:
+        if a.db is not None:
+            raise RuntimeError("a mirrored journal: the live key answers only from the box — read `status` there")
         from qr import secrets
         from qr.execution.venues import BinanceUSDM
         tag, base = ("STUDY", BinanceUSDM.MAINNET) if "live" in a.account else ("TESTNET", BinanceUSDM.TESTNET)

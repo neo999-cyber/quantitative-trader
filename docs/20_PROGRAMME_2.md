@@ -573,6 +573,19 @@ metrics start 2021-12, so the sample cannot grow backwards) or on a
 second venue's OI (Bybit's is mirrored for funding only) — a new
 pre-registration, not a re-run.
 
+**3 October 2026, 19:40 Dubai — stage 1, day 2: the first unattended day on the box.** Started by the timer
+at 07:00:09 UTC under the standing mandate, all 32 slots, `session ended flat` at 15:06, unit result
+`success`; summary pushed to the owner's phone at 15:20. **128 accepted; 113 filled within 15 minutes =
+88.3%** (tape 96.3% — inside the 10-point rule, eight points under it); 64.8% within 60 s (tape 83.8%),
+median wait 23 s (tape 3 s). The shortfall is one-sided: sells 59/59, buys 55/69 — a rising Saturday left
+bids behind (the tape's own two weekend days were its weakest, 94%). Marks, median bps: +1.0 at 5 s, +1.6
+at 60 s (tape 0.92), +1.6 at 300 s. 7 post-only rejections; 25 policy refusals (the $50 gross cap with five
+$10 names, the spot-style cash reservation, stale marks) — entries not placed, so not in the fill rate.
+Money: $97.946 → $97.343, **−$0.603** on $2,222 traded (fees $0.4445 = 2.00 bps a side; price −$0.16).
+Flat; journal and Binance agree (checked on the box). **Cumulative, two days: 175 of 190 accepted orders
+filled within 15 minutes = 92.1%**; cost −$0.80 of the $25 budget. Report:
+`reports/stage1/day_2026-10-03.md` (from the mirrored journal, `--db`).
+
 **2 October 2026, 21:45 Dubai — phone notifications on (owner's yes).** A random ntfy.sh topic is in
 `/root/stage1/env` (`QR_NTFY_TOPIC`, 600; the name is not in the repository — whoever knows it can read the
 messages, which carry counts, a fill rate, the day's net and the wallet, never a key). The daily line goes

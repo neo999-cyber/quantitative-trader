@@ -577,7 +577,7 @@ pre-registration, not a re-run.
 at 07:00:09 UTC under the standing mandate, all 32 slots, `session ended flat` at 15:06, unit result
 `success`; summary pushed to the owner's phone at 15:20. **128 accepted; 113 filled within 15 minutes =
 88.3%** (tape 96.3% — inside the 10-point rule, eight points under it); 64.8% within 60 s (tape 83.8%),
-median wait 23 s (tape 3 s). The shortfall is one-sided: sells 59/59, buys 55/69 — a rising Saturday left
+median wait 23 s (tape 3 s). The shortfall is one-sided: sells 58/59, buys 55/69 — a rising Saturday left
 bids behind (the tape's own two weekend days were its weakest, 94%). Marks, median bps: +1.0 at 5 s, +1.6
 at 60 s (tape 0.92), +1.6 at 300 s. 7 post-only rejections; 25 policy refusals (the $50 gross cap with five
 $10 names, the spot-style cash reservation, stale marks) — entries not placed, so not in the fill rate.

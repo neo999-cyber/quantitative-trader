@@ -76,9 +76,17 @@ def main(argv=None) -> int:
     day_exec = ex[ex.client_id.isin(set(placed.client_id) | set(exits.client_id))]
     fees = float(day_exec.fee.astype(float).sum())
     notional = float((day_exec.qty.astype(float) * day_exec.price.astype(float)).sum())
-    snap = con.execute("select amount from cash_events where account = ? and kind = 'venue_balance_snapshot' and recorded_at >= ? and recorded_at < ? order by recorded_at limit 1", (a.account, a.day, nxt)).fetchone()
+    # the opening snapshot's `amount` is a delta against the cash the journal held (zero on a journal's first day, a
+    # fraction of a cent afterwards); the wallet itself is the last field of the event id (found on day 3, 4 October 2026)
+    snap = con.execute("select event_id from cash_events where account = ? and kind = 'venue_balance_snapshot' and currency = 'USDT' and recorded_at >= ? and recorded_at < ? "
+                       "order by recorded_at limit 1", (a.account, a.day, nxt)).fetchone()
     cash_now = con.execute("select amount from cash where account = ? and currency = 'USDT'", (a.account,)).fetchone()
-    start, now = (float(snap[0]) if snap else float("nan")), (float(cash_now[0]) if cash_now else float("nan"))
+    start, now = (float(snap[0].rsplit(":", 1)[1]) if snap else float("nan")), (float(cash_now[0]) if cash_now else float("nan"))
+    # a past day closes at the next session's opening wallet (the account is flat overnight), not at today's cash
+    later = con.execute("select event_id from cash_events where account = ? and kind = 'venue_balance_snapshot' and currency = 'USDT' and recorded_at >= ? order by recorded_at limit 1",
+                        (a.account, nxt)).fetchone()
+    if later:
+        now = float(later[0].rsplit(":", 1)[1])
     net = now - start
     open_pos = con.execute("select symbol, qty from positions where account = ? and cast(qty as real) != 0", (a.account,)).fetchall()
     # the venue's own view, so a journal that has lost track of a position cannot report "none" unchallenged (2 October 2026)

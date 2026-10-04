@@ -573,6 +573,18 @@ metrics start 2021-12, so the sample cannot grow backwards) or on a
 second venue's OI (Bybit's is mirrored for funding only) — a new
 pre-registration, not a re-run.
 
+**4 October 2026, 19:40 Dubai — stage 1, day 3 (box, unattended): 96.2%.** Timer 07:00:10 UTC, 32 slots,
+`session ended flat` 15:06, unit `success`; push at 15:20. **130 accepted, 125 filled within 15 minutes =
+96.2%** (tape 96.3%); 81.5% within 60 s (tape 83.8%); median wait 14 s. Marks, median bps: +1.0 at 5 s,
++1.6 at 60 s (tape 0.92), +2.0 at 300 s. 5 post-only rejections, 25 policy refusals. Money: $97.346 →
+$96.663, **−$0.683** on $2,377 traded (fees $0.475 = 2.00 bps a side; price −$0.21). Flat; journal and
+Binance agree on the box. **Cumulative, three days: 300 of 320 = 93.8% filled within 15 minutes; −$1.48 of
+the $25 budget; the 60-second mark has been +1.6 bps on both box days against the tape's 0.9.** Two
+report defects fixed, neither touching the box: the day report read the opening snapshot's *delta* as the
+wallet (right on a journal's first day, 0.003 on its second — the wallet is in the event id), and a past
+day now closes at the next session's opening wallet instead of today's cash. The journal's cash drifts
+from Binance's wallet by ~0.3 cents a day (re-based at every start); not chased.
+
 **3 October 2026, 19:40 Dubai — stage 1, day 2: the first unattended day on the box.** Started by the timer
 at 07:00:09 UTC under the standing mandate, all 32 slots, `session ended flat` at 15:06, unit result
 `success`; summary pushed to the owner's phone at 15:20. **128 accepted; 113 filled within 15 minutes =

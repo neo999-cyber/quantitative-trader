@@ -1,4 +1,6 @@
-# Pre-registration (DRAFT, not registered): `p4_listing_fade_v1` — fading new perpetual listings on Binance, market-neutral
+# Pre-registration (FILED, never registered — owner's decision 6 October 2026): `p4_listing_fade_v1` — fading new perpetual listings on Binance, market-neutral
+
+*Filed on 6 October 2026: the owner decided not to pursue meme-coin or listing work in this project; no Programme 4 was opened and nothing was run. Kept for the record.*
 
 *Drafted 5 October 2026 at the owner's request ("will these rules work on a meme coin market?" → "write the
 memo"). **Not registered.** Registering it opens a fourth programme and a new counter, which is the

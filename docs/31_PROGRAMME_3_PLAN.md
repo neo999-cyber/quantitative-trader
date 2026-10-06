@@ -532,3 +532,35 @@ a model of everything observable does not forecast the price, and the
 one thing it forecasts (volatility) is already published free by the
 options market. A simulator is the right tool for *what breaks*
 (§13 B), not for *what happens next*.
+
+## 15. 6 October 2026 — parked until stage 1 ends (12 October): the data-expansion plan
+
+The owner asked what external data and what approach could add to the project ("there has to be more to
+this") and decided to return to it after stage 1's ten sessions. Logged here so it is not lost; nothing
+below is registered, pulled or run.
+
+- **Ruled out, by the owner:** meme-coin and listing work (`docs/prereg/p4_listing_fade_v1.md`, filed, never
+  registered). Not to be raised again.
+- **Finding to keep in view:** more modelling of the inputs we have adds nothing (P3-C, `§14`); anything new
+  comes from new information with a *forced* party behind it.
+- **Candidates, free first, in the order worth getting:**
+  1. **US spot-ETF daily flows, backfilled** from Farside (Jan 2024 →, ~450 trading days; the recorder covers
+     September 2026 only). Mechanism: creations settle T+1, so authorised participants must buy BTC during US
+     hours after an inflow day — a named forced buyer; test the US-hours drift after flow days. The best new
+     idea on the list; prior modest (arbitraged over time, thin history).
+  2. **CFTC Commitments of Traders** for CME bitcoin futures (weekly, 2017 →): leveraged-fund vs asset-manager
+     positioning; basis-trade crowding and squeezes.
+  3. **Coin Metrics community on-chain metrics** (daily, 2011 →): exchange in/outflows, realised profit/loss,
+     holder cohorts — what P3-C lacked. Mechanism: coins moving onto exchanges precede selling.
+  4. **Deribit full options surface** (strikes, skew, open interest): dealer hedging near large open interest
+     into expiry; record forward now at $0 (history is paid).
+  5. **Hyperliquid positioning** (every position and liquidation price public): visible liquidation clusters
+     as magnets; record forward at $0; the professional stop-hunt, likely too fast for this account.
+  Paid on-chain feeds (Glassnode, CryptoQuant; $100–800 a month) only after a free-tier test shows something.
+- **Already measured positive and not to be forgotten:** C1's funding carry — Sharpe 2.4 net, funding 97%
+  of the return; failed the gates as a *timing* rule because timing added nothing over always-in. The right
+  version is a plain cash-and-carry holding, a yield with a tail (exchange, negative funding), comparable to
+  the ladder's T-bill at 4%; its entry/exit cost is what stage 1 measures. A holding decision for the owner.
+- **Proposed shape when we return:** one data-expansion programme with two registrations — the ETF-flow
+  pressure mechanism, and C2 re-tested against the measured maker cost — with the other feeds recorded
+  forward from now so they exist in three months. Nothing starts without the owner's yes.

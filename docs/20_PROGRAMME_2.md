@@ -573,6 +573,17 @@ metrics start 2021-12, so the sample cannot grow backwards) or on a
 second venue's OI (Bybit's is mirrored for funding only) — a new
 pre-registration, not a re-run.
 
+**7 October 2026, 07:50 Dubai — stage 1, day 5 (6 October, box, unattended): 98.5%, the best day; the mark has converged to the tape.**
+Timer 07:00 UTC, 32 slots, `session ended flat`, unit `success`, push at 15:20. **133 accepted, 131
+filled within 15 minutes = 98.5%** (tape 96.3%); 85.0% within 60 s (tape 83.8%); median wait 8 s. Marks,
+median bps: +1.0 at 5 s, **−0.4 at 60 s**, −1.3 at 300 s — a day on which the mid moved *with* the fills.
+15 post-only rejections (a fast tape), 12 policy refusals. Money: $95.847 → $95.271, **−$0.576** on
+$2,581 traded (fees $0.516; price −$0.06). Flat; AGREE. **Cumulative, five days: 545 of 580 = 94.0% filled
+within 15 minutes (buys 92.9%, sells 95.1%); the 60-second mark over 544 fills has a median of +0.99 bps
+— the tape's 0.92 — with a mean of +0.45 and a p90 of +13; wallet $98.142 → $95.271, −$2.87 of the $25
+budget.** The by-day fill rates (100, 88, 96, 89, 98) say the tape's average was right and its day-to-day
+spread was hidden. Five sessions remain.
+
 **5 October 2026, 20:30 Dubai — stage 1, day 4 (box, unattended): 89.0%, and the most adverse day so far.**
 Timer 07:00 UTC, 32 slots, `session ended flat`, unit `success`, push at 15:20; nothing in the log but
 fills and closes. **127 accepted, 113 filled within 15 minutes = 89.0%** (tape 96.3%); 78.7% within 60 s;

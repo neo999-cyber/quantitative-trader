@@ -573,6 +573,16 @@ metrics start 2021-12, so the sample cannot grow backwards) or on a
 second venue's OI (Bybit's is mirrored for funding only) — a new
 pre-registration, not a re-run.
 
+**8 October 2026, 08:20 Dubai — stage 1, day 6 (7 October, box, unattended): 94.3%.** Timer 07:00 UTC, 32
+slots, `session ended flat`, unit `success`, push at 15:20. **123 accepted, 116 filled within 15 minutes =
+94.3%** (tape 96.3%); 85.4% within 60 s; median wait 4 s. Marks, median bps: +0.6 at 5 s, −1.4 at 60 s,
+−2.6 at 300 s. 18 post-only rejections, 19 policy refusals; six log lines of a maker exit refused as
+`exit_does_not_reduce` (a position netted by the next slot's opposite entry — harmless, the exit is
+dropped). Money: $95.271 → $94.767, **−$0.504** on $2,244 traded (fees $0.449; price −$0.06). Flat; AGREE.
+**Cumulative, six days: 661 of 703 = 94.0% (buys 93.1%, sells 95.0%); 60-second mark over 660 fills:
+median +0.54 bps, mean +0.08, p90 +12; wallet $98.142 → $94.767, −$3.38 of the $25 budget.** By day: 100,
+88, 96, 89, 98, 94. Four sessions remain (8–11 October).
+
 **7 October 2026, 07:50 Dubai — stage 1, day 5 (6 October, box, unattended): 98.5%, the best day; the mark has converged to the tape.**
 Timer 07:00 UTC, 32 slots, `session ended flat`, unit `success`, push at 15:20. **133 accepted, 131
 filled within 15 minutes = 98.5%** (tape 96.3%); 85.0% within 60 s (tape 83.8%); median wait 8 s. Marks,

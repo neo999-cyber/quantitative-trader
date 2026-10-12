@@ -573,6 +573,16 @@ metrics start 2021-12, so the sample cannot grow backwards) or on a
 second venue's OI (Bybit's is mirrored for funding only) — a new
 pre-registration, not a re-run.
 
+**12 October 2026, 15:30 Dubai — stage 1 complete: PASS; the verdict is `docs/33`.** Days 7–10 (8–11
+October, box, unattended): 111/110 = 99.1%, 126/122 = 96.8%, 116/108 = 93.1%, 113/100 = 88.5%; money
+−$0.80, −$0.76, −$0.79, −$0.64. **Ten days: 1,169 accepted, 1,101 filled within 15 minutes = 94.2%**
+(tape 96.3% — inside the 10-point rule); 60-second mark median +1.06 bps (tape 0.92); fee 2.00 bps a side;
+wallet $98.14 → $91.77, −$6.37, 5.8 bps a round trip realised. Weekdays 96.0%, weekends 91.6%.
+`CostModel.maker_measured()` carries the numbers (3.2 bps a side, `fill_rate` 0.942). On the 12th the timer
+fired after the mandate's last day, was refused, the close-on-failure unit ran (flat) and the alert went
+out as designed; the owner disables the timers. Decisions now the owner's: a C2 re-test against the
+measured cost (new counter), the carry as a holding, and the parked data-expansion plan (`docs/31` §15).
+
 **8 October 2026, 08:20 Dubai — stage 1, day 6 (7 October, box, unattended): 94.3%.** Timer 07:00 UTC, 32
 slots, `session ended flat`, unit `success`, push at 15:20. **123 accepted, 116 filled within 15 minutes =
 94.3%** (tape 96.3%); 85.4% within 60 s; median wait 4 s. Marks, median bps: +0.6 at 5 s, −1.4 at 60 s,

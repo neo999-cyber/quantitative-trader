@@ -147,3 +147,17 @@ def test_a_backtest_carries_the_split_it_was_charged():
     assert np.allclose(result.cost_parts.sum(axis=1), result.costs)
     shares = _cost_attribution(result)
     assert np.isclose(sum(shares.values()), 1.0)
+
+
+def test_measured_maker_model_blends_the_filled_and_unfilled_shares():
+    from qr.execution.costs import CostModel
+
+    m = CostModel.maker_measured()
+    assert m.use_maker and m.funding and m.fill_rate == 0.942
+    assert m.fee_bps == pytest.approx(0.942 * 2.0 + 0.058 * 5.0, abs=1e-9)          # 2.17 bps
+    assert m.half_spread_bps == pytest.approx(0.942 * 1.06 + 0.058 * 1.0, abs=1e-9)  # 1.06 bps
+    assert 3.1 < m.fee_bps + m.half_spread_bps < 3.3                                  # ~6.5 bps a round trip
+    assert m.describe()["fill_rate"] == 0.942 and "2026-10-11" in m.verified_on
+    assert CostModel.binance_perp().fill_rate == 1.0                                  # every other model is unchanged
+    certain = CostModel.maker_measured(fill_rate=1.0)
+    assert certain.fee_bps == 2.0 and certain.half_spread_bps == pytest.approx(1.06)

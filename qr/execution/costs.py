@@ -162,6 +162,9 @@ class CostModel:
     #: unmodified square-root law, which double-counts.
     net_impact_against_spread: bool = True
     use_maker: bool = False
+    #: the measured probability that a resting order fills within its deadline (1.0 = assumed); a maker
+    #: family's signal is haircut by it — a unit open 30% of the time at 100% fills is open less at 94%
+    fill_rate: float = 1.0
     #: Whether the venue settles funding on held positions. True for a
     #: perpetual; False for spot, where nothing is paid for holding. The
     #: runner reads this to decide whether the panel's `funding_rate` feature
@@ -243,6 +246,46 @@ class CostModel:
             funding=True,
             name=f"binance_perp_{fees.tier}{suffix}_{side}",
             verified_on=verified_on or fees.verified_on,
+        )
+
+    @classmethod
+    def maker_measured(
+        cls,
+        fill_rate: float = 0.942,
+        adverse_bps: float = 1.06,
+        maker_fee_bps: float = 2.0,
+        taker_fee_bps: float = 5.0,
+        half_spread_bps: float = 1.0,
+        impact_coef: float = 1.0,
+        verified_on: str = "2026-10-11 stage 1 live, Binance USDⓈ-M, 1,169 orders",
+    ) -> "CostModel":
+        """The maker cost **measured live** — stage 1 of the maker-fill study (`docs/24`, `docs/33`).
+
+        Ten sessions on the owner's Binance futures account, 2–11 October 2026, 1,169 post-only orders
+        under $10 on SUI/DOGE/ONDO/XRP/ADA: **94.2% filled within 15 minutes** (the tape's replay said
+        96.3%), fee **2.00 bps a side** on the account's own statement, and a median adverse-selection
+        mark of **+1.06 bps** 60 s after the fill (tape 0.92). The model charges, per side, what a
+        strategy that posts and waits actually pays: the filled share pays the maker fee and the adverse
+        mark; the unfilled share is assumed taken at the deadline and pays the taker fee and the
+        half-spread (the conservative reading `docs/24` fixed in advance). `fill_rate` travels with the
+        model so a maker family's signal can be haircut by it.
+
+        Blended: fee = p·maker + (1−p)·taker; spread/adverse = p·adverse + (1−p)·half_spread. At the
+        measured numbers that is 2.17 + 1.06 = 3.2 bps a side, ~6.5 bps a round trip; the ten days
+        realised 5.8 bps a round trip on $21k traded, with no deadline takes forced on them.
+        """
+        p = float(fill_rate)
+        fee = p * maker_fee_bps + (1 - p) * taker_fee_bps
+        adverse = p * adverse_bps + (1 - p) * half_spread_bps
+        return cls(
+            fee_bps=fee,
+            half_spread_bps=adverse,
+            impact_coef=impact_coef,
+            use_maker=True,
+            fill_rate=p,
+            funding=True,
+            name="binance_perp_maker_measured_2026-10",
+            verified_on=verified_on,
         )
 
     @classmethod
@@ -657,6 +700,7 @@ class CostModel:
 
     def describe(self) -> dict[str, float | str | bool]:
         return {
+            "fill_rate": self.fill_rate,
             "name": self.name,
             "fee_bps": self.fee_bps,
             "half_spread_bps": self.half_spread_bps,

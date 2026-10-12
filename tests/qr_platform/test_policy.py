@@ -135,8 +135,11 @@ def test_the_quarterly_cap_binds_even_when_the_week_is_clear(log):
     policy = current(log)
     for name in ("a", "b", "c"):
         log.prereg(name, "x")
+    # measured from when the records were written (see the test above): with a constant, the weekly
+    # window catches the three once the calendar drifts to within a week of it — it did, 12 October 2026
+    written = datetime.now(timezone.utc)
     with pytest.raises(PolicyBreach, match="last quarter"):
-        check_promotion(log, policy, now=NOW + timedelta(days=30))
+        check_promotion(log, policy, now=written + timedelta(days=30))
 
 
 # -------------------------------------------------------------------- the bar

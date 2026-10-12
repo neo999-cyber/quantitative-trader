@@ -580,7 +580,7 @@ October, box, unattended): 111/110 = 99.1%, 126/122 = 96.8%, 116/108 = 93.1%, 11
 wallet $98.14 → $91.77, −$6.37, 5.8 bps a round trip realised. Weekdays 96.0%, weekends 91.6%.
 `CostModel.maker_measured()` carries the numbers (3.2 bps a side, `fill_rate` 0.942). On the 12th the timer
 fired after the mandate's last day, was refused, the close-on-failure unit ran (flat) and the alert went
-out as designed; the owner disables the timers. Decisions now the owner's: a C2 re-test against the
+out as designed; the owner disabled the timers the same afternoon (verified: no pending stage-1 timers, service inactive, account flat; the Polymarket, Deribit and yield recorders stay on). Decisions now the owner's: a C2 re-test against the
 measured cost (new counter), the carry as a holding, and the parked data-expansion plan (`docs/31` §15).
 
 **8 October 2026, 08:20 Dubai — stage 1, day 6 (7 October, box, unattended): 94.3%.** Timer 07:00 UTC, 32

@@ -239,3 +239,27 @@ def test_a_measured_fill_rate_haircuts_the_signal_on_both_engines():
         full = run_backtest(panel, Always(), costs=CostModel.binance_perp(), engine=engine)
         cut = run_backtest(panel, Always(), costs=CostModel.maker_measured(fill_rate=0.5), engine=engine)
         assert cut.weights.abs().max().max() == pytest.approx(0.5) and full.weights.abs().max().max() == pytest.approx(1.0)
+
+
+def test_the_by_weekday_haircut_scales_weekend_bars_more():
+    import numpy as np
+    import pandas as pd
+
+    from qr.data.panel import Panel
+    from qr.execution.costs import CostModel
+    from qr.research.runner import run_backtest
+    from qr.strategies.base import Strategy
+
+    idx = pd.date_range("2024-01-01", periods=120, freq="D", tz="UTC")
+    close = pd.DataFrame({"AUSDT": 100 * np.exp(np.cumsum(np.random.default_rng(1).normal(0, 0.02, 120)))}, index=idx)
+    panel = Panel({"close": close, "open": close, "high": close * 1.01, "low": close * 0.99, "volume": close * 0 + 1e9})
+
+    class Always(Strategy):
+        family = "always"
+
+        def target_weights(self, panel, universe=None):
+            return pd.DataFrame(1.0, index=panel.close.index, columns=panel.close.columns)
+
+    res = run_backtest(panel, Always(), costs=CostModel.maker_measured(by_dow=True), engine="weights")
+    w = res.weights["AUSDT"]
+    assert w[w.index.dayofweek < 5].max() == pytest.approx(0.9604) and w[w.index.dayofweek >= 5].max() == pytest.approx(0.9158)

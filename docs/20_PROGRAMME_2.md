@@ -573,6 +573,19 @@ metrics start 2021-12, so the sample cannot grow backwards) or on a
 second venue's OI (Bybit's is mirrored for funding only) — a new
 pre-registration, not a re-run.
 
+**12 October 2026, 19:30 Dubai — corrections after stage 1, and two refinements of the cost model.** On the
+owner's "let's do 1, 2, 5": (1) the harness re-marks every held name each tick, after the fills are booked
+and before anything is sized — the `nav_uncertain` refusals; and `preview` now warns when the gross cap is
+below 2 × names × order size (stage 1's $50 cap with five $10 names refused the next slot's entries while
+the last slot's positions were still open — the cap doing its job, 235 times); (2) the backtest runner
+applies the measured fill-rate haircut on both engines; (5) an entry netted through by later entries is
+dropped from the working set instead of posting an exit that cannot reduce (six log lines a day). Tests
+for each; rehearsed on the demo exchange (ten entries, no refusals, `session ended flat`); redeployed to
+the box with the timers still off. Then the two cost-model angles: `maker_measured(day_type=…, by_dow=…)`
+with the measured weekday/weekend numbers, and `maker_measured_for(symbol)` from the tape calibrated by
+the live gap (`docs/33` addendum, `reports/stage1/tape_calibration.md`). Waiting on the owner: the parser
+dry-run over the Polymarket recording (counts only) and turning the key's futures permission off.
+
 **12 October 2026, 15:30 Dubai — stage 1 complete: PASS; the verdict is `docs/33`.** Days 7–10 (8–11
 October, box, unattended): 111/110 = 99.1%, 126/122 = 96.8%, 116/108 = 93.1%, 113/100 = 88.5%; money
 −$0.80, −$0.76, −$0.79, −$0.64. **Ten days: 1,169 accepted, 1,101 filled within 15 minutes = 94.2%**

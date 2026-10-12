@@ -42,6 +42,41 @@ import pandas as pd
 
 BPS = 1e-4
 
+#: Stage 1, measured live (2–11 October 2026, 1,169 orders): fill within 15 minutes and the median 60-second mark, by day type.
+STAGE1_MEASURED = {
+    "all": (0.942, 1.06),
+    "weekday": (0.9604, 0.50),   # 682 orders, 654 marks
+    "weekend": (0.9158, 1.76),   # 487 orders, 446 marks: the tape's own weekends were its weakest too
+}
+
+#: The stage-0 tape (14 days, 20 names) corrected by the live result: live fills ran -3.46 points below the tape on the five
+#: names traded, with a spread of under one point between names, and the 60-second mark +0.29 bps above it. The same
+#: correction applied to the other fifteen names gives a maker cost for names that were never traded live
+#: (`maker_measured_for`). Entries: (fill within 900 s, median 60-second mark in bps, measured live or calibrated).
+TAPE_CALIBRATED = {
+    "1000PEPEUSDT": (0.9514, 1.31, False),
+    "ADAUSDT": (0.9283, 2.25, True),
+    "BEATUSDT": (0.8238, 5.76, False),
+    "BNBUSDT": (0.9400, 0.88, False),
+    "BTCUSDT": (0.9394, 0.92, False),
+    "CLUSDT": (0.8940, 0.84, False),
+    "DOGEUSDT": (0.9412, 0.84, True),
+    "ENAUSDT": (0.9540, 1.54, False),
+    "ETHUSDT": (0.9435, 0.91, False),
+    "HYPEUSDT": (0.9431, 1.11, False),
+    "LINKUSDT": (0.9454, 1.46, False),
+    "NEARUSDT": (0.9533, 1.44, False),
+    "ONDOUSDT": (0.9445, 1.48, True),
+    "SOLUSDT": (0.9424, 0.72, False),
+    "SUIUSDT": (0.9495, 0.82, True),
+    "UNIUSDT": (0.9495, 1.84, False),
+    "WLDUSDT": (0.9503, 1.40, False),
+    "XAUTUSDT": (0.7622, 1.04, False),
+    "XRPUSDT": (0.9480, 0.65, True),
+    "ZECUSDT": (0.9552, 1.18, False),
+}
+TAPE_CORRECTION = {"fill_points": -0.0346, "mark_bps": 0.29}
+
 
 @dataclass(frozen=True)
 class BinanceSpotFees:
@@ -165,6 +200,8 @@ class CostModel:
     #: the measured probability that a resting order fills within its deadline (1.0 = assumed); a maker
     #: family's signal is haircut by it — a unit open 30% of the time at 100% fills is open less at 94%
     fill_rate: float = 1.0
+    #: optional fill rate per weekday (Monday..Sunday) for a haircut that knows weekends fill less; None = `fill_rate` every day
+    fill_rate_by_dow: tuple | None = None
     #: Whether the venue settles funding on held positions. True for a
     #: perpetual; False for spot, where nothing is paid for holding. The
     #: runner reads this to decide whether the panel's `funding_rate` feature
@@ -251,12 +288,14 @@ class CostModel:
     @classmethod
     def maker_measured(
         cls,
-        fill_rate: float = 0.942,
-        adverse_bps: float = 1.06,
+        fill_rate: float | None = None,
+        adverse_bps: float | None = None,
         maker_fee_bps: float = 2.0,
         taker_fee_bps: float = 5.0,
         half_spread_bps: float = 1.0,
         impact_coef: float = 1.0,
+        day_type: str = "all",
+        by_dow: bool = False,
         verified_on: str = "2026-10-11 stage 1 live, Binance USDⓈ-M, 1,169 orders",
     ) -> "CostModel":
         """The maker cost **measured live** — stage 1 of the maker-fill study (`docs/24`, `docs/33`).
@@ -274,19 +313,35 @@ class CostModel:
         measured numbers that is 2.17 + 1.06 = 3.2 bps a side, ~6.5 bps a round trip; the ten days
         realised 5.8 bps a round trip on $21k traded, with no deadline takes forced on them.
         """
-        p = float(fill_rate)
+        if day_type not in STAGE1_MEASURED:
+            raise ValueError(f"day_type is one of {sorted(STAGE1_MEASURED)}")
+        m_fill, m_mark = STAGE1_MEASURED[day_type]
+        p = float(m_fill if fill_rate is None else fill_rate)
+        a = float(m_mark if adverse_bps is None else adverse_bps)
         fee = p * maker_fee_bps + (1 - p) * taker_fee_bps
-        adverse = p * adverse_bps + (1 - p) * half_spread_bps
+        adverse = p * a + (1 - p) * half_spread_bps
+        wd, we = STAGE1_MEASURED["weekday"][0], STAGE1_MEASURED["weekend"][0]
         return cls(
             fee_bps=fee,
             half_spread_bps=adverse,
             impact_coef=impact_coef,
             use_maker=True,
             fill_rate=p,
+            fill_rate_by_dow=(wd, wd, wd, wd, wd, we, we) if by_dow else None,
             funding=True,
-            name="binance_perp_maker_measured_2026-10",
+            name=f"binance_perp_maker_measured_2026-10_{day_type}" + ("_by_dow" if by_dow else ""),
             verified_on=verified_on,
         )
+
+    @classmethod
+    def maker_measured_for(cls, symbol: str, **kwargs) -> "CostModel":
+        """The measured maker model for one of the twenty tape names: its live numbers if it was traded in
+        stage 1, else the tape's numbers corrected by the live-minus-tape gap (`TAPE_CALIBRATED`)."""
+        if symbol not in TAPE_CALIBRATED:
+            raise ValueError(f"{symbol} was not on the stage-0 tape; the twenty names are {sorted(TAPE_CALIBRATED)}")
+        fill, mark, live = TAPE_CALIBRATED[symbol]
+        m = cls.maker_measured(fill_rate=fill, adverse_bps=mark, **kwargs)
+        return replace(m, name=f"{m.name}_{symbol}_{'live' if live else 'calibrated'}")
 
     @classmethod
     def bybit_perp(cls, half_spread_bps: float = 1.5, use_maker: bool = False, impact_coef: float = 1.0) -> "CostModel":

@@ -161,3 +161,22 @@ def test_measured_maker_model_blends_the_filled_and_unfilled_shares():
     assert CostModel.binance_perp().fill_rate == 1.0                                  # every other model is unchanged
     certain = CostModel.maker_measured(fill_rate=1.0)
     assert certain.fee_bps == 2.0 and certain.half_spread_bps == pytest.approx(1.06)
+
+
+def test_measured_model_knows_day_types_and_the_calibrated_tape_names():
+    from qr.execution.costs import STAGE1_MEASURED, TAPE_CALIBRATED, CostModel
+
+    wd, we = CostModel.maker_measured(day_type="weekday"), CostModel.maker_measured(day_type="weekend")
+    assert wd.fill_rate > CostModel.maker_measured().fill_rate > we.fill_rate            # weekends fill less
+    assert we.half_spread_bps > wd.half_spread_bps                                     # and are picked off more
+    assert CostModel.maker_measured(by_dow=True).fill_rate_by_dow == (0.9604,) * 5 + (0.9158,) * 2
+    with pytest.raises(ValueError):
+        CostModel.maker_measured(day_type="holiday")
+    btc = CostModel.maker_measured_for("BTCUSDT")
+    assert 0.93 < btc.fill_rate < 0.95 and "calibrated" in btc.name                     # the tape's 97.4% less the live gap
+    ada = CostModel.maker_measured_for("ADAUSDT")
+    assert ada.fill_rate == pytest.approx(TAPE_CALIBRATED["ADAUSDT"][0]) and "live" in ada.name
+    assert len(TAPE_CALIBRATED) == 20 and sum(v[2] for v in TAPE_CALIBRATED.values()) == 5
+    with pytest.raises(ValueError):
+        CostModel.maker_measured_for("NOPEUSDT")
+    assert STAGE1_MEASURED["all"] == (0.942, 1.06)

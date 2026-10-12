@@ -71,3 +71,17 @@ exchange the same evening. The last morning the timer fired after the mandate ha
 ran the close-on-failure unit (flat) and sent the alert it was built to send. **The timers are still
 enabled and should be disabled by the owner** (`systemctl disable --now qr-stage1.timer
 qr-stage1-summary.timer`); the live key stays trade-only, withdrawal-off and IP-locked to the box.
+
+## Addendum, 12 October — two refinements of the model
+
+- **Day type.** Weekdays filled 96.0% with a 60-second mark of +0.50 bps; weekends 91.6% and +1.76 bps.
+  `CostModel.maker_measured(day_type="weekday" | "weekend")` carries each, and `by_dow=True` gives the
+  runner a haircut that follows the calendar (`fill_rate_by_dow`).
+- **The tape, calibrated.** On the five names traded, live fills ran 3.5 points below the tape with a
+  spread of under one point between names, and the mark 0.3 bps above it — a correction steady enough to
+  apply to the fifteen tape names never traded live (`CostModel.maker_measured_for(symbol)`, table in
+  `reports/stage1/tape_calibration.md`: BTC 93.9%, ETH 94.4%, SOL 94.2%, down to BEAT 82% and XAUT 76%).
+  This is what a C2 re-test would price each name with.
+- **The runner applies the haircut** (`_FillHaircut`): a maker family's exposure is scaled by the measured
+  fill rate, per weekday when the model carries one, while the model's blended fee already pays the
+  deadline take for the unfilled share — both, as `docs/24` fixed in advance.

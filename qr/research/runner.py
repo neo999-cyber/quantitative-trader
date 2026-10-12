@@ -174,13 +174,17 @@ class _FillHaircut(Strategy):
     """`inner`'s target weights scaled by a measured fill rate (see `run_backtest`)."""
     family = "fill_haircut"
 
-    def __init__(self, inner: Strategy, fill_rate: float) -> None:
-        self.inner, self.fill_rate = inner, float(fill_rate)
+    def __init__(self, inner: Strategy, fill_rate: float, by_dow: tuple | None = None) -> None:
+        self.inner, self.fill_rate, self.by_dow = inner, float(fill_rate), by_dow
         self.params = {**getattr(inner, "params", {}), "fill_rate": self.fill_rate}
         self.family = getattr(inner, "family", "fill_haircut")
 
     def target_weights(self, panel, universe=None):
-        return self.inner.target_weights(panel, universe) * self.fill_rate
+        w = self.inner.target_weights(panel, universe)
+        if self.by_dow is not None:   # weekends fill less: the bar's weekday decides the haircut
+            scale = pd.Series([self.by_dow[d] for d in w.index.dayofweek], index=w.index)
+            return w.mul(scale, axis=0)
+        return w * self.fill_rate
 
 
 def run_backtest(
@@ -214,7 +218,7 @@ def run_backtest(
         # the measured maker model (`CostModel.maker_measured`): a unit that is open 30% of the time at
         # 100% fills is open less at 94%, so the signal's exposure is scaled by the fill rate; the model's
         # blended fee already pays the deadline take for the unfilled share — both, as docs/24 fixed
-        strategy = _FillHaircut(strategy, fill_rate)
+        strategy = _FillHaircut(strategy, fill_rate, getattr(costs, "fill_rate_by_dow", None))
     if engine == "ledger":
         from qr.research.ledger import run_ledger
 

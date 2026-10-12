@@ -170,6 +170,19 @@ def drift(weights_prev: pd.DataFrame, returns: pd.DataFrame) -> pd.DataFrame:
     return grown.div(port, axis=0).fillna(0.0)
 
 
+class _FillHaircut(Strategy):
+    """`inner`'s target weights scaled by a measured fill rate (see `run_backtest`)."""
+    family = "fill_haircut"
+
+    def __init__(self, inner: Strategy, fill_rate: float) -> None:
+        self.inner, self.fill_rate = inner, float(fill_rate)
+        self.params = {**getattr(inner, "params", {}), "fill_rate": self.fill_rate}
+        self.family = getattr(inner, "family", "fill_haircut")
+
+    def target_weights(self, panel, universe=None):
+        return self.inner.target_weights(panel, universe) * self.fill_rate
+
+
 def run_backtest(
     panel: Panel,
     strategy: Strategy,
@@ -196,6 +209,12 @@ def run_backtest(
     here — this engine's cash earns nothing, so a rate is refused rather
     than dropped.
     """
+    fill_rate = float(getattr(costs, "fill_rate", 1.0) or 1.0) if costs is not None else 1.0
+    if fill_rate < 1.0:
+        # the measured maker model (`CostModel.maker_measured`): a unit that is open 30% of the time at
+        # 100% fills is open less at 94%, so the signal's exposure is scaled by the fill rate; the model's
+        # blended fee already pays the deadline take for the unfilled share — both, as docs/24 fixed
+        strategy = _FillHaircut(strategy, fill_rate)
     if engine == "ledger":
         from qr.research.ledger import run_ledger
 

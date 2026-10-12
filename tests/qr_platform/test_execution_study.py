@@ -278,3 +278,49 @@ def test_close_all_ends_with_a_market_order_when_the_touch_never_holds_enough(tm
     kinds = [r[0].rsplit(":", 2)[1] for r in journal.db.execute("SELECT signal_id FROM intents WHERE action = 'EXIT' ORDER BY rowid").fetchall()]
     assert kinds == ["exit_maker"] + ["exit_taker"] * Session.CLOSE_ROUNDS + ["exit_market"]
     assert resume(journal, {"fake": fake}, "acct") == []
+
+
+def test_held_names_are_re_marked_each_tick_so_other_entries_are_not_refused(tmp_path):
+    fake = FakeVenue(name="fake", instruments={s: Instrument("fake", s, D("0.0001"), D("0.1"), D("1"), D("5")) for s in ("DOGEUSDT", "SUIUSDT")},
+                     books={"DOGEUSDT": (D("0.1000"), D("0.1001")), "SUIUSDT": (D("0.7000"), D("0.7001"))})
+    journal = Journal(tmp_path / "j.sqlite")
+    config = StudyConfig(account="acct", symbols={"fake": ["DOGEUSDT", "SUIUSDT"]}, hours_utc=(7, 15), max_gross_usd="100", session_expires_at=(T0 + timedelta(hours=6)).isoformat())
+    start(journal, config, {"fake": fake}, f"{config.digest()} STUDY", now=T0)
+    clock = Clock()
+    s = Session(journal, config, {"fake": fake}, now=clock, log=lambda m: None)
+    s.tick()                                  # slot 1: DOGE and SUI entries rest
+    fake._exec(fake.orders[[c for c, o in fake.orders.items() if o.symbol == "SUIUSDT"][0]], D("14.2"))   # SUI fills; its mark is from this tick
+    clock.advance(900)                        # slot 2, 15 minutes later: SUI's mark is now 900 s old
+    s.tick()
+    outcomes = journal.db.execute("SELECT symbol, outcome FROM study_attempts WHERE slot = ? ", (datetime.fromtimestamp(int(clock.t.timestamp()) // 900 * 900, tz=timezone.utc).isoformat(),)).fetchall()
+    assert ("DOGEUSDT", "placed:ACKED") in outcomes   # before the fix: refused, nav_uncertain (SUI's stale mark)
+
+
+def test_an_entry_netted_through_by_later_entries_is_dropped_without_refusals(tmp_path):
+    fake, journal, config = make(tmp_path)
+    start(journal, config, {"fake": fake}, f"{config.digest()} STUDY", now=T0)
+    clock = Clock()
+    logs = []
+    s = Session(journal, config, {"fake": fake}, now=clock, log=logs.append)
+
+    def fill_entries_only():
+        entries = {r[0] for r in journal.db.execute("SELECT client_id FROM intents WHERE action = 'ENTRY'").fetchall()}
+        for cid, o in list(fake.orders.items()):
+            if o.status == "NEW":
+                if cid in entries:
+                    fake._exec(o, o.qty)
+                else:
+                    fake.cancel(o.symbol, cid)   # exits never fill at this venue today
+
+    s.tick(); fill_entries_only(); s.tick()      # slot 1: BUY fills (+14.2)
+    assert fake.positions() == {"SUIUSDT": D("14.2")}
+    for _ in range(2):                           # sides alternate: slot 2 SELL fills (flat), slot 3 BUY fills (+14.2 again)
+        clock.advance(900)
+        s.tick(); fill_entries_only(); s.tick()
+    assert fake.positions() == {"SUIUSDT": D("14.2")}
+    # the slot-2 SELL entry is still "filled, no exit" in the working set, but the position is long: an exit on
+    # its side (a BUY) would not reduce anything — before the fix it was refused on every tick, six lines a day
+    for _ in range(3):
+        clock.advance(5)
+        s.tick()
+    assert not any("exit_does_not_reduce" in m for m in logs)

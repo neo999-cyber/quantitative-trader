@@ -84,6 +84,10 @@ def preview(config: StudyConfig, venues: dict, out: Callable[[str], None] = prin
     out(f"caps: ${config.max_order_usd}/order, ${config.max_gross_usd} gross incl. pending, ${config.stop_loss_usd} session stop, "
         f"hours {config.hours_utc[0]:02d}-{config.hours_utc[1]:02d} UTC, slot {config.slot_s}s, TTL {config.ttl_s}s, "
         f"taker exit {config.exit_after_fill_s}s after a fill; expires {config.session_expires_at or '(unset)'}")
+    names = sum(len(v) for v in config.symbols.values())
+    if D(config.max_gross_usd) < 2 * names * D(config.max_order_usd):
+        out(f"NOTE: gross cap ${config.max_gross_usd} is below 2 × {names} names × ${config.max_order_usd}: while a slot's positions are still "
+            f"open, the next slot's entries will be refused by the cap (stage 1 refused 235 of 1,404 attempts this way)")
     for name, venue in venues.items():
         bal = venue.balances()
         pos = venue.positions()
@@ -312,6 +316,14 @@ class Session:
 
     # -- one pass --------------------------------------------------------------
 
+    def _refresh_held_marks(self, t: datetime) -> None:
+        """A fresh mark for every held name before anything is decided: a name whose entry was skipped this
+        tick kept its last mark, and the policy then refused *other* names' entries for a NAV it could not
+        value (235 refusals in stage 1, `nav_uncertain`). One book call per held name per tick."""
+        for (venue, symbol), qty in self.journal.positions(self.config.account).items():
+            if qty != 0 and venue in self.venues:
+                self._mark(venue, symbol)
+
     def tick(self) -> None:
         t = self.now()
         if self.open_nav is None:
@@ -321,7 +333,8 @@ class Session:
                 self.open_nav = D(0)
         # a fault in one step is logged and the rest of the pass still runs: the
         # exits and the marks must not depend on the entries' code path
-        for step in (self._reconcile_working, self._place_entries if (self.journal.mode() == "STUDY" and self.in_hours(t)) else None,
+        for step in (self._reconcile_working, self._refresh_held_marks,   # after the fills are booked, before anything is sized against them
+                     self._place_entries if (self.journal.mode() == "STUDY" and self.in_hours(t)) else None,
                      self._expire_and_exit, self._settle_marks):
             if step is None:
                 continue
@@ -422,8 +435,11 @@ class Session:
             return
         bid, ask = book
         side = "SELL" if w.intent.side == "BUY" else "BUY"
-        held = abs(self.journal.positions(self.config.account).get((venue, symbol), D(0)))
-        if held == 0:
+        signed = self.journal.positions(self.config.account).get((venue, symbol), D(0))
+        held = abs(signed)
+        if held == 0 or (signed > 0) != (w.intent.side == "BUY"):
+            # flat, or the position now has the other sign: later entries netted this one through, and an
+            # exit on its side would not reduce anything (six refusals a day in stage 1's log, harmless)
             del self.working[w.intent.client_id]
             return
         ins = self._instrument(venue, symbol)

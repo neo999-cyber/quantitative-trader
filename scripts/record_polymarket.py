@@ -12,11 +12,16 @@ Two venues, both public, no key, standard library plus `websockets`:
 * **polymarket** — CLOB market channel `wss://ws-subscriptions-clob.polymarket.com/ws/market`:
   `book` (full book on subscribe), `price_change`, `last_trade_price`,
   `tick_size_change`, for the YES and NO tokens of every *active*
-  BTC/ETH/SOL threshold market (horizon ≥ 7 days; "Up or Down", dated-hour
-  and "which first" markets excluded by rule). The token list is rebuilt
-  from Gamma `public-search` every `--refresh` seconds and the socket
-  reconnected when it changes, so new weekly markets are picked up within
-  the hour. The market catalogue in force is written beside the data.
+  BTC/ETH/SOL threshold market whose life from listing to settlement is at
+  least `--min-horizon-days` (7 by default, v1's rule; **1 on the box from
+  13 October 2026 05:30 UTC**, the owner's choice of option B in `docs/31`
+  §16, which admits the daily "above $X on <date>" ladders — listed with
+  just under seven days to run, settled on the Binance 1-minute close at
+  noon ET; "Up or Down", dated-hour and "which first" markets stay excluded
+  by rule). The token list is rebuilt from Gamma `public-search` every
+  `--refresh` seconds and the socket reconnected when it changes, so new
+  markets are picked up within the hour. The market catalogue in force is
+  written beside the data, with the horizon rule that produced it.
 * **deribit** — `wss://www.deribit.com/ws/api/v2`, channels
   `deribit_volatility_index.{btc,eth}_usd` and
   `deribit_price_index.{btc,eth,sol}_usd`: the model inputs, at the
@@ -73,6 +78,9 @@ QUERIES = (
     "bitcoin reach", "bitcoin dip", "bitcoin hit", "what price will bitcoin hit", "bitcoin above",
     "ethereum reach", "ethereum dip", "ethereum hit", "what price will ethereum hit", "ethereum above",
     "solana reach", "solana dip", "what price will solana hit",
+    # 13 October 2026 (option B, docs/31 §16): the daily ladders are one event an asset a day, "Bitcoin above ___ on October 13?";
+    # "solana above" was missing and "price of <asset>" is how their questions begin
+    "solana above", "price of bitcoin", "price of ethereum", "price of solana",
 )
 # the same classification as qr/data/polymarket.py, copied so the box needs nothing installed
 EXCLUDE = re.compile(r"up or down|\b\d{1,2}(:\d{2})?\s?(am|pm)\s?(et|utc)\b|\bfirst\?|\bor \$", re.I)
@@ -90,8 +98,8 @@ def _get(url: str) -> dict | list:
         return json.loads(r.read())
 
 
-def active_markets() -> list[dict]:
-    """Every active, classifiable BTC/ETH/SOL threshold market with ≥ 7 days to its end, with its two token ids."""
+def active_markets(min_horizon_days: int = MIN_HORIZON_DAYS) -> list[dict]:
+    """Every active, classifiable BTC/ETH/SOL threshold market whose listing-to-settlement life is ≥ `min_horizon_days`, with its two token ids."""
     now = datetime.now(timezone.utc)
     seen, out = set(), []
     for q in QUERIES:
@@ -117,7 +125,7 @@ def active_markets() -> list[dict]:
                         start_dt = datetime.fromisoformat(start.replace("Z", "+00:00"))
                     except Exception:  # noqa: BLE001
                         continue
-                    if end_dt <= now or (end_dt - start_dt).days < MIN_HORIZON_DAYS:
+                    if end_dt <= now or (end_dt - start_dt).days < min_horizon_days:
                         continue
                     tokens = m.get("clobTokenIds")
                     if isinstance(tokens, str):
@@ -208,18 +216,19 @@ class Recorder:
             self._fh.close()
 
 
-async def run_polymarket(rec: Recorder, refresh: float, verbose: bool, smoke: float | None, near: float = 0.02) -> None:
+async def run_polymarket(rec: Recorder, refresh: float, verbose: bool, smoke: float | None, near: float = 0.02,
+                         min_horizon_days: int = MIN_HORIZON_DAYS) -> None:
     import websockets
     t_end = time.monotonic() + smoke if smoke else None
     backoff = 2.0
     last_tob: dict = {}
     while True:
-        markets = active_markets()
+        markets = active_markets(min_horizon_days)
         yes = {m["yes_token"] for m in markets}
         ids = sorted(yes)  # YES only: the CLOB folds NO orders into the YES book
-        (rec.out / "catalogue.json").write_text(json.dumps({"at": time.time(), "markets": markets}))
+        (rec.out / "catalogue.json").write_text(json.dumps({"at": time.time(), "min_horizon_days": min_horizon_days, "markets": markets}))
         with (rec.out / "catalogue.jsonl").open("a", encoding="utf-8") as fh:  # every refresh kept: a market that ends drops out of the next one
-            fh.write(json.dumps({"at": time.time(), "markets": markets}, separators=(",", ":")) + "\n")
+            fh.write(json.dumps({"at": time.time(), "min_horizon_days": min_horizon_days, "markets": markets}, separators=(",", ":")) + "\n")
         print(f"[polymarket] {len(markets)} active markets, {len(ids)} tokens", flush=True)
         if not ids:
             await asyncio.sleep(min(refresh, 300))
@@ -307,6 +316,8 @@ def main(argv=None) -> int:
     ap.add_argument("--refresh", type=float, default=3600.0, help="seconds between token-list rebuilds (polymarket)")
     ap.add_argument("--smoke", type=float, default=None, help="run this many seconds and stop")
     ap.add_argument("--near", type=float, default=0.02, help="keep price changes within this of the mid (polymarket); top-of-book moves are always kept")
+    ap.add_argument("--min-horizon-days", type=int, default=MIN_HORIZON_DAYS,
+                    help="admit a market only if its listing-to-settlement life is at least this many days (7: v1's rule; 1 admits the daily ladders)")
     ap.add_argument("--verbose", action="store_true")
     ap.add_argument("--print-systemd", action="store_true")
     a = ap.parse_args(argv)
@@ -328,7 +339,7 @@ def main(argv=None) -> int:
     for s in (signal.SIGINT, signal.SIGTERM):
         signal.signal(s, _stop)
     try:
-        coro = run_polymarket(rec, a.refresh, a.verbose, a.smoke, a.near) if a.venue == "polymarket" else run_deribit(rec, a.verbose, a.smoke)
+        coro = run_polymarket(rec, a.refresh, a.verbose, a.smoke, a.near, a.min_horizon_days) if a.venue == "polymarket" else run_deribit(rec, a.verbose, a.smoke)
         loop.run_until_complete(coro)
     except (asyncio.CancelledError, KeyboardInterrupt):
         pass

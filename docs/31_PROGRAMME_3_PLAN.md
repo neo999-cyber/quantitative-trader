@@ -564,3 +564,66 @@ below is registered, pulled or run.
 - **Proposed shape when we return:** one data-expansion programme with two registrations — the ETF-flow
   pressure mechanism, and C2 re-tested against the measured maker cost — with the other feeds recorded
   forward from now so they exist in three months. Nothing starts without the owner's yes.
+
+## 16. 13 October 2026 — after stage 1: the dry-run, the C2 memo, the recorders
+
+The owner's answers to the 12 October list: the key's futures permission unticked (their hand), yes to
+the parser dry-run, yes to the C2 re-test, "let's work on the decisions". Done today, in that order:
+
+- **Parser dry-run over the real recording — counts only, no wedge.** `scripts/p3a_dryrun_counts.py`
+  reads the recording exactly as the 27 October engine does (every hourly gzip member, every line, the
+  inner JSON) and counts: files, days, truncated members, messages by type and channel, tokens with
+  quotes and with trade prints, gaps, the catalogue's shape, then (laptop stage) the frozen classifier's
+  coverage and the asset × settlement-date clusters. It never computes a model probability or compares a
+  price with anything; it is disclosed in the trial log as a *note* under `p3_threshold_wedge_v2_intraday`,
+  not a run. Standard library, so the stream pass ran on the box beside the recorder (22 minutes) and again on the
+  laptop's mirror (7.7 minutes; the two agree line for line except the hour being written). Trial-log note
+  seq 940; report `reports/p3/p3a_v2_dryrun_2026-10-13.md`. **The recording is sound and the sample is not
+  there:** 23 days, 67.4 M Polymarket messages (32,186 trade prints over 248 of 256 tokens), 8.45 M Deribit
+  prints, no gap over four minutes on Polymarket; the catalogue's 255 markets all classify (`reach` 143,
+  `dip` 112, `above` 0) and fall into **17 asset × settlement-date clusters in total** — monthly ("in
+  October"), year-end and quarterly ladders — of which **3 end by 27 October and 6 by 30 November**, against
+  the memo's minimum of 30 with a fill. The registered read is therefore deferred on both dates by
+  construction, and at three new monthly ladders a month the minimum is not reached before mid-2027. The
+  engine need not run on 27 October to know this (and running it would spend the "read once"); a note will
+  record the deferral on the day. The cause: the memo assumed "five weekly settlement cycles", but
+  Polymarket's short-dated BTC/ETH/SOL ladders are the *daily* "above $X on <date>" markets (~45–60 a day
+  across the three assets, listed with just under seven days to run, liquidity in the final 48 hours:
+  ~$80k on the settlement day, ~$4k two days out) and v1's ≥ 7-day horizon rule, carried into the
+  recorder, never admits them. **The owner's options, nothing started:** (A) leave v2 as registered — the
+  recording costs nothing and the verdict arrives in 2027; (B) extend the recorder to the daily ladders
+  from the day the owner says so (forward-only; ~3 clusters a day, so 30 clusters in ten days), with σ
+  from the options surface at the matching one-to-seven-day tenor (the surface recorder below records
+  exactly that) and a **v3 memo** — which needs a fourth Programme 3 registration, i.e. the owner's
+  decision to extend the counter of three. The v1 finding (daily data, +2.6 points, t 2.0, placebo below)
+  is unchanged by any of this.
+- **One pass, not thirteen.** The v2 script re-read the whole recording once per variant and control —
+  thirteen passes of ~100 million lines, hours of gzip and JSON for nothing on 27 October. `WedgeSession.run`
+  is now `step` + `settle`, and `run_many` feeds every message to all thirteen sessions from one pass; the
+  sessions share no state, and a test shows `run_many` produces `run`'s trade tables exactly. The rule, the
+  fill model and the grid are untouched; the registered memo (seq 934) is not.
+- **C2 v2 drafted, not registered:** `docs/prereg/p2_venue_spread_v2_maker.md` (+ `_always_in`). The one
+  change from v1 is the cost model, `--costs xvenue_maker`: the Binance leg at stage 1's measured maker cost
+  (3.23 bps a side: fee blended at the 94.2% fill, the +1.06 bps 60-second mark as the spread; weekday/
+  weekend fill rates as the runner's haircut, which `carry_pair` now inherits from a measured leg), the Bybit
+  leg taker as before (7.0 bps, the only leg a measurement exists for) — **10.23 bps a side against v1's
+  12.50**. A pre-stated sensitivity, `xvenue_maker_both` (6.46 bps; Bybit *assumed* to fill as Binance did),
+  runs beside it and cannot pass on its own. The memo's honest prior is FAIL at gates 4 and 5: the measured
+  cost takes 18% off the drag (+0.3%/yr of net return), and a 2–3%/yr book at 1× does not beat a 3%/yr
+  T-bill, which is the hurdle gate 5 holds it to because idle margin on an exchange earns nothing. Its value
+  is the number in the "what it would take" line — short by costs (then a Bybit measurement is next) or by
+  the spread's own size (then C2 is closed at 1×). Registration is the owner's yes; the run is a night job.
+- **The recorders of §15 (items 4 and 5), built and not started:** `scripts/record_surface.py`, standard
+  library, one hourly snapshot of Deribit's full BTC and ETH options book summary (every strike's mark IV,
+  open interest, volume, bid/ask — ~900 instruments a currency, ~40 KB gzipped a snapshot, ~2 MB a day) and
+  Hyperliquid's per-asset contexts (funding, open interest, oracle/mark, premium, day volume for ~230 perps,
+  ~14 KB a snapshot). Units in `deploy/surface/` (`qr-surface.timer`, two minutes past every hour). Probed
+  once from the laptop to fix the fields: BTC open interest today sits 142k contracts on 30 October and
+  127k on 25 December — the expiry-pinning mechanism's raw material. The per-address liquidation map
+  Hyperliquid makes public needs a walk over every account and is a separate build. **Starting them on the
+  box is the owner's yes**; the box has 26 GB free.
+- **The key.** The owner unticked *Enable Futures*; from the box the key still answered a futures balance
+  and position read afterwards (twice, 20 minutes apart). A key without the futures permission is refused
+  on the futures endpoints, so the likely reading is that the edit was not saved (the save asks for 2FA).
+  Flagged to the owner to check the key page; nothing is scheduled either way and the standing mandate
+  expired on 11 October.

@@ -573,6 +573,27 @@ metrics start 2021-12, so the sample cannot grow backwards) or on a
 second venue's OI (Bybit's is mirrored for funding only) — a new
 pre-registration, not a re-run.
 
+**13 October 2026, 10:30 Dubai — the owner's answers, and what they set off (`docs/31` §16).** Owner: the
+key's futures permission unticked (their hand), yes to the parser dry-run, yes to the C2 re-test, "let's work
+on the decisions". (1) **Dry-run of the 27 October read over the real recording — counts only, no wedge**
+(`scripts/p3a_dryrun_counts.py`, standard library, run on the box beside the recorder and again on the
+laptop's mirror as an integrity check; a trial-log *note*, not a run, under `p3_threshold_wedge_v2_intraday`).
+Recording sound (23 days, 67.4 M messages, 32,186 trade prints, no gap over four minutes); sample not there: the 255 recorded markets form **17 settlement ladders in total, 3 ending by 27 October and 6 by 30 November, against the memo's minimum of 30** — the daily "above $X on <date>" ladders are listed with just under seven days to run and v1's ≥ 7-day rule in the recorder never admits them. The read is deferred by construction on both dates; note seq 940; `reports/p3/p3a_v2_dryrun_2026-10-13.md`; the owner's options in `docs/31` §16. (2) The v2 engine re-read the recording once per variant and control — thirteen
+passes of ~100 million lines; `run_many` now feeds all thirteen sessions from one pass, proven equal to
+`run` by a test; rule and memo untouched. (3) **C2 v2 drafted, not registered** —
+`docs/prereg/p2_venue_spread_v2_maker.md`: v1 verbatim except the cost, `--costs xvenue_maker` = the Binance
+leg at stage 1's measured maker cost (3.23 bps a side, fill-rate haircut inherited by the unit through
+`carry_pair`) plus the Bybit leg taker (7.0), 10.23 bps a side against v1's 12.50; a pre-stated sensitivity
+with both legs at the measured model (6.46; Bybit assumed) runs beside it and cannot pass alone. Honest prior:
+FAIL at gates 4 and 5 — the cost change is +0.3%/yr of net return on a 2–3%/yr book held to the full T-bill
+hurdle at 1×; the value is the number in the "what it would take" line. Registration and the night run are the
+owner's yes; the counter would go to twelve. (4) The §15 recorders for Deribit's options surface and
+Hyperliquid's positioning are built (`scripts/record_surface.py`, hourly, ~2 MB a day, `deploy/surface/`),
+tested on fixtures, probed once from the laptop, **not started** — the owner's yes. (5) From the box the live
+key still answered a futures balance read after the untick (twice); flagged — likely the save did not go
+through. The working tree's `study/rehearsal.testnet.json` carries the last rehearsal's expiry stamp,
+uncommitted, as before. Tests pass.
+
 **12 October 2026, 19:30 Dubai — corrections after stage 1, and two refinements of the cost model.** On the
 owner's "let's do 1, 2, 5": (1) the harness re-marks every held name each tick, after the fills are booked
 and before anything is sized — the `nav_uncertain` refusals; and `preview` now warns when the gross cap is

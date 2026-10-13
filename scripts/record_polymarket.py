@@ -55,6 +55,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import gzip
+import heapq
 import json
 import os
 import re
@@ -65,6 +66,15 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
+
+try:  # the daily ladders' books are a megabyte each and the CLOB sends every token's on (re)connect; the stdlib
+    import orjson  # parser cannot keep up with that dump and the venue closes the socket as a "slow consumer"
+
+    def _loads(s): return orjson.loads(s)
+    def _dumps(o): return orjson.dumps(o).decode()
+except ImportError:  # pragma: no cover - the laptop; same bytes, slower
+    def _loads(s): return json.loads(s)
+    def _dumps(o): return json.dumps(o, separators=(",", ":"))
 
 DEFAULT_OUT = Path(os.environ.get("QR_ROOT", Path.home() / "qr" / "lake")) / "polymarket_live"
 GAMMA = "https://gamma-api.polymarket.com"
@@ -142,11 +152,18 @@ def active_markets(min_horizon_days: int = MIN_HORIZON_DAYS) -> list[dict]:
     return out
 
 
-def compact(raw: str, yes_tokens: set[str], last_tob: dict, near: float = 0.02) -> str | None:
-    """Polymarket message without whitespace, hashes, the NO-side mirror, or deep-book churn; None when nothing is left."""
+def compact(raw: str, yes_tokens: set[str], last_tob: dict, near: float = 0.02, book_depth: int | None = None) -> str | None:
+    """Polymarket message without whitespace, hashes, the NO-side mirror, or deep-book churn; None when nothing is left.
+
+    `book_depth` keeps the best `book_depth` levels a side of a full `book` snapshot (the best bid is the highest
+    bid, the best ask the lowest ask; the CLOB sends bids ascending and asks descending). The daily ladders'
+    books run to a megabyte of JSON each — thousands of one-tick levels of bot quotes — and the CLOB sends every
+    token's full book on every (re)connect, 40 MB gzipped an hour for 659 tokens; the rules read the top of
+    book, and fifty levels is more depth than any reward band or posted order ever touches.
+    """
     try:
-        msg = json.loads(raw)
-    except json.JSONDecodeError:
+        msg = _loads(raw)
+    except ValueError:  # json.JSONDecodeError and orjson.JSONDecodeError are both ValueErrors
         return raw
     msgs = msg if isinstance(msg, list) else [msg]
     out = []
@@ -155,6 +172,17 @@ def compact(raw: str, yes_tokens: set[str], last_tob: dict, near: float = 0.02) 
             out.append(m)
             continue
         m.pop("hash", None)
+        if book_depth and m.get("event_type") == "book":
+            for side, best_is_high in (("bids", True), ("asks", False)):
+                levels = m.get(side)
+                if isinstance(levels, list) and len(levels) > book_depth:
+                    try:
+                        pick = heapq.nlargest if best_is_high else heapq.nsmallest
+                        levels = pick(book_depth, levels, key=lambda l: float(l["price"]))
+                    except (KeyError, TypeError, ValueError):
+                        levels = levels[-book_depth:]
+                    m[side] = levels
+                    m["book_depth"] = book_depth
         if m.get("event_type") == "price_change" and isinstance(m.get("price_changes"), list):
             keep = []
             for c in m["price_changes"]:
@@ -178,7 +206,7 @@ def compact(raw: str, yes_tokens: set[str], last_tob: dict, near: float = 0.02) 
         out.append(m)
     if not out:
         return None
-    return json.dumps(out if isinstance(msg, list) else out[0], separators=(",", ":"))
+    return _dumps(out if isinstance(msg, list) else out[0])
 
 
 class Recorder:
@@ -217,7 +245,7 @@ class Recorder:
 
 
 async def run_polymarket(rec: Recorder, refresh: float, verbose: bool, smoke: float | None, near: float = 0.02,
-                         min_horizon_days: int = MIN_HORIZON_DAYS) -> None:
+                         min_horizon_days: int = MIN_HORIZON_DAYS, book_depth: int | None = None) -> None:
     import websockets
     t_end = time.monotonic() + smoke if smoke else None
     backoff = 2.0
@@ -253,7 +281,7 @@ async def run_polymarket(rec: Recorder, refresh: float, verbose: bool, smoke: fl
                         continue
                     if raw == "PONG":
                         continue
-                    line = compact(raw if isinstance(raw, str) else raw.decode(), yes, last_tob, near)
+                    line = compact(raw if isinstance(raw, str) else raw.decode(), yes, last_tob, near, book_depth)
                     if line is not None:
                         rec.write(line)
                     if verbose and rec.lines % 200 == 0:
@@ -316,6 +344,8 @@ def main(argv=None) -> int:
     ap.add_argument("--refresh", type=float, default=3600.0, help="seconds between token-list rebuilds (polymarket)")
     ap.add_argument("--smoke", type=float, default=None, help="run this many seconds and stop")
     ap.add_argument("--near", type=float, default=0.02, help="keep price changes within this of the mid (polymarket); top-of-book moves are always kept")
+    ap.add_argument("--book-depth", type=int, default=None,
+                    help="keep only the best N levels a side of each full book snapshot (None: whole book; 50 on the box from 13 Oct 2026)")
     ap.add_argument("--min-horizon-days", type=int, default=MIN_HORIZON_DAYS,
                     help="admit a market only if its listing-to-settlement life is at least this many days (7: v1's rule; 1 admits the daily ladders)")
     ap.add_argument("--verbose", action="store_true")
@@ -339,7 +369,7 @@ def main(argv=None) -> int:
     for s in (signal.SIGINT, signal.SIGTERM):
         signal.signal(s, _stop)
     try:
-        coro = run_polymarket(rec, a.refresh, a.verbose, a.smoke, a.near, a.min_horizon_days) if a.venue == "polymarket" else run_deribit(rec, a.verbose, a.smoke)
+        coro = run_polymarket(rec, a.refresh, a.verbose, a.smoke, a.near, a.min_horizon_days, a.book_depth) if a.venue == "polymarket" else run_deribit(rec, a.verbose, a.smoke)
         loop.run_until_complete(coro)
     except (asyncio.CancelledError, KeyboardInterrupt):
         pass

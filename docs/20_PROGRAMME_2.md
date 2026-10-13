@@ -573,6 +573,30 @@ metrics start 2021-12, so the sample cannot grow backwards) or on a
 second venue's OI (Bybit's is mirrored for funding only) — a new
 pre-registration, not a re-run.
 
+**13 October 2026, 13:30 Dubai — C2 `p2_venue_spread_v2_maker`: verdict FAIL at gate 3 (and 4, 5, 6, 7, 8); the
+twelfth candidate.** The owner ("let's do options A and B; if anything else can be done now, do it") took the
+drafted memo as read; registered seq 941 (sensitivity 942, control 943), run on the laptop 04:50–05:15 UTC, three
+counted runs. The one change from v1 is the cost: the Binance leg at stage 1's measured maker model with its
+weekday/weekend fill haircut, the Bybit leg taker — 10.23 bps a side against 12.50.
+
+| run | gate 2 | gate 3 | gate 4 | gate 5 | gate 6 | gate 7 | gate 8 |
+|---|---|---|---|---|---|---|---|
+| always-in control | **FAIL** gross ≤ 0 | t −8.54 | — | skip | p 0.03 | 0/9 | 0% of years |
+| family (18), measured maker | PASS 65% of gross survives | **FAIL** t 1.84 | FAIL DSR 0.70 (eff. 3) | FAIL PBO 0.70, SPA p 0.97 vs cash | FAIL p 0.12 | FAIL 0.10 = 15% IS | 23 round trips, 40% of years |
+| sensitivity (18), both legs at the measured maker (Bybit assumed) | PASS 78% survives | WARN t 2.57 | FAIL DSR 0.84 (eff. 3) | FAIL PBO 0.64, SPA p 0.85 vs cash | FAIL p 0.13 | WARN 0.44 = 47% IS, WFE 0.91 | 32 round trips |
+
+Best variant on the ledger: net Sharpe **0.66** (gross 1.02), gross 3.0%/yr, drawdown 2.9%, in the market 16% of
+the time. Against v1 on the same engine (net 0.54, gross 1.01, t 1.50, `docs/20` 19 September): the measured
+cost adds ~0.1 of Sharpe and 0.3 of t, which is the arithmetic the memo gave in advance. The spread is real
+(gate 2 now passes), the selection matters (the control loses, t −8.5), and there is not enough of it: a
+2–3%/yr book at 1× against a 3%/yr T-bill (SPA p 0.97) with 23 round trips in 4.7 years. **Short by its own
+size, not by costs** — the "what it would take" line is now a number: at zero cost the gross Sharpe is 1.02,
+which still fails gate 4's deflation over 18 and gate 5 against cash. The pre-stated sensitivity says how far a
+Bybit measurement would carry it: with both legs at the measured maker model, net Sharpe 0.93 (gross 1.20), t 2.57,
+nine of nine CV paths positive — and still DSR 0.84 over 18 and SPA p 0.85 against cash. So: closer than costs alone
+suggested, and still not over the bar a 3.4%/yr gross book at 1× has to clear. C2 is closed at 1×; leverage would be
+a different registration and is not proposed. Holdout not opened. Programme 2: **twelve for twelve.**
+
 **13 October 2026, 10:30 Dubai — the owner's answers, and what they set off (`docs/31` §16).** Owner: the
 key's futures permission unticked (their hand), yes to the parser dry-run, yes to the C2 re-test, "let's work
 on the decisions". (1) **Dry-run of the 27 October read over the real recording — counts only, no wedge**

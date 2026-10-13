@@ -627,3 +627,60 @@ the parser dry-run, yes to the C2 re-test, "let's work on the decisions". Done t
   on the futures endpoints, so the likely reading is that the edit was not saved (the save asks for 2FA).
   Flagged to the owner to check the key page; nothing is scheduled either way and the standing mandate
   expired on 11 October.
+
+## 17. 13 October 2026, later — options A and B taken; C2 v2 run; the counter extended to four
+
+The owner: "let's do options A and B; if anything else can be done now, do it." Done, in order of what was
+forward-only:
+
+- **B, the recorder (04:53 UTC).** `scripts/record_polymarket.py` takes `--min-horizon-days` (7 by default,
+  v1's rule); the box unit runs it at **1**, which admits the daily "above $X on <date>" ladders (listed with
+  just under seven days to run). Four discovery queries were missing ("solana above", "price of
+  bitcoin/ethereum/solana" — the daily questions begin that way), added. The horizon rule is stamped on every
+  catalogue line. Restarted 04:53:05 UTC: **659 active markets** (231 daily-ladder markets = 11 strikes × 3
+  assets × 7 days, plus 428 monthly and longer) against 255 before; the message rate is ~3.7× (10 M lines a
+  day, ~300 MB gzipped), so the box's 25 GB lasts to about the turn of the year — a daily disk alert now
+  pushes through ntfy below 5 GB (`deploy/surface/disk_alert.sh`, cron 06:00 UTC). The old recorder is kept
+  beside it as `record_polymarket.py.v1_2026-09-21`.
+- **The surface recorder (04:49 UTC).** `qr-surface.timer` on the box, two minutes past every hour:
+  Deribit's full BTC and ETH option book summary (1,648 instruments) and Hyperliquid's 234 asset contexts;
+  first snapshot 04:49:24 UTC, 84 KB. Mirrored to `~/qr/lake/mirror/surface_live/`. Read through the new
+  loader, the BTC ATM curve at 05:02 UTC: 13 Oct 28.2%, 14 Oct 32.6%, 15 Oct 35.2%, 16 Oct 34.0%, 23 Oct
+  32.8%, 30 Oct 33.3%, 27 Nov 36.6%, 25 Dec 37.1% — the one-day tenor sits five points under the 30-day,
+  which is exactly the term-structure effect a 30-day DVOL hides on a one-day contract.
+- **A.** v2 (seq 934) stands as registered; the 27 October read is a note recording the deferral, not a run.
+- **The fourth registration — `p3_threshold_wedge_v3_daily`, seq 951**
+  (`docs/prereg/p3_threshold_wedge_v3_daily.md`): v2's mechanism, rule, fill model and controls on the daily
+  ladders, with **σ = the ATM implied vol at the market's own tenor** from the surface (nearest strike per
+  expiry, call and put averaged, linear in total variance between expiries, past-only, DVOL fallback
+  counted; SOL via BTC's tenor σ × the realised-vol ratio), `T ∈ {1 day, resolution}`, the DVOL arm as the
+  term-structure control, 30 clusters with a fill as the minimum, **read once on 31 October** (window 13–30
+  October), else 30 November; holdout 1–29 November. Engine `scripts/p3a_wedge_v3.py`
+  (`SurfaceSigma`, `Market.start`, seventeen sessions in one pass), tests on fixtures. Written and registered
+  before any daily-ladder line was read for a wedge (the only thing read since 04:53 is the recorder's
+  "N active markets" line). The counter: **four of four**, extended by the owner's choice of B.
+- **C2 v2 registered and run** (seq 941–943; `docs/20`, 13 October): the measured maker cost lifts the ledger
+  net Sharpe from 0.54 to 0.66 and the HAC t from 1.50 to 1.84; **FAIL at gates 3, 4, 5** as the memo
+  predicted — short by the spread's own size at 1×, not by costs. The pre-stated both-maker sensitivity (Bybit assumed to fill as Binance did) reaches net Sharpe 0.93, t 2.57, and
+  still fails DSR (0.84) and cash (SPA 0.85): the "what it would take" line now has its number.
+- **Storage and the venue's patience, measured on the first new hour — and misread once.** After the switch the
+  recorder kept ~270 `price_change` lines a second (83 MB of JSON in a quarter of an hour, ~1 GB gzipped a
+  day against 26 GB free), 86% of them entries kept only for sitting within 2¢ of the mid; the venue closed
+  the socket twice as a "slow consumer" (close 1013) because the standard-library parser fell behind in
+  bursts, and each reconnect re-sent every book. A first reading blamed megabyte books and registered a
+  50-level cap (amendment 1, seq 975); the megabyte is in fact all 659 books in one frame, ~1.7 KB each, and
+  the cap is harmless. **Amendment 2 (seq 977) corrects the record:** from 05:18:34 UTC (the journal's time; the amendments' "05:2x"/"05:4x" are corrected in note 979) a `price_change` entry
+  is kept only when it moves the token's best bid or ask (`--near 0`), parsing is `orjson`, nothing the
+  registered rules read changes (best bid/ask and trade prints), and the 2¢ band — kept for the P3-B
+  rewards sizing, done on 11 October — is no longer recorded. Both amendments are noted under v2 (seq 976,
+  978). The disk alert covers the rest.
+- **§15's free backfills, mirrored, nothing tested:** the CFTC financial-futures COT history 2017–2026
+  (`~/qr/lake/mirror/cftc/fut_fin_txt_YYYY.zip`; CME Bitcoin and Micro Bitcoin rows with leveraged-fund and
+  asset-manager positions, weekly) and the Coin Metrics community CSVs for BTC/ETH/SOL
+  (`~/qr/lake/mirror/coinmetrics/`; daily from 2009, exchange in/outflows among the 32 columns, the public
+  file ending 24 May 2026). Farside refuses non-browser fetches (403); the ETF-flow backfill's next route is
+  the issuers' own daily NAV/shares files (iShares' download URL needs the right product id — not found in
+  one try). Nothing from any of these is registered; they exist so the data-expansion programme can start the
+  day the owner opens it.
+- **The key.** Still answering futures reads from the box after the owner's untick; the owner is to check
+  the key page saved.

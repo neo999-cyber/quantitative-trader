@@ -146,3 +146,92 @@ def test_run_many_is_run_on_each_session_from_one_pass(recording):
         if len(a):
             pd.testing.assert_frame_equal(a.reset_index(drop=True), b.reset_index(drop=True))
     assert len(together["family"].trade_table()) == 1
+
+
+# ---------------------------------------------------------------- v3: the surface σ and the daily ladders
+def _surface_snapshot(rec: Path, at: float, btc_rows: list[dict]) -> None:
+    from datetime import datetime, timezone
+
+    d = datetime.fromtimestamp(at, tz=timezone.utc)
+    path = rec / "surface" / d.strftime("%Y-%m-%d") / f"{d.strftime('%H')}.json.gz"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with gzip.open(path, "wt", encoding="utf-8") as fh:
+        json.dump({"venue": "deribit", "recorded_at": at, "body": {"BTC": btc_rows}}, fh)
+
+
+def _row(name, iv, und=100_000.0):
+    return {"instrument_name": name, "mark_iv": iv, "underlying_price": und, "open_interest": 1.0}
+
+
+def test_atm_curve_and_total_variance_interpolation():
+    from qr.execution.pm_replay import atm_curve, interp_sigma
+
+    rows = [_row("BTC-14OCT26-100000-C", 40.0), _row("BTC-14OCT26-100000-P", 44.0), _row("BTC-14OCT26-120000-C", 90.0),
+            _row("BTC-16OCT26-101000-C", 60.0), _row("BTC-16OCT26-99000-P", 60.0), _row("BTC-16OCT26-100000-C", 50.0), _row("BTC-16OCT26-100000-P", 50.0),
+            _row("not-an-option", 10.0), {"instrument_name": "BTC-14OCT26-100000-C"}]
+    curve = atm_curve(rows)
+    assert [round(iv, 3) for _, iv in curve] == [0.42, 0.50]        # nearest strike per expiry, call and put averaged; junk ignored
+    t = pd.Timestamp("2026-10-13 08:00", tz="UTC").timestamp()      # 1 day and 3 days to the two expiries
+    one_day, three_days = 1 / 365, 3 / 365
+    assert interp_sigma(curve, t, one_day) == pytest.approx(0.42)
+    assert interp_sigma(curve, t, three_days) == pytest.approx(0.50)
+    mid = interp_sigma(curve, t, 2 / 365)                            # linear in σ²τ: (0.42²·1 + 0.50²·3)/2 ... between the two
+    w = (0.42**2 * 1 + (0.50**2 * 3 - 0.42**2 * 1) * (2 - 1) / (3 - 1)) / 2
+    assert mid == pytest.approx(w**0.5)
+    assert interp_sigma(curve, t, 10 / 365) == pytest.approx(0.50)   # flat beyond the last expiry
+    assert interp_sigma(curve, t, 0.1 / 365) == pytest.approx(0.42)  # flat inside the first
+    assert interp_sigma([], t, one_day) != interp_sigma([], t, one_day)  # nan
+
+
+def test_surface_sigma_reads_only_the_past_and_falls_back_when_stale(tmp_path):
+    from qr.execution.pm_replay import SurfaceSigma
+
+    rec = tmp_path
+    t0 = pd.Timestamp("2026-10-13 09:02", tz="UTC").timestamp()
+    _surface_snapshot(rec, t0, [_row("BTC-14OCT26-100000-C", 40.0), _row("BTC-14OCT26-100000-P", 40.0)])
+    s = SurfaceSigma(rec / "surface")
+    assert s.sigma("BTC", t0 + 1800, 1 / 365) == pytest.approx(0.40)       # half an hour later: the 09:02 snapshot
+    assert s.sigma("BTC", t0 - 60, 1 / 365) != s.sigma("BTC", t0 - 60, 1 / 365)  # a minute before it was recorded: nothing to read
+    assert s.sigma("BTC", t0 + 3 * 3600, 1 / 365) != s.sigma("BTC", t0 + 3 * 3600, 1 / 365)  # three hours later: stale, nan
+    assert s.sigma("ETH", t0 + 60, 1 / 365) != s.sigma("ETH", t0 + 60, 1 / 365)  # no ETH rows
+
+
+def test_session_prices_off_the_surface_and_counts_dvol_fallbacks(recording, tmp_path):
+    from qr.execution.pm_replay import SurfaceSigma
+
+    # a surface snapshot just before the first decision (01:00) saying σ = 0.5 at every tenor: same answer as DVOL 50 → same trade
+    _surface_snapshot(tmp_path, T0 + 1800, [_row("BTC-14OCT26-100000-C", 50.0), _row("BTC-30OCT26-100000-C", 50.0), _row("BTC-26MAR27-100000-C", 50.0)])
+    mk = _market()
+    with_surface = WedgeSession(mk, k=0.05, T="resolution", side="sell", sigma_source="surface", surface=SurfaceSigma(tmp_path / "surface", max_age_s=48 * 3600))
+    with_surface.run(iter_events(recording))
+    plain = WedgeSession(_market(), k=0.05, T="resolution", side="sell")
+    plain.run(iter_events(recording))
+    a, b = with_surface.trade_table(), plain.trade_table()
+    assert len(a) == len(b) == 1 and a.iloc[0].fill == pytest.approx(b.iloc[0].fill)
+    assert with_surface.surface_fallbacks == 0
+    # no snapshot at all: every decision falls back to DVOL and is counted
+    none = WedgeSession(_market(), k=0.05, T="resolution", side="sell", sigma_source="surface", surface=SurfaceSigma(tmp_path / "nowhere"))
+    none.run(iter_events(recording))
+    assert none.surface_fallbacks > 0 and len(none.trade_table()) == 1
+
+
+def test_v3_script_keeps_only_the_daily_ladders_and_runs_on_fixture(recording, tmp_path, monkeypatch):
+    (recording / "polymarket").mkdir(exist_ok=True)
+    daily = {"market_id": "d", "question": "Will the price of Bitcoin be above $120,000 on October 31?", "end": "2026-10-31T16:00:00Z",
+             "start": "2026-10-24T16:00:15Z", "yes_token": YES, "no_token": "999"}
+    monthly = {"market_id": "m", "question": "Will Bitcoin reach $120,000 in October?", "end": "2026-11-01T04:00:00Z",
+               "start": "2026-10-01T05:00:00Z", "yes_token": "777", "no_token": "778"}
+    (recording / "polymarket" / "catalogue.jsonl").write_text(json.dumps({"at": T0, "min_horizon_days": 1, "markets": [daily, monthly]}) + "\n")
+    (tmp_path / "res.json").write_text(json.dumps({"d": 0.0, "m": 0.0}))
+    _surface_snapshot(tmp_path, T0 + 1800, [_row("BTC-14OCT26-100000-C", 50.0), _row("BTC-30OCT26-100000-C", 50.0), _row("BTC-26MAR27-100000-C", 50.0)])
+    monkeypatch.setenv("QR_ROOT", str(tmp_path / "lake"))
+    spec = importlib.util.spec_from_file_location("v3", Path(__file__).resolve().parents[2] / "scripts" / "p3a_wedge_v3.py")
+    v3 = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(v3)
+    markets = v3.load_daily_markets(recording)
+    assert list(markets) == [YES] and markets[YES].kind == "above" and markets[YES].start is not None
+    assert v3.main(["--start", "2026-10-01", "--end", "2026-10-03", "--mirror", str(recording), "--surface", str(tmp_path / "surface"),
+                    "--resolutions", str(tmp_path / "res.json"), "--no-log"]) == 0
+    summ = json.loads((tmp_path / "lake" / "reports" / "p3" / "p3_threshold_wedge_v3_daily_2026-10-01_2026-10-03_summary.json").read_text())
+    assert set(summ["results"]) >= {"k5_T1", "mirror_k5_T1", "placebo_k5_T1", "dvol_k5_T1", "naive_le20c"} and "DEFERRED" in summ["verdict"]
+    assert "surface_fallbacks" in summ["results"]["k5_T1"]

@@ -22,6 +22,7 @@ import gzip
 import json
 import math
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator
 
@@ -151,6 +152,7 @@ class Market:
     strike: float
     end: pd.Timestamp
     resolved_yes: float | None = None
+    start: pd.Timestamp | None = None   # listing time, when the catalogue has it (v3: the daily ladders live < 8 days)
 
 
 @dataclass
@@ -176,10 +178,12 @@ class WedgeSession:
     """The registered rule over the event stream. `sigma_source` is "dvol" or "rv" (the placebo)."""
 
     def __init__(self, markets: dict[str, Market], k: float, T, side: str = "sell", x: float = 0.02, ttl_h: float = 4.0,
-                 sigma_source: str = "dvol", naive: bool = False, rv_window_h: float = 24 * 30):
+                 sigma_source: str = "dvol", naive: bool = False, rv_window_h: float = 24 * 30, surface: "SurfaceSigma | None" = None):
         self.markets = markets
         self.k, self.T, self.side, self.x, self.ttl = k, T, side, x, ttl_h * 3600
         self.sigma_source, self.naive = sigma_source, naive
+        self.surface = surface                 # "surface": tenor-matched ATM IV from the recorded options surface (v3)
+        self.surface_fallbacks = 0             # decisions priced off DVOL because no snapshot was within reach
         self.rv_window = rv_window_h * 3600
         self.state = State()
         self.orders: dict[str, Order] = {}
@@ -194,7 +198,18 @@ class WedgeSession:
         self._rv_samples: dict[str, list[tuple[float, float]]] = {"BTC": [], "ETH": [], "SOL": []}
 
     # -- helpers
-    def sigma(self, asset: str) -> float:
+    def sigma(self, asset: str, t: float | None = None, tau: float | None = None) -> float:
+        if self.sigma_source == "surface":
+            if asset in ("BTC", "ETH"):
+                s = self.surface.sigma(asset, t, tau) if (self.surface is not None and t is not None and tau is not None) else float("nan")
+                if not (s > 0):
+                    self.surface_fallbacks += 1
+                    return self.state.dvol.get(asset, float("nan")) / 100.0
+                return s
+            b, r = self._rv("BTC"), self._rv("SOL")      # SOL: BTC's tenor-matched σ scaled by the realised-vol ratio, as v2 scales DVOL
+            if not (b > 0 and r > 0):
+                return float("nan")
+            return self.sigma("BTC", t, tau) * r / b
         if self.sigma_source == "rv":
             s = self._rv_samples.get(asset) or []
             if len(s) < 48:
@@ -223,7 +238,7 @@ class WedgeSession:
         if S is None:
             return float("nan")
         tau = (mk.end.timestamp() - t) / 86400 / PPY_DAYS
-        return model_prob(mk.kind, S, mk.strike, self.sigma(mk.asset), tau)
+        return model_prob(mk.kind, S, mk.strike, self.sigma(mk.asset, t, tau), tau)
 
     # -- event loop
     def step(self, t: float, venue: str, m: dict) -> None:
@@ -354,6 +369,101 @@ class WedgeSession:
 
     def trade_table(self) -> pd.DataFrame:
         return pd.DataFrame(self.trades)
+
+
+# ------------------------------------------------------------------ surface
+EXPIRY_HOUR_UTC = 8   # Deribit options expire 08:00 UTC
+
+
+def _parse_instrument(name: str) -> tuple[float, float, str] | None:
+    """`BTC-16OCT26-90000-C` -> (expiry timestamp, strike, "C"/"P"); None for anything else."""
+    parts = name.split("-")
+    if len(parts) != 4:
+        return None
+    try:
+        exp = datetime.strptime(parts[1], "%d%b%y").replace(hour=EXPIRY_HOUR_UTC, tzinfo=timezone.utc)
+        return exp.timestamp(), float(parts[2]), parts[3].upper()
+    except ValueError:
+        return None
+
+
+def atm_curve(rows: list[dict]) -> list[tuple[float, float]]:
+    """Per expiry, the mark IV (decimal) of the strike nearest the underlying, call and put averaged; sorted by expiry."""
+    best: dict[float, tuple[float, list[float]]] = {}   # expiry -> (distance, [ivs])
+    for r in rows:
+        p = _parse_instrument(str(r.get("instrument_name", "")))
+        iv, und = r.get("mark_iv"), r.get("underlying_price")
+        if p is None or iv is None or und is None:
+            continue
+        exp, strike, _ = p
+        try:
+            dist, iv = abs(float(strike) - float(und)), float(iv) / 100.0
+        except (TypeError, ValueError):
+            continue
+        if not (iv > 0):
+            continue
+        cur = best.get(exp)
+        if cur is None or dist < cur[0] - 1e-9:
+            best[exp] = (dist, [iv])
+        elif abs(dist - cur[0]) <= 1e-9:
+            cur[1].append(iv)
+    return sorted((exp, sum(ivs) / len(ivs)) for exp, (_, ivs) in best.items())
+
+
+def interp_sigma(curve: list[tuple[float, float]], t: float, tau: float) -> float:
+    """σ at tenor `tau` (years from `t`): linear in total variance between the bracketing expiries, flat outside."""
+    pts = [((exp - t) / 86400 / PPY_DAYS, iv) for exp, iv in curve if exp - t > 600]
+    if not pts or not (tau > 0):
+        return float("nan")
+    if tau <= pts[0][0]:
+        return pts[0][1]
+    if tau >= pts[-1][0]:
+        return pts[-1][1]
+    for (t1, s1), (t2, s2) in zip(pts, pts[1:]):
+        if t1 <= tau <= t2:
+            w1, w2 = s1 * s1 * t1, s2 * s2 * t2
+            w = w1 + (w2 - w1) * (tau - t1) / (t2 - t1)
+            return math.sqrt(w / tau)
+    return float("nan")
+
+
+class SurfaceSigma:
+    """Tenor-matched ATM implied vol from the hourly Deribit surface snapshots (`scripts/record_surface.py`).
+
+    `sigma(ccy, t, tau)` reads the latest snapshot at or before `t` within `max_age_s`
+    (default two hours; the recorder writes at two minutes past the hour) and
+    interpolates the ATM curve in total variance to the market's own tenor. Nothing
+    after `t` is ever read: a snapshot is used only once its `recorded_at` has passed.
+    """
+
+    def __init__(self, root: Path, max_age_s: float = 2 * 3600):
+        self.root, self.max_age = Path(root), float(max_age_s)
+        self._cache: dict[str, dict | None] = {}
+
+    def _load(self, key: str) -> dict | None:
+        if key not in self._cache:
+            path = self.root / f"{key}.json.gz"
+            snap = None
+            if path.exists():
+                with gzip.open(path, "rt", encoding="utf-8") as fh:
+                    d = json.load(fh)
+                snap = {"recorded_at": float(d["recorded_at"]), "curves": {ccy: atm_curve(rows) for ccy, rows in (d.get("body") or {}).items()}}
+            self._cache[key] = snap
+        return self._cache[key]
+
+    def latest(self, t: float) -> dict | None:
+        for h in range(int(self.max_age // 3600) + 2):
+            key = datetime.fromtimestamp(t - h * 3600, tz=timezone.utc).strftime("%Y-%m-%d/%H")
+            snap = self._load(key)
+            if snap and snap["recorded_at"] <= t <= snap["recorded_at"] + self.max_age:
+                return snap
+        return None
+
+    def sigma(self, ccy: str, t: float, tau: float) -> float:
+        snap = self.latest(t)
+        if snap is None:
+            return float("nan")
+        return interp_sigma(snap["curves"].get(ccy) or [], t, tau)
 
 
 def run_many(sessions: dict[str, "WedgeSession"], events) -> None:

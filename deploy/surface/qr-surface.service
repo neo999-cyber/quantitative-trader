@@ -1,0 +1,10 @@
+[Unit]
+Description=qr: hourly Deribit options surface and Hyperliquid positioning snapshot (Programme 3 data expansion)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /root/surface/record_surface.py --out /root/surface/data
+User=root
+

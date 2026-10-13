@@ -25,7 +25,7 @@ import pandas as pd
 
 from qr.config import paths
 from qr.data import polymarket as pm
-from qr.execution.pm_replay import Market, WedgeSession, iter_events
+from qr.execution.pm_replay import Market, WedgeSession, iter_events, run_many
 from qr.validate import stats as st
 from qr.validate.trial_log import TrialLog
 
@@ -115,9 +115,12 @@ def main(argv=None) -> int:
     runs += [(f"placebo_k{int(v['k']*100)}_T{v['T']}", v["k"], v["T"], "sell", "rv", False) for v in GRID]
     runs += [("naive_le20c", 0.0, "resolution", "sell", "dvol", True)]
     results, books, tables = {}, {}, []
+    # every variant and control over one pass of the recording (13 passes of ~100 million lines is hours for nothing)
+    sessions = {name: WedgeSession({t: Market(**{**m.__dict__}) for t, m in markets.items()}, k, T, side, sigma_source=sig, naive=naive)
+                for name, k, T, side, sig, naive in runs}
+    run_many(sessions, iter_events(rec, start, end))
     for name, k, T, side, sig, naive in runs:
-        sess = WedgeSession({t: Market(**{**m.__dict__}) for t, m in markets.items()}, k, T, side, sigma_source=sig, naive=naive)
-        sess.run(iter_events(rec, start, end))
+        sess = sessions[name]
         tr = sess.trade_table()
         n_attempt = len(tr)
         filled = tr[tr["edge"].notna()].copy() if len(tr) else tr

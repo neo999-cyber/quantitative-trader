@@ -58,3 +58,35 @@ def test_the_cross_venue_cost_model_adds_both_taker_legs():
     assert unit.fee_bps == pytest.approx(CostModel.binance_perp().fee_bps + 5.5)
     assert unit.half_spread_bps == pytest.approx(1.0 + 1.5)
     assert unit.funding
+
+
+def test_the_unit_inherits_a_measured_leg_fill_rate():
+    """C2 v2: a maker-measured Binance leg hands its fill rate to the unit (the legs' product), per weekday when it has them."""
+    taker = CostModel.carry_pair(CostModel.binance_perp(), CostModel.bybit_perp())
+    assert taker.fill_rate == 1.0 and taker.fill_rate_by_dow is None
+    binance = CostModel.maker_measured(by_dow=True)
+    unit = CostModel.carry_pair(binance, CostModel.bybit_perp())
+    assert unit.fee_bps == pytest.approx(binance.fee_bps + 5.5)
+    assert unit.half_spread_bps == pytest.approx(binance.half_spread_bps + 1.5)
+    assert unit.fill_rate == pytest.approx(binance.fill_rate)
+    assert unit.fill_rate_by_dow == pytest.approx(binance.fill_rate_by_dow)
+    both = CostModel.carry_pair(binance, binance)
+    assert both.fill_rate == pytest.approx(binance.fill_rate ** 2)
+    assert both.fill_rate_by_dow[0] == pytest.approx(binance.fill_rate_by_dow[0] ** 2)
+    assert both.fill_rate_by_dow[6] == pytest.approx(binance.fill_rate_by_dow[6] ** 2)
+
+
+def test_the_cli_names_the_measured_cross_venue_models():
+    import argparse
+
+    from qr.cli import _costs
+
+    v1 = _costs(argparse.Namespace(costs="xvenue"))
+    primary = _costs(argparse.Namespace(costs="xvenue_maker"))
+    both = _costs(argparse.Namespace(costs="xvenue_maker_both"))
+    measured = CostModel.maker_measured(by_dow=True)
+    assert primary.fee_bps + primary.half_spread_bps == pytest.approx(measured.fee_bps + measured.half_spread_bps + 5.5 + 1.5)
+    assert primary.fee_bps + primary.half_spread_bps < v1.fee_bps + v1.half_spread_bps
+    assert both.fee_bps + both.half_spread_bps == pytest.approx(2 * (measured.fee_bps + measured.half_spread_bps))
+    assert primary.fill_rate == pytest.approx(measured.fill_rate) and both.fill_rate == pytest.approx(measured.fill_rate ** 2)
+    assert both.verified_on == "unverified" and "assumed" in both.name

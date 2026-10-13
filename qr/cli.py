@@ -1887,6 +1887,17 @@ def _costs(args) -> CostModel:
     """
     if getattr(args, "costs", "spot") == "xvenue":
         return CostModel.carry_pair(CostModel.binance_perp(), CostModel.bybit_perp())
+    if getattr(args, "costs", "spot") == "xvenue_maker":
+        # C2 v2 (`docs/prereg/p2_venue_spread_v2_maker.md`): the Binance leg at the maker cost measured live in
+        # stage 1 (`docs/33`; fee blended at the fill rate, the 60 s adverse mark as the spread, weekday/weekend
+        # fill rates as the haircut), the Bybit leg taker as in v1 — the only leg a measurement exists for.
+        return CostModel.carry_pair(CostModel.maker_measured(by_dow=True), CostModel.bybit_perp())
+    if getattr(args, "costs", "spot") == "xvenue_maker_both":
+        # the memo's pre-stated sensitivity, not its claim: Bybit assumed to fill like Binance (unmeasured, unverified)
+        from dataclasses import replace
+
+        as_binance = replace(CostModel.maker_measured(by_dow=True), name="bybit_perp_assumed_as_binance_maker_measured", verified_on="unverified")
+        return CostModel.carry_pair(CostModel.maker_measured(by_dow=True), as_binance)
     if getattr(args, "costs", "spot") == "carry":
         spot = CostModel.trial(half_spread_bps=args.spread)
         return CostModel.carry_pair(spot, CostModel.binance_perp())
@@ -2266,12 +2277,14 @@ def build_parser() -> argparse.ArgumentParser:
     gt.add_argument("--spread", type=float, default=2.0)
     gt.add_argument(
         "--costs",
-        choices=("spot", "carry", "alpaca", "perp", "xvenue"),
+        choices=("spot", "carry", "alpaca", "perp", "xvenue", "xvenue_maker", "xvenue_maker_both"),
         default="spot",
         help="spot: the trial's Binance spot model; carry: spot plus Binance perp, both legs taker; "
         "alpaca: $0 commission, 2 bps half-spread, 1 bp slippage, whole shares; "
         "perp: Binance USDT-M perpetual, regular user with BNB, taker, funding settled gross; "
-        "xvenue: Binance perp plus Bybit perp, both legs taker (the cross-venue unit)",
+        "xvenue: Binance perp plus Bybit perp, both legs taker (the cross-venue unit); "
+        "xvenue_maker: the Binance leg at the maker cost measured in stage 1 (docs/33), Bybit taker; "
+        "xvenue_maker_both: both legs at the measured maker cost (Bybit assumed, the pre-stated sensitivity)",
     )
     gt.add_argument(
         "--basket",

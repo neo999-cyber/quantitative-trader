@@ -1,0 +1,11 @@
+[Unit]
+Description=qr: run the surface snapshot every hour
+
+[Timer]
+OnCalendar=*-*-* *:02:00
+AccuracySec=30s
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+

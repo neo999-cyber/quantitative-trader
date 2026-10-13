@@ -226,24 +226,29 @@ class WedgeSession:
         return model_prob(mk.kind, S, mk.strike, self.sigma(mk.asset), tau)
 
     # -- event loop
+    def step(self, t: float, venue: str, m: dict) -> None:
+        """One recorded message: decisions due before it, the state update, fills, expiries."""
+        if self._next_hour is None:
+            self._next_hour = math.floor(t / 3600) * 3600 + 3600
+        while t >= self._next_hour:
+            self.decide(self._next_hour)
+            self._next_hour += 3600
+        for tr in self.state.apply(venue, m):
+            self.on_trade(t, tr)
+        if venue == "deribit" and m.get("method") == "subscription" and m["params"]["channel"].startswith("deribit_price_index"):
+            ccy = m["params"]["channel"].split(".")[-1].split("_")[0].upper()
+            buf = self._rv_samples.setdefault(ccy, [])
+            if not buf or t - buf[-1][0] >= 3600:
+                buf.append((t, float(m["params"]["data"]["price"])))
+                while buf and t - buf[0][0] > self.rv_window:
+                    buf.pop(0)
+        self.expire(t)
+
     def run(self, events) -> None:
         for t, venue, m in events:
-            if self._next_hour is None:
-                self._next_hour = math.floor(t / 3600) * 3600 + 3600
-            while t >= self._next_hour:
-                self.decide(self._next_hour)
-                self._next_hour += 3600
-            for tr in self.state.apply(venue, m):
-                self.on_trade(t, tr)
-            if venue == "deribit" and m.get("method") == "subscription" and m["params"]["channel"].startswith("deribit_price_index"):
-                ccy = m["params"]["channel"].split(".")[-1].split("_")[0].upper()
-                buf = self._rv_samples.setdefault(ccy, [])
-                if not buf or t - buf[-1][0] >= 3600:
-                    buf.append((t, float(m["params"]["data"]["price"])))
-                    while buf and t - buf[0][0] > self.rv_window:
-                        buf.pop(0)
-            self.expire(t)
+            self.step(t, venue, m)
         self.settle()
+
 
     def decide(self, t: float) -> None:
         entries: list[tuple[float, str, float]] = []   # (wedge, token, post price)
@@ -349,3 +354,18 @@ class WedgeSession:
 
     def trade_table(self) -> pd.DataFrame:
         return pd.DataFrame(self.trades)
+
+
+def run_many(sessions: dict[str, "WedgeSession"], events) -> None:
+    """Every session over one pass of the stream — the same result as `run` on each, read once.
+
+    The recording is ~100 million lines over five weeks; reading it once per
+    variant and control (thirteen times on 27 October) is hours of gzip and
+    JSON for nothing. Sessions share no state (each holds its own `State`),
+    so feeding each message to all of them in turn is exactly `run` on each.
+    """
+    for t, venue, m in events:
+        for s in sessions.values():
+            s.step(t, venue, m)
+    for s in sessions.values():
+        s.settle()

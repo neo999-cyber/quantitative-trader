@@ -390,16 +390,30 @@ class CostModel:
         short leg's sign, so `funding=True` here means "settle what the
         panel says". Impact is charged once, on the thinner leg's volume,
         which is what the unit panel's `quote_volume` is.
+
+        A leg priced at a measured maker cost (`maker_measured`) carries a
+        fill rate below one, and the unit inherits it: a unit trades only
+        when both legs do, so its rate is the legs' product — per weekday
+        when a leg carries weekday rates — and the runner's haircut applies
+        to the unit's weights as it would to a single-leg maker family.
         """
         spot = spot or cls.trial()
         perp = perp or cls.binance_perp()
         if spot.per_share_usd or perp.per_share_usd:
             raise ValueError("a carry unit is priced on two proportional venues, not per share")
+        fill_rate = float(spot.fill_rate) * float(perp.fill_rate)
+        by_dow = None
+        if spot.fill_rate_by_dow is not None or perp.fill_rate_by_dow is not None:
+            a = spot.fill_rate_by_dow or (spot.fill_rate,) * 7
+            b = perp.fill_rate_by_dow or (perp.fill_rate,) * 7
+            by_dow = tuple(float(x) * float(y) for x, y in zip(a, b))
         return cls(
             fee_bps=spot.fee_bps + perp.fee_bps,
             half_spread_bps=spot.half_spread_bps + perp.half_spread_bps,
             impact_coef=max(spot.impact_coef, perp.impact_coef),
             use_maker=False,
+            fill_rate=fill_rate,
+            fill_rate_by_dow=by_dow,
             funding=True,
             name=f"carry[{spot.name}+{perp.name}]",
             verified_on=min(spot.verified_on, perp.verified_on, key=lambda v: (v != "unverified", v)),

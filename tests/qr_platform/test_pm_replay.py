@@ -125,3 +125,24 @@ def test_script_runs_on_fixture(recording, tmp_path, monkeypatch):
     assert v2.main(["--start", "2026-10-01", "--end", "2026-10-03", "--mirror", str(recording), "--resolutions", str(tmp_path / "res.json"), "--no-log"]) == 0
     summ = json.loads((tmp_path / "lake" / "reports" / "p3" / "p3_threshold_wedge_v2_intraday_2026-10-01_2026-10-03_summary.json").read_text())
     assert summ["results"]["k5_T3"]["n_trades"] == 1 and "DEFERRED" in summ["verdict"]
+
+
+def test_run_many_is_run_on_each_session_from_one_pass(recording):
+    from qr.execution.pm_replay import run_many
+
+    def fresh():
+        return {"family": WedgeSession(_market(), k=0.05, T="resolution", side="sell"),
+                "mirror": WedgeSession(_market(), k=0.05, T="resolution", side="buy"),
+                "naive": WedgeSession(_market(), k=0.0, T="resolution", side="sell", naive=True)}
+
+    one_by_one = fresh()
+    for s in one_by_one.values():
+        s.run(iter_events(recording))
+    together = fresh()
+    run_many(together, iter_events(recording))      # the recording read once for all three
+    for name in one_by_one:
+        a, b = one_by_one[name].trade_table(), together[name].trade_table()
+        assert len(a) == len(b)
+        if len(a):
+            pd.testing.assert_frame_equal(a.reset_index(drop=True), b.reset_index(drop=True))
+    assert len(together["family"].trade_table()) == 1

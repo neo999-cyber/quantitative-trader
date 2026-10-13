@@ -291,11 +291,54 @@ class Recorder:
             self._fh.close()
 
 
-async def run_polymarket(rec: Recorder, refresh: float, verbose: bool, smoke: float | None, near: float = 0.02,
-                         min_horizon_days: int = MIN_HORIZON_DAYS, book_depth: int | None = None) -> None:
+def _slices(ids: list[str], n: int) -> list[list[str]]:
+    """The token list dealt round-robin over `n` sockets (every socket gets a share of every ladder)."""
+    n = max(1, min(n, len(ids)))
+    return [ids[i::n] for i in range(n)]
+
+
+async def _socket(ids: list[str], writer: Writer, slot: int, stop: asyncio.Event, t_end: float | None) -> None:
+    """One market-channel connection: subscribe, receive, queue; reconnect on its own with a growing pause."""
     import websockets
-    t_end = time.monotonic() + smoke if smoke else None
     backoff = 2.0
+    while not stop.is_set():
+        try:
+            # max_queue = (high, low) water marks in frames: the library stops reading the socket at `high` queued frames
+            # and resumes at `low`. The default (16) throttled the reader so hard that the venue's send buffer filled and
+            # it closed the socket as a slow consumer; 8,192 is about a minute of the daily ladders at full tilt.
+            # websockets 17 reads nothing at all when given a bare integer here — pass the tuple (measured 13 Oct 2026).
+            async with websockets.connect(PM_WS, ping_interval=None, max_size=2**24, max_queue=(8192, 2048)) as ws:
+                await ws.send(json.dumps({"assets_ids": ids, "type": "market"}))
+                backoff = 2.0
+                last_ping = time.monotonic()
+                while not stop.is_set():
+                    if t_end and time.monotonic() > t_end:
+                        return
+                    try:
+                        raw = await asyncio.wait_for(ws.recv(), timeout=5.0)
+                    except asyncio.TimeoutError:
+                        if time.monotonic() - last_ping > 10:
+                            await ws.send("PING")
+                            last_ping = time.monotonic()
+                        continue
+                    if raw == "PONG":
+                        continue
+                    writer.put(raw if isinstance(raw, str) else raw.decode())
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            print(f"[polymarket] socket {slot}: reconnect after error: {exc!r} (sleep {backoff:.0f}s)", file=sys.stderr, flush=True)
+            await asyncio.sleep(backoff)
+            backoff = min(backoff * 2, 120)
+
+
+async def run_polymarket(rec: Recorder, refresh: float, verbose: bool, smoke: float | None, near: float = 0.02,
+                         min_horizon_days: int = MIN_HORIZON_DAYS, book_depth: int | None = None, sockets: int = 1) -> None:
+    """The token list over `sockets` connections (the venue's send buffer is per connection: with 660 tokens on one
+    socket it filled in bursts and closed us as a "slow consumer" even with a reader that never lagged — 13 October
+    2026), one writer thread, the list rebuilt every `refresh` seconds off the event loop and the sockets kept
+    while it is unchanged."""
+    t_end = time.monotonic() + smoke if smoke else None
     writer = Writer(rec, near, book_depth, verbose)
 
     def catalogue(markets: list[dict]) -> None:
@@ -310,48 +353,34 @@ async def run_polymarket(rec: Recorder, refresh: float, verbose: bool, smoke: fl
             ids = sorted(yes)  # YES only: the CLOB folds NO orders into the YES book
             writer.yes = yes
             catalogue(markets)
-            print(f"[polymarket] {len(markets)} active markets, {len(ids)} tokens", flush=True)
             if not ids:
+                print("[polymarket] no active markets", flush=True)
                 await asyncio.sleep(min(refresh, 300))
                 markets = await asyncio.to_thread(active_markets, min_horizon_days)
                 continue
+            slices = _slices(ids, sockets)
+            print(f"[polymarket] {len(markets)} active markets, {len(ids)} tokens over {len(slices)} socket(s)", flush=True)
+            stop = asyncio.Event()
+            tasks = [asyncio.create_task(_socket(sl, writer, i, stop, t_end)) for i, sl in enumerate(slices)]
             t_refresh = time.monotonic() + refresh
             try:
-                # max_queue = (high, low) water marks in frames: the library stops reading the socket at `high` queued frames
-                # and resumes at `low`. The default (16) throttled the reader so hard that the venue's send buffer filled and
-                # it closed the socket as a slow consumer; 8,192 is about a minute of the daily ladders at full tilt.
-                # websockets 17 reads nothing at all when given a bare integer here — pass the tuple (measured 13 Oct 2026).
-                async with websockets.connect(PM_WS, ping_interval=None, max_size=2**24, max_queue=(8192, 2048)) as ws:
-                    await ws.send(json.dumps({"assets_ids": ids, "type": "market"}))
-                    backoff = 2.0
-                    last_ping = time.monotonic()
-                    while True:
-                        if t_end and time.monotonic() > t_end:
-                            return
-                        if time.monotonic() > t_refresh:
-                            # rebuild the list off the loop; the socket keeps being read into the library's queue meanwhile
-                            fresh = await asyncio.to_thread(active_markets, min_horizon_days)
-                            t_refresh = time.monotonic() + refresh
-                            if {m["yes_token"] for m in fresh} != yes:
-                                markets = fresh
-                                break  # reconnect with the new token list
-                            catalogue(fresh)  # the hourly record of the list in force, even when nothing changed
-                            print(f"[polymarket] {len(fresh)} active markets, list unchanged", flush=True)
-                            continue
-                        try:
-                            raw = await asyncio.wait_for(ws.recv(), timeout=5.0)
-                        except asyncio.TimeoutError:
-                            if time.monotonic() - last_ping > 10:
-                                await ws.send("PING")
-                                last_ping = time.monotonic()
-                            continue
-                        if raw == "PONG":
-                            continue
-                        writer.put(raw if isinstance(raw, str) else raw.decode())
-            except Exception as exc:  # noqa: BLE001
-                print(f"[polymarket] reconnect after error: {exc!r} (sleep {backoff:.0f}s)", file=sys.stderr, flush=True)
-                await asyncio.sleep(backoff)
-                backoff = min(backoff * 2, 120)
+                while True:
+                    if t_end and time.monotonic() > t_end:
+                        return
+                    await asyncio.sleep(1.0)
+                    if time.monotonic() > t_refresh:
+                        fresh = await asyncio.to_thread(active_markets, min_horizon_days)   # off the loop; the sockets keep receiving
+                        t_refresh = time.monotonic() + refresh
+                        if {m["yes_token"] for m in fresh} != yes:
+                            markets = fresh
+                            break  # resubscribe with the new token list
+                        catalogue(fresh)  # the hourly record of the list in force, even when nothing changed
+                        print(f"[polymarket] {len(fresh)} active markets, list unchanged", flush=True)
+            finally:
+                stop.set()
+                for t in tasks:
+                    t.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
     finally:
         writer.close()
 
@@ -408,6 +437,7 @@ def main(argv=None) -> int:
     ap.add_argument("--refresh", type=float, default=3600.0, help="seconds between token-list rebuilds (polymarket)")
     ap.add_argument("--smoke", type=float, default=None, help="run this many seconds and stop")
     ap.add_argument("--near", type=float, default=0.02, help="keep price changes within this of the mid (polymarket); top-of-book moves are always kept")
+    ap.add_argument("--sockets", type=int, default=1, help="spread the token list over this many market-channel connections (4 on the box from 13 Oct 2026)")
     ap.add_argument("--book-depth", type=int, default=None,
                     help="keep only the best N levels a side of each full book snapshot (None: whole book; 50 on the box from 13 Oct 2026)")
     ap.add_argument("--min-horizon-days", type=int, default=MIN_HORIZON_DAYS,
@@ -433,7 +463,7 @@ def main(argv=None) -> int:
     for s in (signal.SIGINT, signal.SIGTERM):
         signal.signal(s, _stop)
     try:
-        coro = run_polymarket(rec, a.refresh, a.verbose, a.smoke, a.near, a.min_horizon_days, a.book_depth) if a.venue == "polymarket" else run_deribit(rec, a.verbose, a.smoke)
+        coro = run_polymarket(rec, a.refresh, a.verbose, a.smoke, a.near, a.min_horizon_days, a.book_depth, a.sockets) if a.venue == "polymarket" else run_deribit(rec, a.verbose, a.smoke)
         loop.run_until_complete(coro)
     except (asyncio.CancelledError, KeyboardInterrupt):
         pass

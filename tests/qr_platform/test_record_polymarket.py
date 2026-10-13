@@ -48,3 +48,10 @@ def test_writer_thread_compacts_and_writes_in_order(tmp_path):
     raws = [json.loads(l["raw"]) for l in lines]
     assert [r["event_type"] for r in raws] == ["price_change", "price_change", "book"]      # the repeat top-of-book was dropped (near=0)
     assert raws[1]["price_changes"][0]["best_bid"] == "0.48" and len(raws[2]["asks"]) == 50
+
+
+def test_slices_deal_every_token_once_round_robin():
+    ids = [str(i) for i in range(10)]
+    sl = rp._slices(ids, 4)
+    assert len(sl) == 4 and sorted(sum(sl, [])) == ids and sl[0] == ["0", "4", "8"]
+    assert rp._slices(ids, 1) == [ids] and rp._slices(ids[:2], 4) == [["0"], ["1"]]

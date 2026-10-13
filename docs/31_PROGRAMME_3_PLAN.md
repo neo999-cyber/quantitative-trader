@@ -675,7 +675,16 @@ forward-only:
   is kept only when it moves the token's best bid or ask (`--near 0`), parsing is `orjson`, nothing the
   registered rules read changes (best bid/ask and trade prints), and the 2¢ band — kept for the P3-B
   rewards sizing, done on 11 October — is no longer recorded. Both amendments are noted under v2 (seq 976,
-  978). The disk alert covers the rest.
+  978). That was still not the end of it: through the day the venue kept closing the socket once or twice
+  an hour (12 closes, 13 seconds lost each). The cause was in our reader, not the venue — the websockets
+  library's default receive queue (16 frames) throttles the socket so hard that the venue's send buffer
+  fills; a bare integer `max_queue` makes websockets 17 read nothing at all, and the tuple form
+  `(8192, 2048)` fixes it (measured on the laptop: 55 frames in 8 s at the default, 972 with the tuple).
+  From 16:49 UTC the recorder receives on the event loop and compacts/writes on its own thread, keeps the
+  socket across an unchanged hourly refresh (the refresh used to drop it for ~10 s), and runs at `Nice=-5`
+  because another project's `node` process holds one of the box's two cores around the clock. First
+  twenty minutes after: no closes, ~45 MB a day. The surface recorder lost its 09:00 snapshot to a Deribit
+  503 and now retries four times with a growing pause.
 - **§15's free backfills, mirrored, nothing tested:** the CFTC financial-futures COT history 2017–2026
   (`~/qr/lake/mirror/cftc/fut_fin_txt_YYYY.zip`; CME Bitcoin and Micro Bitcoin rows with leveraged-fund and
   asset-manager positions, weekly) and the Coin Metrics community CSVs for BTC/ETH/SOL

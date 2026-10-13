@@ -43,10 +43,19 @@ DERIBIT_KEEP = ("instrument_name", "mark_iv", "open_interest", "volume", "volume
                 "underlying_price", "underlying_index", "interest_rate", "creation_timestamp")
 
 
-def _get(url: str, data: bytes | None = None, timeout: int = 60) -> bytes:
-    req = urllib.request.Request(url, data=data, headers={"User-Agent": "Mozilla/5.0", "Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return r.read()
+def _get(url: str, data: bytes | None = None, timeout: int = 60, retries: int = 4, pause: float = 15.0, sleep=time.sleep) -> bytes:
+    """One request, retried with a growing pause: Deribit answered 503 once at 09:02 UTC on 13 October and the hour was lost."""
+    for attempt in range(retries):
+        try:
+            req = urllib.request.Request(url, data=data, headers={"User-Agent": "Mozilla/5.0", "Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return r.read()
+        except Exception as exc:  # noqa: BLE001 — 503s, resets, timeouts: all worth one more try
+            if attempt == retries - 1:
+                raise
+            print(f"{datetime.now(timezone.utc).isoformat(timespec='seconds')} retry {attempt + 1}/{retries - 1} after {type(exc).__name__}: {str(exc)[:80]}", file=sys.stderr)
+            sleep(pause * (attempt + 1))
+    raise RuntimeError("unreachable")
 
 
 def compact_deribit(payload: dict) -> list[dict]:

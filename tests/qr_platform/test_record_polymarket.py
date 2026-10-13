@@ -29,3 +29,22 @@ def test_book_depth_leaves_small_books_and_other_messages_alone():
     pc = json.dumps({"event_type": "price_change", "market": "m", "price_changes": [{"asset_id": "T", "price": "0.5", "best_bid": "0.49", "best_ask": "0.51", "size": "1", "side": "BUY"}], "timestamp": "1"})
     kept = json.loads(rp.compact(pc, {"T"}, {}, book_depth=50))
     assert kept["price_changes"][0]["best_bid"] == "0.49"
+
+
+def test_writer_thread_compacts_and_writes_in_order(tmp_path):
+    rec = rp.Recorder("polymarket", tmp_path)
+    w = rp.Writer(rec, near=0.0, book_depth=50)
+    w.yes = {"T"}
+    pc = lambda bid, ask: json.dumps({"event_type": "price_change", "market": "m", "timestamp": "1",
+                                      "price_changes": [{"asset_id": "T", "price": "0.5", "best_bid": bid, "best_ask": ask, "size": "1", "side": "BUY"}]})
+    w.put(pc("0.49", "0.51")); w.put(pc("0.49", "0.51")); w.put(pc("0.48", "0.51")); w.put(_book(80))
+    w.close()
+    rec.close()
+    import gzip
+    files = list((tmp_path / "polymarket").glob("*/*.jsonl.gz"))
+    assert len(files) == 1
+    with gzip.open(files[0], "rt") as fh:
+        lines = [json.loads(l) for l in fh]
+    raws = [json.loads(l["raw"]) for l in lines]
+    assert [r["event_type"] for r in raws] == ["price_change", "price_change", "book"]      # the repeat top-of-book was dropped (near=0)
+    assert raws[1]["price_changes"][0]["best_bid"] == "0.48" and len(raws[2]["asks"]) == 50

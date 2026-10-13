@@ -44,3 +44,28 @@ def test_main_skips_a_failing_venue_and_records_the_other(tmp_path, monkeypatch)
     monkeypatch.setattr(rs, "snapshot_hyperliquid", lambda: [{"name": "BTC", "funding": "0.0"}])
     assert rs.main(["--out", str(tmp_path)]) == 1
     assert not (tmp_path / "deribit").exists() and len(list((tmp_path / "hyperliquid").glob("*/*.json.gz"))) == 1
+
+
+def test_get_retries_a_503_then_succeeds(monkeypatch):
+    import urllib.error
+
+    calls = {"n": 0}
+
+    class _Resp:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def read(self): return b'{"result": []}'
+
+    def fake_urlopen(req, timeout=60):
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise urllib.error.HTTPError(req.full_url, 503, "Service Unavailable", {}, None)
+        return _Resp()
+
+    monkeypatch.setattr(rs.urllib.request, "urlopen", fake_urlopen)
+    slept = []
+    assert rs._get("https://example.invalid/x", sleep=slept.append) == b'{"result": []}'
+    assert calls["n"] == 3 and slept == [15.0, 30.0]
+    calls["n"] = 0
+    with pytest.raises(urllib.error.HTTPError):
+        rs._get("https://example.invalid/x", retries=2, sleep=slept.append)

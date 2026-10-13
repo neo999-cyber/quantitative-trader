@@ -614,8 +614,9 @@ hurdle at 1×; the value is the number in the "what it would take" line. Registr
 owner's yes; the counter would go to twelve. (4) The §15 recorders for Deribit's options surface and
 Hyperliquid's positioning are built (`scripts/record_surface.py`, hourly, ~2 MB a day, `deploy/surface/`),
 tested on fixtures, probed once from the laptop, **not started** — the owner's yes. (5) From the box the live
-key still answered a futures balance read after the untick (twice); flagged — likely the save did not go
-through. The working tree's `study/rehearsal.testnet.json` carries the last rehearsal's expiry stamp,
+key still answered a futures balance read after the untick, which I flagged as "likely not saved" — wrong: at
+11:11 UTC the key's own permission flags (`/sapi/v1/account/apiRestrictions`) read `enableFutures false,
+enableReading true, ipRestrict true`; futures reads are allowed on Enable Reading alone. The untick had saved. The working tree's `study/rehearsal.testnet.json` carries the last rehearsal's expiry stamp,
 uncommitted, as before. Tests pass.
 
 **12 October 2026, 19:30 Dubai — corrections after stage 1, and two refinements of the cost model.** On the

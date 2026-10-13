@@ -623,10 +623,12 @@ the parser dry-run, yes to the C2 re-test, "let's work on the decisions". Done t
   Hyperliquid makes public needs a walk over every account and is a separate build. **Starting them on the
   box is the owner's yes**; the box has 26 GB free.
 - **The key.** The owner unticked *Enable Futures*; from the box the key still answered a futures balance
-  and position read afterwards (twice, 20 minutes apart). A key without the futures permission is refused
-  on the futures endpoints, so the likely reading is that the edit was not saved (the save asks for 2FA).
-  Flagged to the owner to check the key page; nothing is scheduled either way and the standing mandate
-  expired on 11 October.
+  and position read afterwards, which I read as "not saved". **Wrong, corrected at 11:11 UTC:** Binance
+  allows the futures account reads on *Enable Reading* alone; only trading needs the futures permission.
+  The definitive check is the key's own permission flags, `GET /sapi/v1/account/apiRestrictions` (signed,
+  read-only): `enableFutures false, enableReading true, ipRestrict true`, trading, margin, withdrawals and
+  transfers all false. The untick had saved. Nothing is scheduled and the standing mandate expired on
+  11 October.
 
 ## 17. 13 October 2026, later — options A and B taken; C2 v2 run; the counter extended to four
 
@@ -682,5 +684,7 @@ forward-only:
   the issuers' own daily NAV/shares files (iShares' download URL needs the right product id — not found in
   one try). Nothing from any of these is registered; they exist so the data-expansion programme can start the
   day the owner opens it.
-- **The key.** Still answering futures reads from the box after the owner's untick; the owner is to check
-  the key page saved.
+- **The key: resolved at 11:11 UTC.** The untick had saved; Binance's permission flags for the key read
+  `enableFutures false, enableReading true, ipRestrict true`, everything else false. The futures balance
+  reads that made me doubt it are allowed on *Enable Reading* (§16, corrected). From now the permission
+  flags, not a balance read, are how a key's state is checked.

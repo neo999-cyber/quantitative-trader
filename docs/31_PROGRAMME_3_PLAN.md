@@ -683,7 +683,9 @@ forward-only:
   From 16:49 UTC the recorder receives on the event loop and compacts/writes on its own thread, keeps the
   socket across an unchanged hourly refresh (the refresh used to drop it for ~10 s), and runs at `Nice=-5`
   because another project's `node` process holds one of the box's two cores around the clock. First
-  twenty minutes after: no closes, ~45 MB a day. The surface recorder lost its 09:00 snapshot to a Deribit
+  twenty minutes after: no closes, all 660 tokens printing, ~45 MB a day. (From the laptop the same subscription
+  receives nothing above ~300 tokens while the box receives all 660 — a laptop-side observation, unexplained,
+  which is one more reason the 31 October read is done from the box's recording and not from a laptop feed.) The surface recorder lost its 09:00 snapshot to a Deribit
   503 and now retries four times with a growing pause.
 - **§15's free backfills, mirrored, nothing tested:** the CFTC financial-futures COT history 2017–2026
   (`~/qr/lake/mirror/cftc/fut_fin_txt_YYYY.zip`; CME Bitcoin and Micro Bitcoin rows with leveraged-fund and

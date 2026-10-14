@@ -32,7 +32,10 @@ def _post_fills(journal: Journal, venue, intent: Intent, order: Order) -> int:
     for x in venue.executions(intent.symbol):
         if x.venue_order_id != order.venue_order_id:
             continue
-        if journal.execution(x.exec_id, intent.client_id, x.qty, x.price, x.fee, x.fee_currency, x.venue_ts,
+        # execution ids are unique per venue, not across venues: a spot trade id and a futures trade id can
+        # coincide, and the journal keys executions by id alone (found by the carry holding's two venues on
+        # one account, 14 October 2026) — so the venue's name is part of the id from here on
+        if journal.execution(f"{venue.name}:{x.exec_id}", intent.client_id, x.qty, x.price, x.fee, x.fee_currency, x.venue_ts,
                              content={"venue_order_id": x.venue_order_id, "maker": x.maker}):
             new += 1
     return new

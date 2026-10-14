@@ -1,0 +1,15 @@
+{
+  "account": "carry-testnet",
+  "coin": "BTC",
+  "spot_symbol": "BTCUSDT",
+  "perp_symbol": "BTCUSDT",
+  "notional_usd": "100",
+  "max_notional_usd": "150",
+  "ttl_s": 120,
+  "max_imbalance_pct": "1.0",
+  "stop_loss_usd": "10",
+  "max_leverage": "2.5",
+  "testnet": true,
+  "version": "carry-v1-rehearsal",
+  "expires_at": ""
+}

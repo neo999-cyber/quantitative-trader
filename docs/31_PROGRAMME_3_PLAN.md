@@ -720,3 +720,14 @@ forward-only:
   cron 06:00 UTC, `~/flows/ishares/`, `~/flows/etf_flows_table.jsonl`). Nothing is registered; the
   mechanism memo (forced AP buying after an inflow day) is written when the owner opens the programme — and it
   must take the one-day lag into account: the share count moves on settlement, the AP buys around the order.
+- **The carry holding's execution leg, built and not rehearsed on a venue** — `docs/34_CARRY_HOLDING.md`.
+  Long spot, short perp, same coin, same quantity, on the stage-1 harness: a spot client (`BinanceSpot`,
+  `LIMIT_MAKER` post-only, balances as positions), an IOC entry and a funding-income read on the perp client,
+  and a two-leg session (`qr/execution/carry.py`, `scripts/study_carry.py`): `open` under a typed mandate
+  posts both legs at the touch and takes the unfilled remainder after the maker wait; `funding` books every
+  payment once by the venue's transaction id; `rebalance` closes an imbalance on the perp; `close` unwinds
+  maker → taker → market and leaves the journal PAUSED. Tests on the fake venues. One defect found and fixed
+  on the way: the journal keyed executions by the venue's id alone, and two venues on one account collide —
+  ids now carry the venue's name. The rehearsal needs a spot-testnet key pair from the owner
+  (`BINANCE_SPOT_TESTNET_KEY/SECRET`); live needs the ladder decision first, then the key's trading
+  permissions, which are off.

@@ -32,7 +32,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal, ROUND_DOWN
 from typing import Any
 
-__all__ = ["Instrument", "Order", "Execution", "VenueError", "VenueTimeout", "BinanceUSDM", "BybitLinear", "FakeVenue"]
+__all__ = ["Instrument", "Order", "Execution", "VenueError", "VenueTimeout", "BinanceUSDM", "BinanceSpot", "BybitLinear", "FakeVenue"]
 
 
 class VenueError(RuntimeError):
@@ -194,6 +194,25 @@ class BinanceUSDM:
         })
         return self._order(r)
 
+    def place_ioc(self, client_id: str, symbol: str, side: str, qty: Decimal, price: Decimal, reduce_only: bool = False) -> Order:
+        """IOC limit through the touch that may *open* a position: the carry holding's taker leg after the maker wait (`docs/34`)."""
+        r = self._signed("POST", "/fapi/v1/order", {
+            "symbol": symbol, "side": side, "type": "LIMIT", "timeInForce": "IOC",
+            "quantity": str(qty), "price": str(price), "newClientOrderId": client_id, "reduceOnly": "true" if reduce_only else None,
+        })
+        return self._order(r)
+
+    def funding_rate(self, symbol: str) -> tuple[Decimal, int]:
+        """The last funding rate and the next funding time (ms) from the premium index."""
+        r = self._public("/fapi/v1/premiumIndex", {"symbol": symbol})
+        return _D(r["lastFundingRate"]), int(r["nextFundingTime"])
+
+    def income(self, symbol: str, since_ms: int | None = None, kind: str = "FUNDING_FEE") -> list[dict]:
+        """Funding payments (and other income kinds) as the venue books them: one row per transaction id."""
+        rows = self._signed("GET", "/fapi/v1/income", {"symbol": symbol, "incomeType": kind, "startTime": since_ms, "limit": 1000})
+        return [{"tran_id": str(x["tranId"]), "symbol": x["symbol"], "amount": _D(x["income"]), "asset": x["asset"], "time_ms": int(x["time"]), "kind": x["incomeType"]}
+                for x in rows]
+
     def cancel(self, symbol: str, client_id: str) -> Order:
         return self._order(self._signed("DELETE", "/fapi/v1/order", {"symbol": symbol, "origClientOrderId": client_id}))
 
@@ -218,6 +237,121 @@ class BinanceUSDM:
     def balances(self) -> dict[str, Decimal]:
         rows = self._signed("GET", "/fapi/v2/balance", {})
         return {x["asset"]: _D(x["balance"]) for x in rows if _D(x["balance"]) != 0}
+
+
+class BinanceSpot:
+    """Binance spot, the long leg of a carry holding (`docs/34`): the same interface as the perp client where it applies.
+
+    Spot has no positions, only balances: `positions()` reports the base asset held for each configured
+    symbol (so a `flat` check and the journal's reconciliation mean the same thing as on the perp venue),
+    and the "reduce-only" closes are plain sells of what is held. Post-only is `LIMIT_MAKER`. The spot
+    testnet (`testnet.binance.vision`) issues its own keys; mainnet is the owner's key with *Enable Spot &
+    Margin Trading* ticked, which it is not until the owner says so.
+    """
+    name = "binance_spot"
+    TESTNET = "https://testnet.binance.vision"
+    MAINNET = "https://api.binance.com"
+
+    def __init__(self, key: str, secret: str, base: str = TESTNET, transport: Transport | None = None, recv_window: int = 5000,
+                 symbols: tuple[str, ...] = ()) -> None:
+        self.key, self.secret, self.base = key, secret.encode(), base.rstrip("/")
+        self.transport = transport or Transport()
+        self.recv_window = recv_window
+        self.symbols = tuple(symbols)
+        self.last_raw: Any = None
+        self._base_asset: dict[str, str] = {}
+
+    _signed = BinanceUSDM._signed
+    _public = BinanceUSDM._public
+    _parse = BinanceUSDM._parse
+
+    def instrument(self, symbol: str) -> Instrument:
+        info = self._public("/api/v3/exchangeInfo", {"symbol": symbol})
+        for s in info.get("symbols", []):
+            if s["symbol"] == symbol:
+                self._base_asset[symbol] = s["baseAsset"]
+                f = {x["filterType"]: x for x in s.get("filters", [])}
+                notional = f.get("NOTIONAL", f.get("MIN_NOTIONAL", {}))
+                return Instrument(self.name, symbol, _D(f["PRICE_FILTER"]["tickSize"]), _D(f["LOT_SIZE"]["stepSize"]),
+                                  _D(f["LOT_SIZE"]["minQty"]), _D(notional.get("minNotional", "5")))
+        raise VenueError(f"binance spot: {symbol} not listed")
+
+    def book(self, symbol: str) -> tuple[Decimal, Decimal]:
+        t = self._public("/api/v3/ticker/bookTicker", {"symbol": symbol})
+        return _D(t["bidPrice"]), _D(t["askPrice"])
+
+    def place_post_only(self, client_id: str, symbol: str, side: str, qty: Decimal, price: Decimal, reduce_only: bool = False) -> Order:
+        if reduce_only:
+            self._assert_reduces(symbol, side, qty)
+        r = self._signed("POST", "/api/v3/order", {
+            "symbol": symbol, "side": side, "type": "LIMIT_MAKER", "quantity": str(qty), "price": str(price), "newClientOrderId": client_id,
+            "newOrderRespType": "RESULT",
+        })
+        return self._order(r)
+
+    def place_ioc(self, client_id: str, symbol: str, side: str, qty: Decimal, price: Decimal, reduce_only: bool = False) -> Order:
+        if reduce_only:
+            self._assert_reduces(symbol, side, qty)
+        r = self._signed("POST", "/api/v3/order", {
+            "symbol": symbol, "side": side, "type": "LIMIT", "timeInForce": "IOC", "quantity": str(qty), "price": str(price),
+            "newClientOrderId": client_id, "newOrderRespType": "RESULT",
+        })
+        return self._order(r)
+
+    def close_taker(self, client_id: str, symbol: str, side: str, qty: Decimal, price: Decimal) -> Order:
+        """Sell (or buy back) what is held with an IOC through the touch; refuses anything that is not a reduction."""
+        return self.place_ioc(client_id, symbol, side, qty, price, reduce_only=True)
+
+    def close_market(self, client_id: str, symbol: str, side: str, qty: Decimal) -> Order:
+        self._assert_reduces(symbol, side, qty)
+        r = self._signed("POST", "/api/v3/order", {"symbol": symbol, "side": side, "type": "MARKET", "quantity": str(qty),
+                                                    "newClientOrderId": client_id, "newOrderRespType": "RESULT"})
+        return self._order(r)
+
+    def _assert_reduces(self, symbol: str, side: str, qty: Decimal) -> None:
+        held = self.positions().get(symbol, Decimal(0))
+        if side != "SELL" or held <= 0 or qty > held:
+            raise VenueError(f"binance spot: a reduce-only {side} {qty} {symbol} would not reduce a holding of {held}")
+
+    def cancel(self, symbol: str, client_id: str) -> Order:
+        return self._order(self._signed("DELETE", "/api/v3/order", {"symbol": symbol, "origClientOrderId": client_id}))
+
+    def order(self, symbol: str, client_id: str) -> Order:
+        return self._order(self._signed("GET", "/api/v3/order", {"symbol": symbol, "origClientOrderId": client_id}))
+
+    def _order(self, r: dict) -> Order:
+        return Order(str(r["orderId"]), r.get("clientOrderId") or r.get("origClientOrderId", ""), r["symbol"], r["side"], r["status"],
+                     _D(r["origQty"]), _D(r["executedQty"]), _D(r["price"]))
+
+    def executions(self, symbol: str, since_ms: int | None = None) -> list[Execution]:
+        rows = self._signed("GET", "/api/v3/myTrades", {"symbol": symbol, "startTime": since_ms, "limit": 1000})
+        return [
+            Execution(str(x["id"]), str(x["orderId"]), x["symbol"], "BUY" if x["isBuyer"] else "SELL", _D(x["qty"]), _D(x["price"]),
+                      _D(x["commission"]), x["commissionAsset"], str(x["time"]), bool(x["isMaker"]))
+            for x in rows
+        ]
+
+    def balances(self) -> dict[str, Decimal]:
+        acct = self._signed("GET", "/api/v3/account", {"omitZeroBalances": "true"})
+        out = {}
+        for b in acct.get("balances", []):
+            total = _D(b["free"]) + _D(b["locked"])
+            if total != 0:
+                out[b["asset"]] = total
+        return out
+
+    def positions(self) -> dict[str, Decimal]:
+        """The base asset held for each configured symbol, as a 'position' in that symbol."""
+        for symbol in self.symbols:
+            if symbol not in self._base_asset:
+                self.instrument(symbol)
+        bal = self.balances()
+        out = {}
+        for symbol in self.symbols:
+            q = bal.get(self._base_asset[symbol], Decimal(0))
+            if q != 0:
+                out[symbol] = q
+        return out
 
 
 # ------------------------------------------------------------------ Bybit
@@ -359,6 +493,9 @@ class FakeVenue:
     refuse_cancel_of_filled: bool = False
     #: quantities the next taker closes fill (an IOC on a thin book fills in part and the rest dies); empty = in full
     taker_fills: list = field(default_factory=list)
+    #: the carry holding's funding: rows the fake perp venue reports from `income()`, and the current rate
+    funding: list = field(default_factory=list)
+    funding_rate_now: Decimal = Decimal("0.0001")
     _seq: int = 0
 
     def instrument(self, symbol: str) -> Instrument:
@@ -405,6 +542,30 @@ class FakeVenue:
             self.timeout_after_accept = False
             raise VenueTimeout("accepted, then the response was lost")
         return o
+
+    def place_ioc(self, client_id, symbol, side, qty, price, reduce_only=False) -> Order:
+        """An IOC that may open: fills what `taker_fills` allows (all, by default) at the touch, the rest dies."""
+        if client_id in self.orders:
+            return self.orders[client_id]
+        if reduce_only:
+            return self.close_taker(client_id, symbol, side, qty, price)
+        bid, ask = self.books[symbol]
+        touch = ask if side == "BUY" else bid
+        o = Order(f"v{len(self.orders)+1}", client_id, symbol, side, "NEW", qty, Decimal(0), touch)
+        self.orders[client_id] = o
+        fill = min(qty, self.taker_fills.pop(0)) if self.taker_fills else qty
+        if fill > 0:
+            o = self._exec(o, fill)
+        if o.filled < o.qty:
+            o = Order(o.venue_order_id, o.client_id, o.symbol, o.side, "EXPIRED", o.qty, o.filled, o.price)
+            self.orders[client_id] = o
+        return o
+
+    def funding_rate(self, symbol):
+        return self.funding_rate_now, 0
+
+    def income(self, symbol, since_ms=None, kind="FUNDING_FEE"):
+        return [x for x in self.funding if x["symbol"] == symbol and (since_ms is None or x["time_ms"] >= since_ms)]
 
     def close_taker(self, client_id, symbol, side, qty, price) -> Order:
         if client_id in self.orders:

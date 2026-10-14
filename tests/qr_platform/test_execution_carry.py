@@ -183,3 +183,14 @@ def test_spot_client_sends_limit_maker_and_reads_trades_and_balances():
     assert isinstance(x[0], Execution) and x[0].side == "BUY" and x[0].maker and x[0].fee_currency == "BTC"
     assert v.balances() == {"BTC": D("0.0010"), "USDT": D("60")}
     assert v.positions() == {"BTCUSDT": D("0.0010")}
+
+
+def test_a_new_process_restores_the_target_and_reports_complete(tmp_path):
+    venues = _venues(spot_fill=D("0.99"), perp_fill=D("0.99"))
+    s, clock = _session(tmp_path, venues)
+    s.open(T0); s.tick(T0); s.park()
+    again = CarrySession(s.journal, s.config, venues, now=lambda: T0 + timedelta(hours=1), log=lambda *_: None)
+    assert again.target_qty == D("0.99") and again.complete()
+    again.close(rounds=1, pause=lambda _: None, wait_s=0)                     # a close is recorded; after it the target is gone
+    third = CarrySession(s.journal, s.config, venues, now=lambda: T0 + timedelta(hours=2), log=lambda *_: None)
+    assert third.target_qty == 0

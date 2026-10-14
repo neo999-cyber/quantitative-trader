@@ -102,6 +102,7 @@ def main(argv=None) -> int:
                 return 2
             view = run_until(session, lambda s, v: s.complete(), a.poll, max_wait)
             session.park()
+            view = session.status()   # after the park, so the mode printed is the one left behind
             print(json.dumps(view, indent=1))
             return 0 if view["complete"] else 3
         if a.action == "rebalance":
@@ -109,9 +110,9 @@ def main(argv=None) -> int:
             if session.held("spot") - abs(session.held("perp")) > 0:
                 mandate(journal, config, venues, a.confirm)
             print("rebalance:", session.rebalance())
-            view = run_until(session, lambda s, v: not s.working, a.poll, max_wait)
+            run_until(session, lambda s, v: not s.working, a.poll, max_wait)
             session.park()
-            print(json.dumps(view, indent=1))
+            print(json.dumps(session.status(), indent=1))
             return 0
         if a.action == "tick":
             print(json.dumps(session.tick(), indent=1))

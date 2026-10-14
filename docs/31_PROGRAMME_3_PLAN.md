@@ -728,6 +728,6 @@ forward-only:
   payment once by the venue's transaction id; `rebalance` closes an imbalance on the perp; `close` unwinds
   maker → taker → market and leaves the journal PAUSED. Tests on the fake venues. One defect found and fixed
   on the way: the journal keyed executions by the venue's id alone, and two venues on one account collide —
-  ids now carry the venue's name. The rehearsal needs a spot-testnet key pair from the owner
-  (`BINANCE_SPOT_TESTNET_KEY/SECRET`); live needs the ladder decision first, then the key's trading
-  permissions, which are off.
+  ids now carry the venue's name. **Rehearsed the same afternoon** once the owner added a spot-testnet pair: spot leg filled as a maker, perp leg
+  taken after the wait, both legs equal, parked; funding and close follow overnight (`docs/34`). Live needs the
+  ladder decision first, then the key's trading permissions, which are off.

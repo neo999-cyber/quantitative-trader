@@ -93,7 +93,9 @@ def preview(config: CarryConfig, venues: dict, out: Callable[[str], None] = prin
         "config_hash": config.digest(), "testnet": config.testnet, "qty": str(qty), "spot": {"bid": str(sb), "ask": str(sa)}, "perp": {"bid": str(pb), "ask": str(pa)},
         "basis_bps": str(basis_bps.quantize(D("0.1"))), "funding_rate": str(rate), "funding_annualised_pct": str((rate * FUNDING_PERIODS_PER_YEAR * 100).quantize(D("0.01"))),
         "round_trip_bps": str(2 * entry_bps), "next_funding_ms": next_ms,
-        "balances": {config.spot_venue: {k: str(v) for k, v in spot.balances().items()}, config.perp_venue: {k: str(v) for k, v in perp.balances().items()}},
+        # the coin and the quote currencies only: the spot testnet's faucet account holds hundreds of fake coins
+        "balances": {config.spot_venue: {k: str(v) for k, v in spot.balances().items() if k in (config.coin, "USDT", "BNB", "USDC")},
+                     config.perp_venue: {k: str(v) for k, v in perp.balances().items() if k in (config.coin, "USDT", "BNB", "USDC")}},
         "positions": {config.spot_venue: {k: str(v) for k, v in spot.positions().items()}, config.perp_venue: {k: str(v) for k, v in perp.positions().items()}},
     }
     out(f"carry {config.version}  config {config.digest()}  {'TESTNET' if config.testnet else 'MAINNET — REAL MONEY'}")
@@ -162,6 +164,14 @@ class CarrySession:
                      "perp": _Leg("perp", self.config.perp_venue, self.config.perp_symbol, "SELL")}
         self._attempt_n = 0
         self._load_working()
+        self._restore_target()
+
+    def _restore_target(self) -> None:
+        """A new process picks the open's target up from the audit trail, so a half-open holding is still completed."""
+        row = self.journal.db.execute("SELECT kind, detail FROM audit WHERE kind IN ('carry_open', 'carry_close') AND ref = ? ORDER BY seq DESC LIMIT 1",
+                                      (self.config.digest(),)).fetchone()
+        if row and row[0] == "carry_open":
+            self.target_qty = D(row[1])
 
     # -- state ---------------------------------------------------------------------------------------------------------
     def _load_working(self) -> None:
@@ -265,7 +275,8 @@ class CarrySession:
             self.journal.transition(intent.client_id, "REJECTED", f"venue refused: {exc}")
             return "REJECTED"
         state = reconcile(self.journal, venue, intent)
-        self.log(f"{leg.name} taker {action}: {side} {qty} {leg.symbol} @ {price} -> {state} (filled {order.filled}/{order.qty})")
+        filled = self.journal.db.execute("SELECT filled_qty FROM orders WHERE client_id = ?", (intent.client_id,)).fetchone()[0]
+        self.log(f"{leg.name} taker {action}: {side} {qty} {leg.symbol} @ {price} -> {state} (filled {filled}/{order.qty})")
         if state in ("ACKED", "PARTIAL", "UNKNOWN"):
             self.working[intent.client_id] = _Working(intent, leg.name, t, "taker")
         return state
@@ -335,7 +346,13 @@ class CarrySession:
         return self.status(t)
 
     def complete(self) -> bool:
-        return self.target_qty > 0 and abs(self.held("spot")) >= self.target_qty and abs(self.held("perp")) >= self.target_qty and not self.working
+        """Both legs on, equal within the tolerance, nothing working."""
+        spot, perp = abs(self.held("spot")), abs(self.held("perp"))
+        if spot == 0 or perp == 0 or self.working:
+            return False
+        if self.target_qty > 0 and (spot < self.target_qty or perp < self.target_qty):
+            return False
+        return abs(spot - perp) / max(spot, perp) * 100 <= D(self.config.max_imbalance_pct)
 
     def status(self, t: datetime | None = None) -> dict:
         t = t or self.now()
@@ -393,6 +410,7 @@ class CarrySession:
         """Unwind both legs: cancel what is working, maker exits, then taker, then market; leaves the journal PAUSED."""
         t = self.now()
         self.target_qty = D(0)
+        self.journal.db.execute("INSERT INTO audit (ts, kind, ref, detail) VALUES (?, ?, ?, ?)", (t.isoformat(), "carry_close", self.config.digest(), "close requested"))
         for cid, w in list(self.working.items()):
             try:
                 if cancel(self.journal, self.venues[w.intent.venue], w.intent) in ("FILLED", "CANCELLED", "REJECTED", "EXPIRED"):

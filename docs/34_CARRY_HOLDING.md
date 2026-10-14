@@ -75,3 +75,14 @@ A rehearsal on a venue. The futures demo key exists from stage 1; the spot testn
 
 Live would need the owner's key with spot and futures trading ticked, a funded spot wallet and futures
 margin, the typed line at the terminal, and — first — the ladder decision itself.
+
+## Rehearsed, 14 October 2026, on the testnets
+
+The owner created the spot-testnet pair the same afternoon. `preview` read both venues (spot testnet book
+81,658.00/81,658.01; futures demo 81,601/81,607; demo funding 0.0001 per 8 h). `open --confirm` at 18:22
+UTC: the spot maker (BUY 0.0012 BTC at the bid) **filled as a maker**; the perp maker (SELL 0.0012 at the
+ask) did not fill within the 120-second wait, was cancelled and **taken through the touch** — both legs
+0.0012, imbalance 0, the journal parked PAUSED with the positions standing. Left open overnight so that
+`funding` books a real demo payment at 00:00 UTC; `close` follows. Fake money throughout; the spot testnet
+faucet's 1 BTC that the account already held is not the journal's and is ignored, which is how a live
+account that holds the coin for other reasons would be treated too.

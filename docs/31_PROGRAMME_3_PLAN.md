@@ -703,3 +703,20 @@ forward-only:
   `enableFutures false, enableReading true, ipRestrict true`, everything else false. The futures balance
   reads that made me doubt it are allowed on *Enable Reading* (§16, corrected). From now the permission
   flags, not a balance read, are how a key's state is checked.
+
+## 18. 14 October 2026 — the two builds while waiting (owner: "let's do this while waiting")
+
+- **The ETF-flow series, solved at the issuer.** Farside refuses fetches and most issuers' pages are JS or
+  blocked (Grayscale 429, ARK 403, Fidelity 403), but iShares' own "Download" on every product page is a
+  SpreadsheetML workbook whose `Historical` sheet lists every day's NAV per share and shares outstanding since
+  launch. Mirrored as dated files (`~/qr/lake/mirror/etf_flows/ishares/<TICKER>_<date>.xls`) and built into
+  the lake as `etf_flows_ishares_daily` (`qr.data.etf_flows.build_crypto_etf_flows`): **IBIT, 695 daily rows
+  from 5 January 2024** (mean |flow| $163 M a day, 79 flat days); ETHA from 18 February 2026. The flow on
+  date t is (shares_t − shares_{t−1}) × NAV_t, i.e. priced at the settlement day's NAV; the issuer's series
+  sits **one business day after** the aggregators' "flow date" (their 12 October −66.1 M is the issuer's 13
+  October −65.9 M). IBIT is the majority of the complex; the other nine issuers publish no history, so their
+  flows exist only forward, from a public table's rolling fifteen days (bitbo.io, an aggregator, not a source
+  of record) that the box now records daily beside the two workbooks (`scripts/collect_btc_etf_standalone.py`,
+  cron 06:00 UTC, `~/flows/ishares/`, `~/flows/etf_flows_table.jsonl`). Nothing is registered; the
+  mechanism memo (forced AP buying after an inflow day) is written when the owner opens the programme — and it
+  must take the one-day lag into account: the share count moves on settlement, the AP buys around the order.

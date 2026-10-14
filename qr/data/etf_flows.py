@@ -40,6 +40,7 @@ round trip it cost.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -417,3 +418,123 @@ def precision_warning(counts: Sequence[ShareCount], flow_fraction: float = 0.001
         "Most days would read as zero flow and the rest as a jump. Collecting for longer "
         "does not fix a step the source never published below."
     )
+
+
+# ---------------------------------------------------------------------------
+# The spot bitcoin and ether ETFs: the issuer's own daily history (14 October 2026)
+#
+# The paragraph at the top of this file ("there is no free historical series")
+# was true of the screener and is not true of iShares' fund download: the
+# "Download" link on every iShares product page returns a SpreadsheetML
+# workbook whose `Historical` sheet lists, per day since launch, the NAV per
+# share and the shares outstanding — for IBIT every day from 5 January 2024.
+# Shares outstanding change on the day a creation or redemption *settles*, so
+# the issuer's series sits one business day after the aggregators' "flow
+# date" (checked against a public table on 14 October 2026: −65.9 M on the
+# issuer's 13 October row is the table's 12 October −66.1 M). Each download
+# is kept as a dated file, so a restatement would show as a difference
+# between snapshots rather than silently replace history.
+
+ISHARES_FUND_DOWNLOAD = (
+    "https://www.blackrock.com/varnish-api/blk-one01-product-data/product-data/api/v1/get-fund-document"
+    "?appType=PRODUCT_PAGE&appSubType=ISHARES&targetSite=us-ishares&locale=en_US&portfolioId={portfolio_id}"
+    "&component=fundDownload&userType=individual"
+)
+#: iShares' numeric portfolio ids, read off the product pages on 14 October 2026.
+ISHARES_CRYPTO_FUNDS: dict[str, int] = {"IBIT": 333011, "ETHA": 348532}
+_SS = "urn:schemas-microsoft-com:office:spreadsheet"
+
+
+def parse_ishares_fund_xls(text: str, sheet: str = "Historical") -> list[dict[str, Any]]:
+    """Rows of the `Historical` sheet of an iShares fund workbook (SpreadsheetML): date, nav, shares_outstanding.
+
+    The sheet's columns are `As Of`, `NAV per Share`, `Ex-Dividends`, `Shares Outstanding`; rows are newest
+    first and come back oldest first here. A row without a parsable date or number is dropped, not guessed.
+    Parsed with expressions, not an XML parser: the workbook's disclaimer text carries unescaped ampersands
+    that make ElementTree refuse the whole file (found on the first real download, 14 October 2026).
+    """
+    if "<ss:Workbook" not in text[:4000]:
+        raise FlowSourceError(f"not a SpreadsheetML workbook; starts {text[:120]!r}")
+    start = text.find(f'Name="{sheet}"')
+    if start < 0:
+        names = re.findall(r'Worksheet[^>]*Name="([^"]+)"', text)
+        raise FlowSourceError(f"no {sheet!r} sheet; the workbook has {names}")
+    body = text[start:]
+    body = body[: body.find("</ss:Worksheet>")]
+    rows: list[dict[str, Any]] = []
+    header: list[str] | None = None
+    for row in re.findall(r"<ss:Row[^>]*>(.*?)</ss:Row>", body, re.S):
+        cells = [c.strip() for c in re.findall(r"<ss:Data[^>]*>(.*?)</ss:Data>", row, re.S)]
+        if header is None:
+            header = [c.lower() for c in cells]
+            continue
+        rec = dict(zip(header, cells))
+        try:
+            date = datetime.strptime(rec.get("as of", ""), "%b %d, %Y").date().isoformat()
+            nav = float(rec.get("nav per share", ""))
+            shares = float(rec.get("shares outstanding", ""))
+        except ValueError:
+            continue
+        rows.append({"date": date, "nav": nav, "shares_outstanding": shares, "ex_dividend": rec.get("ex-dividends", "") or None})
+    rows.sort(key=lambda r: r["date"])
+    return rows
+
+
+def fetch_ishares_fund_xls(portfolio_id: int, timeout: int = 90) -> str:
+    """The fund workbook as text; raises `FlowSourceError` when the site answers with its HTML instead."""
+    import urllib.request
+
+    req = urllib.request.Request(ISHARES_FUND_DOWNLOAD.format(portfolio_id=portfolio_id), headers={"User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        text = r.read().decode("utf-8", "replace")
+    if "<ss:Workbook" not in text[:2000]:
+        raise FlowSourceError(f"iShares did not return a workbook for portfolio {portfolio_id}; starts {text[:120]!r}")
+    return text
+
+
+def mirror_ishares_history(mirror: Path, funds: dict[str, int] = ISHARES_CRYPTO_FUNDS, now: datetime | None = None) -> dict[str, Path]:
+    """Download each fund's workbook once and keep it as a dated file under `mirror/etf_flows/ishares/`."""
+    day = (now or datetime.now(timezone.utc)).strftime("%Y-%m-%d")
+    out_dir = mirror / "etf_flows" / "ishares"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    written = {}
+    for ticker, pid in funds.items():
+        path = out_dir / f"{ticker}_{day}.xls"
+        if not path.exists():
+            path.write_text(fetch_ishares_fund_xls(pid), encoding="utf-8")
+        written[ticker] = path
+    return written
+
+
+def ishares_history(mirror: Path, ticker: str):
+    """The latest dated workbook for one fund as a daily frame with the derived flow.
+
+    `flow_usd` on date t is (shares_t − shares_{t−1}) × NAV_t: creations and redemptions are priced at the
+    NAV of the day they settle. The first row has no predecessor and is NaN, not zero.
+    """
+    import pandas as pd
+
+    files = sorted((mirror / "etf_flows" / "ishares").glob(f"{ticker}_*.xls"))
+    if not files:
+        return pd.DataFrame(columns=["date", "ticker", "nav", "shares_outstanding", "flow_usd", "snapshot"])
+    rows = parse_ishares_fund_xls(files[-1].read_text(encoding="utf-8"))
+    frame = pd.DataFrame(rows)
+    frame["date"] = pd.to_datetime(frame["date"])
+    frame["ticker"] = ticker
+    frame["shares_change"] = frame["shares_outstanding"].diff()
+    frame["flow_usd"] = frame["shares_change"] * frame["nav"]
+    frame["snapshot"] = files[-1].name
+    return frame[["date", "ticker", "nav", "shares_outstanding", "shares_change", "flow_usd", "snapshot"]]
+
+
+def build_crypto_etf_flows(lake, mirror: Path, funds: dict[str, int] = ISHARES_CRYPTO_FUNDS):
+    """Every mirrored iShares crypto fund's daily history into the lake as `etf_flows_ishares_daily`."""
+    import pandas as pd
+
+    frames = [ishares_history(mirror, t) for t in funds]
+    frames = [f for f in frames if len(f)]
+    if not frames:
+        raise FlowSourceError("no mirrored iShares workbooks; run mirror_ishares_history first")
+    panel = pd.concat(frames, ignore_index=True).sort_values(["ticker", "date"]).reset_index(drop=True)
+    lake.write_reference("etf_flows_ishares_daily", panel, source="ishares_fund_download")
+    return panel

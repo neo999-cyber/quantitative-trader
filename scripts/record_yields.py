@@ -31,6 +31,8 @@ One JSON line per snapshot: `<out>/yields/YYYY-MM-DD.jsonl`, plus
 from __future__ import annotations
 
 import argparse
+import csv
+import io
 import json
 import os
 import re
@@ -69,13 +71,34 @@ def snapshot_yields() -> list[dict]:
     return out
 
 
+TREASURY_BILLS = ("https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/{year}/all"
+                  "?type=daily_treasury_bill_rates&field_tdr_date_value={year}&page&_format=csv")
+
+
 def tbill() -> dict | None:
-    lines = _get(FRED, timeout=180).decode().strip().splitlines()
-    for line in reversed(lines):
-        d, v = line.split(",")
-        if v not in (".", ""):
-            return {"date": d, "dtb3": float(v)}
-    return None
+    """The 3-month bill: FRED's DTB3 when it answers, else the Treasury's own daily bill-rate file.
+
+    FRED stopped answering the box on 13 October 2026 (Python's reads time out; curl, which worked once, now
+    fails with HTTP/2 stream errors and then timeouts — the box's address appears to be shielded). The
+    Treasury's file is the primary source of the same number: DTB3 is the 13-week bill on the bank-discount
+    basis, which the file carries as "13 WEEKS BANK DISCOUNT". Each row says which source it came from.
+    """
+    fred_error = None
+    try:
+        lines = _get(FRED, timeout=20).decode().strip().splitlines()
+        for line in reversed(lines):
+            d, v = line.split(",")
+            if v not in (".", ""):
+                return {"date": d, "dtb3": float(v), "source": "fred"}
+    except Exception as exc:  # noqa: BLE001
+        fred_error = f"{type(exc).__name__}: {str(exc)[:60]}"
+    year = datetime.now(timezone.utc).year
+    rows = list(csv.DictReader(io.StringIO(_get(TREASURY_BILLS.format(year=year), timeout=60).decode())))
+    rows = [r for r in rows if r.get("13 WEEKS BANK DISCOUNT") not in (None, "", "N/A")]
+    rows.sort(key=lambda r: datetime.strptime(r["Date"], "%m/%d/%Y"))
+    last = rows[-1]
+    return {"date": datetime.strptime(last["Date"], "%m/%d/%Y").date().isoformat(), "dtb3": float(last["13 WEEKS BANK DISCOUNT"]),
+            "source": "treasury_13w_bank_discount", "fred_error": fred_error}
 
 
 def announcements(out: Path) -> list[dict]:

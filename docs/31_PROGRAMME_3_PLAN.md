@@ -741,3 +741,17 @@ forward-only:
   us: a checklist we already run, one safety feature to add (Binance's `countdownCancelAll` as a dead-man's
   switch for the carry harness, a ticket), and no edge — the judgment layer sits on inputs C3, C5 and P3-C
   already tested.
+- **The desk sheet and the feed health, 15 October evening (owner: "do the desk sheet and health feed").**
+  The two things worth taking from the terminal report (`docs/research/11`). (1) `scripts/desk_sheet.py`
+  runs on the box at 06:40 UTC (cron) and writes one markdown page a day from the files already there —
+  the recorders' health line, yesterday's megabytes and reconnects, the daily-ladder recording's progress
+  (markets, asset × settlement-date clusters seen and settled, against v3's minimum of 30 *with a fill*,
+  stated as a ceiling), the collectors' freshness, the stablecoin ladder from the morning's DefiLlama
+  snapshot with the T-bill and today's BTC/ETH funding annualised, the measured costs, and a hand-kept block
+  of dated items and open decisions — and pushes it to the owner's phone (markdown, low priority). The first
+  sheet is `reports/desk/desk_2026-10-15.md`. (2) `recorder_health.sh` now also alerts when a feed goes
+  quiet: the Polymarket catalogue not refreshed for two hours, no surface file for two hours, the yield
+  snapshot or the ETF workbooks missing after 07:00 UTC, the equities share-count file untouched for three
+  days. Found by the sheet on its first run: FRED's T-bill fetch had timed out in the yield recorder three
+  mornings running (the pools and announcements were fine) — the fetch now retries three times with a
+  pause, and the sheet falls back to the latest snapshot that has a value.

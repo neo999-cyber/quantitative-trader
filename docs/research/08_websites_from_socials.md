@@ -116,3 +116,32 @@ not; and the one mechanism it embodies — follow the leaders — has a literatu
 outperformance does not persist; the followers pay the fees) and no point-in-time leaderboard history to
 test it on. For a person it is a way to lose money faster with company. Verdict: not for this project; not
 recommended for the owner's own money either.
+
+## app.blockworks.com — Blockworks Intel (asked 15 October 2026)
+
+What it is: Blockworks' research and data platform (news aggregation, analyst reports, asset profiles,
+an AI assistant, and analytics dashboards: project revenue, token unlocks, sectors, stablecoins,
+prediction markets, perp DEXs, treasury companies, and a **Crypto ETFs** set — total flows and AUM by
+asset, by provider, by region, by product type, trading volume, AUM as a share of market cap). Tiers:
+**Free** (one watchlist, curated news, limited profiles, view-only dashboards), **Pro** (full research,
+alerts, charts; the price is not shown on the page; the research seat was $4,500 a year when it was
+listed), and **Data** — the API, MCP server, data shares, streaming and CSV export — all "Contact Sales",
+"offered as a custom package", i.e. institutional pricing. The API (`api.blockworks.com`, one key for
+everything; the "Unified API" now also serves former Messari API customers) covers 40,000+ assets, 300+
+venues, 400+ protocols' financials, unlocks, funding rounds, sentiment; the legacy API documents a daily
+per-issuer `etf-flow-usd` metric, "data source: Blockworks", "may be revised after late-arriving data".
+
+Why it is tempting: the ETF-flow dashboard is exactly the series the data-expansion plan (`docs/31`
+§15, item 1) wants for the nine issuers that publish no history, and the token-unlock and perp-DEX data
+are things this project has used or records.
+
+Why it is not usable here: (1) **the data costs money** and the owner's rule is $0 data until a free-tier
+test shows something — the Data API is a sales conversation, not a sign-up; (2) **the free tier is
+charts, not data** — view-only, no export, and the dashboards' values are drawn by the app's internal
+endpoints, which are not a sanctioned feed and would not be point-in-time anyway; (3) **what we need from
+it we have taken from the source**: IBIT's full daily history from the issuer, the other issuers' flows
+recorded forward from a public table; unlocks were tested (C6, FAIL); prediction markets and Hyperliquid
+are recorded directly. If the owner ever paid for one dataset, the per-issuer ETF-flow history would be
+the one with a specific use — the backfill for the ETF-flow test — and even then "Blockworks-compiled,
+revised later" is a secondary source to be checked against the issuers' own files. Verdict: a good
+reading desk, paid data; nothing for the programme at $0.

@@ -731,3 +731,13 @@ forward-only:
   ids now carry the venue's name. **Rehearsed the same afternoon** once the owner added a spot-testnet pair: spot leg filled as a maker, perp leg
   taken after the wait, both legs equal, parked; funding and close follow overnight (`docs/34`). Live needs the
   ladder decision first, then the key's trading permissions, which are off.
+- **Site review on the owner's ask, 15 October:** cloud9markets.com's "24/7 AI trading bot" page —
+  `docs/research/10_cloud9_decision_bot_review.md`. A research desk's paper-trading decision engine (code
+  features → Microsoft-Decision-1 through OpenRouter's Decisions API → plain-code policy → risk engine), not a
+  broker, nothing sold. Its facts check out (the model is real, launched 9–10 October; the costs and the
+  wake rate reproduce on our tape: 91.3% of seconds skipped, $0.20 a day). Its baseline strategy, run on our
+  15-minute BTC bars at our measured costs, loses 75–90% over 2.75 years (trial-log run 980, a review
+  replication). Its own live desk went GREEN LIGHT zero times in 73 hours and GET OUT one time in five. For
+  us: a checklist we already run, one safety feature to add (Binance's `countdownCancelAll` as a dead-man's
+  switch for the carry harness, a ticket), and no edge — the judgment layer sits on inputs C3, C5 and P3-C
+  already tested.

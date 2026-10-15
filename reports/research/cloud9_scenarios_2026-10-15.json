@@ -1,0 +1,143 @@
+{
+ "wake": {
+  "day": "2026-09-20",
+  "symbol": "BTCUSDT",
+  "seconds": 86323,
+  "hours": 24.0,
+  "calls": 7539,
+  "skipped_pct": 91.3,
+  "calls_per_minute": 5.24,
+  "calls_per_day_equiv": 7539,
+  "cost_per_day_usd": 0.196,
+  "by_reason": {
+   "mid_5bps": 151,
+   "imbalance_shift": 1554,
+   "vol_ratio_1.5": 260,
+   "aggressive_burst": 4294,
+   "heartbeat": 1280
+  },
+  "note": "top-of-book and prints only: the depth triggers (walls, absorption, book drain) are not computable here, so this wake rate is a floor"
+ },
+ "macross": {
+  "taker_5.5bps": {
+   "bars": 96384,
+   "from": "2024-01-01",
+   "to": "2026-09-30",
+   "years": 2.75,
+   "fast": 20,
+   "slow": 50,
+   "fee_bps_side": 5.5,
+   "slippage_bps": 1.0,
+   "stop_pct": null,
+   "trades": 1908,
+   "trades_per_year": 694.8,
+   "win_rate_net": 0.308,
+   "mean_gross_per_trade_bps": 2.5,
+   "round_trip_cost_bps": 13.0,
+   "mean_net_per_trade_bps": -10.5,
+   "gross_total_return": 0.226,
+   "net_total_return": -0.898,
+   "net_cagr": -0.564,
+   "net_sharpe_daily": -1.67,
+   "max_drawdown_net": -0.908,
+   "exit_reasons": {
+    "cross": 1908
+   }
+  },
+  "maker_3.2bps": {
+   "bars": 96384,
+   "from": "2024-01-01",
+   "to": "2026-09-30",
+   "years": 2.75,
+   "fast": 20,
+   "slow": 50,
+   "fee_bps_side": 3.2,
+   "slippage_bps": 1.0,
+   "stop_pct": null,
+   "trades": 1908,
+   "trades_per_year": 694.8,
+   "win_rate_net": 0.322,
+   "mean_gross_per_trade_bps": 2.5,
+   "round_trip_cost_bps": 8.4,
+   "mean_net_per_trade_bps": -5.9,
+   "gross_total_return": 0.226,
+   "net_total_return": -0.753,
+   "net_cagr": -0.399,
+   "net_sharpe_daily": -0.95,
+   "max_drawdown_net": -0.799,
+   "exit_reasons": {
+    "cross": 1908
+   }
+  },
+  "free": {
+   "bars": 96384,
+   "from": "2024-01-01",
+   "to": "2026-09-30",
+   "years": 2.75,
+   "fast": 20,
+   "slow": 50,
+   "fee_bps_side": 0.0,
+   "slippage_bps": 0.0,
+   "stop_pct": null,
+   "trades": 1908,
+   "trades_per_year": 694.8,
+   "win_rate_net": 0.36,
+   "mean_gross_per_trade_bps": 2.5,
+   "round_trip_cost_bps": 0.0,
+   "mean_net_per_trade_bps": 2.5,
+   "gross_total_return": 0.226,
+   "net_total_return": 0.226,
+   "net_cagr": 0.077,
+   "net_sharpe_daily": 0.4,
+   "max_drawdown_net": -0.41,
+   "exit_reasons": {
+    "cross": 1908
+   }
+  },
+  "taker_5.5bps_stop_1pct": {
+   "bars": 96384,
+   "from": "2024-01-01",
+   "to": "2026-09-30",
+   "years": 2.75,
+   "fast": 20,
+   "slow": 50,
+   "fee_bps_side": 5.5,
+   "slippage_bps": 1.0,
+   "stop_pct": 0.01,
+   "trades": 1908,
+   "trades_per_year": 694.8,
+   "win_rate_net": 0.284,
+   "mean_gross_per_trade_bps": 4.7,
+   "round_trip_cost_bps": 13.0,
+   "mean_net_per_trade_bps": -8.3,
+   "gross_total_return": 0.96,
+   "net_total_return": -0.836,
+   "net_cagr": -0.482,
+   "net_sharpe_daily": -1.52,
+   "max_drawdown_net": -0.867,
+   "exit_reasons": {
+    "cross": 1288,
+    "stop": 620
+   }
+  }
+ },
+ "desk_read_2026-10-15": {
+  "uptime": "73h 42m",
+  "seconds_checked": 264984,
+  "decisions": 18914,
+  "skipped_pct": 92.9,
+  "cost_usd": 0.493597,
+  "cost_per_day": 0.160736,
+  "latency_ms_p50": 646,
+  "vetoes": 596,
+  "kills": 27,
+  "errors": 30,
+  "actions": {
+   "GREEN LIGHT": 0,
+   "TRADE SMALL": 10988,
+   "CAUTION": 3916,
+   "GET OUT": 3413,
+   "SIT OUT": 597
+  }
+ }
+}

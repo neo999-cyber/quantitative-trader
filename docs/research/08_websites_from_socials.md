@@ -67,3 +67,31 @@ for month in ["2007-09", "2014-06"]:
 PY
 ```
 If the column names differ from the card, print `df.columns` and adjust; the checks are the point, not the exact code.
+
+## finviz.com (asked 15 October 2026: "can this data be used; lots of professional traders use it")
+
+What it is: a US-equities screener and visualisation site (screener with technical and fundamental
+filters, sector maps, news headlines, insider trades, an economic and earnings calendar, delayed futures,
+forex and a few crypto quotes). Free tier delayed (quotes "delayed by 1 minute", futures 15 minutes),
+basic filters, 3 years of statements; Elite ($24.96/month billed annually, $39.50 monthly) adds real-time
+quotes, advanced filters, alerts, intraday charts, 8 years of statements and "Export to Excel, CSV" of
+screens, prices, portfolios and groups. No public API; the robots file disallows every export path, every
+custom screen (`/screener?*`), the insider search and `/api/v1/screener-export-csv`, allowing crawlers only
+a dozen canned screens. The unofficial Python scrapers say in their own READMEs that using them is against
+the site's terms.
+
+Why professionals use it: it is the fastest way for a *discretionary* trader to look at the whole US market
+at once — which names moved, on what volume, with what headline — and to mark charts by eye. That is a
+cockpit, not a dataset.
+
+Why it is no use to this programme: (1) **no history** — a screen shows today; there is no point-in-time
+archive of past screens, so nothing from it can be backtested without look-ahead and survivorship problems;
+(2) **nothing original** — every field is derived from sources we already mirror free with history (SEC
+EDGAR Form 4 for insider trades, `qr/data/form4.py`; FINRA short data, `short_data.py`; earnings dates,
+`earnings.py`; prices and auctions from Databento/Alpaca/Tiingo), and the E-family tests built on those
+primary sources already failed the gates; (3) **equities only** — the live thread is crypto perps and
+prediction markets; its crypto page is four quotes; (4) **no sanctioned feed** — automated access is
+disallowed, and Elite's export is for the member's own screen, not a licensed data product. The one honest
+way to make it data would be to record a chosen screen daily forward as a point-in-time snapshot, and even
+then the events it surfaces (unusual volume, insider buys, new highs) are computable from our own primary
+feeds with history. Verdict: not a data source for this project; a useful set of eyes for a human.

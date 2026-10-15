@@ -86,3 +86,13 @@ ask) did not fill within the 120-second wait, was cancelled and **taken through 
 `funding` books a real demo payment at 00:00 UTC; `close` follows. Fake money throughout; the spot testnet
 faucet's 1 BTC that the account already held is not the journal's and is ignored, which is how a live
 account that holds the coin for other reasons would be treated too.
+
+**Overnight, 15 October.** The demo paid funding at 00:00 UTC and `funding` booked it once: **0.00979773 USDT**,
+which is 0.0012 × 81,648 × 0.0001 to the cent. Then an unplanned test of the recovery path: the detached job
+that ran `close` at 01:15 UTC staged both maker exits (spot SELL at the ask, perp BUY at the bid), the venues
+filled them, and the process hung before it could record the fills (the laptop had slept and the socket never
+answered). The next run, an hour later, loaded the staged intents, asked the venue to cancel, was told
+`-2011 Unknown order sent` — the venue's way of saying "filled" — reconciled, posted the five executions by
+their venue ids, and reported `flat`. The journal and both venues agree: no coin held that is ours, the
+testnet's faucet balance untouched. That is the race the stage-1 journal was built for, seen on two venues.
+The hung process was stopped by hand afterwards.

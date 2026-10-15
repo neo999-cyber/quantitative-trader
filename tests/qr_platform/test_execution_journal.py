@@ -167,3 +167,11 @@ def test_an_exit_can_be_staged_while_paused_but_an_entry_cannot(journal):
     with pytest.raises(ValueError, match="staging refused"):
         journal.stage(intent(signal="p1"))
     assert journal.stage(intent(side="SELL", action="EXIT", signal="p2")) == "STAGED"
+
+
+def test_a_venue_side_cancel_is_bookable_from_a_resting_state(tmp_path):
+    """The countdown-cancel dead-man's switch (or any exchange-side rule) cancels a resting order without a request from us."""
+    from qr.execution.journal import TRANSITIONS
+
+    assert "CANCELLED" in TRANSITIONS["ACKED"] and "CANCELLED" in TRANSITIONS["PARTIAL"]
+    assert "CANCELLED" not in TRANSITIONS["SUBMITTING"]        # before an acknowledgement the venue cannot have cancelled anything of ours

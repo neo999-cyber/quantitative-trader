@@ -194,3 +194,14 @@ def test_a_new_process_restores_the_target_and_reports_complete(tmp_path):
     again.close(rounds=1, pause=lambda _: None, wait_s=0)                     # a close is recorded; after it the target is gone
     third = CarrySession(s.journal, s.config, venues, now=lambda: T0 + timedelta(hours=2), log=lambda *_: None)
     assert third.target_qty == 0
+
+
+def test_deadman_is_armed_while_a_perp_order_rests_and_disarmed_after(tmp_path):
+    venues = _venues(spot_fill=D("0.99"))              # the perp maker rests
+    s, clock = _session(tmp_path, venues)
+    s.open(T0)
+    assert venues["binance"].countdowns == {SYM: 60_000}
+    venues["binance"].expire_countdown(SYM)               # the process dies: the venue cancels the resting order by itself
+    clock["t"] = T0 + timedelta(seconds=5)
+    s.tick(clock["t"])                                    # the next run sees CANCELLED and, still under the mandate, takes the leg
+    assert s.held("perp") == D("-0.99") and venues["binance"].countdowns.get(SYM, 0) == 0

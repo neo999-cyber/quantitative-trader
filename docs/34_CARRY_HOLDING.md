@@ -96,3 +96,15 @@ answered). The next run, an hour later, loaded the staged intents, asked the ven
 their venue ids, and reported `flat`. The journal and both venues agree: no coin held that is ours, the
 testnet's faucet balance untouched. That is the race the stage-1 journal was built for, seen on two venues.
 The hung process was stopped by hand afterwards.
+
+## The dead-man's switch (added 15 October)
+
+Hyperliquid's `scheduleCancel`, which the Cloud9 page recommends, has a Binance USDⓈ-M equivalent:
+`POST /fapi/v1/countdownCancelAll` cancels every open order on a symbol unless the client re-arms the
+countdown in time. The carry session now arms it for 60 seconds on the perp leg whenever one of its orders
+is resting and re-arms it every tick, disarming once nothing rests (`CarrySession._deadman`). Had it been
+on during the overnight close, the hung process would have left no resting order behind for the venue to
+fill in our absence — though the journal handled that case too. Exercised once on the futures demo
+(armed 10 s, disarmed). The journal accepts the resulting venue-side cancel from a resting state. Spot has
+no such switch: a spot maker exit left resting by a dead process stays until cancelled by hand or by the
+next run, which is one more reason the spot leg is the one that is taken, not left.

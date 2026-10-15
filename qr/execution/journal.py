@@ -49,8 +49,10 @@ TRANSITIONS: dict[str, set[str]] = {
     "STAGED": {"SUBMITTING", "CANCELLED"},
     "SUBMITTING": {"ACKED", "PARTIAL", "FILLED", "REJECTED", "EXPIRED", "UNKNOWN"},  # EXPIRED: a post-only that would have crossed
     "UNKNOWN": {"ACKED", "PARTIAL", "FILLED", "REJECTED", "CANCELLED", "EXPIRED"},  # by reconciliation only
-    "ACKED": {"PARTIAL", "FILLED", "CANCEL_REQUESTED", "UNKNOWN", "EXPIRED"},
-    "PARTIAL": {"PARTIAL", "FILLED", "CANCEL_REQUESTED", "UNKNOWN", "EXPIRED"},
+    # CANCELLED straight from a resting state: the venue cancelled it by itself — the countdown-cancel dead-man's switch
+    # lapsing (the carry holding arms it, 15 October 2026) or an exchange-side rule — and reconciliation reports it so
+    "ACKED": {"PARTIAL", "FILLED", "CANCEL_REQUESTED", "UNKNOWN", "EXPIRED", "CANCELLED"},
+    "PARTIAL": {"PARTIAL", "FILLED", "CANCEL_REQUESTED", "UNKNOWN", "EXPIRED", "CANCELLED"},
     "CANCEL_REQUESTED": {"PARTIAL", "FILLED", "CANCELLED", "EXPIRED", "UNKNOWN"},
     "FILLED": set(),
     "CANCELLED": set(),

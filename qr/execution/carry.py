@@ -325,14 +325,30 @@ class CarrySession:
         self.journal.db.execute("INSERT INTO audit (ts, kind, ref, detail) VALUES (?, ?, ?, ?)", (t.isoformat(), "carry_open", self.config.digest(), str(qty)))
         for leg in (spot, perp):
             self._maker(leg, leg.side, qty, "ENTRY", t)
+        self._deadman()
         return qty
 
+    DEADMAN_MS = 60_000   # the venue cancels the perp leg's resting orders itself if no tick re-arms this within a minute
+
+    def _deadman(self) -> None:
+        """Arm the perp venue's countdown while one of its orders rests; disarm once nothing does. Spot has no such switch."""
+        perp = self.legs["perp"]
+        venue = self.venues[perp.venue]
+        if not hasattr(venue, "countdown_cancel_all"):
+            return
+        resting = any(w.leg == "perp" for w in self.working.values())
+        try:
+            venue.countdown_cancel_all(perp.symbol, self.DEADMAN_MS if resting else 0)
+        except (VenueError, VenueTimeout) as exc:
+            self.log(f"dead-man's switch: {exc}")
+
     def tick(self, t: datetime | None = None) -> dict:
-        """Reconcile, cancel-and-take after the maker wait, re-mark both legs; returns the imbalance view."""
+        """Reconcile, cancel-and-take after the maker wait, re-mark both legs, re-arm the dead-man's switch; returns the imbalance view."""
         t = t or self.now()
         for leg in self.legs.values():   # fresh marks first: every cap and NAV check below reads them at this tick's time
             self._mark(leg, t)
         self._reconcile_working(t)
+        self._deadman()
         if self.target_qty > 0 and self.journal.mode() == "STUDY":
             for name in ("spot", "perp"):
                 leg = self.legs[name]
@@ -443,6 +459,7 @@ class CarrySession:
                         self.working.pop(cid, None)
                 except (VenueError, VenueTimeout) as exc:
                     self.log(f"cancel {cid[:8]} during close: {exc}")
+        self._deadman()
         flat = self.held("spot") == 0 and self.held("perp") == 0
         events.append("flat" if flat else f"NOT FLAT: spot {self.held('spot')} perp {self.held('perp')}")
         if self.journal.mode() == "STUDY":
@@ -451,5 +468,6 @@ class CarrySession:
 
     def park(self) -> None:
         """After the legs are on: leave the mandate (the positions stand; nothing else can be entered until the next typed line)."""
+        self._deadman()
         if self.journal.mode() == "STUDY":
             self.journal.set_mode("PAUSED", "carry holding on; mandate released")

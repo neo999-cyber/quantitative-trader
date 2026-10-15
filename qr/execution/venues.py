@@ -202,6 +202,13 @@ class BinanceUSDM:
         })
         return self._order(r)
 
+    def countdown_cancel_all(self, symbol: str, countdown_ms: int) -> int:
+        """Arm the venue's dead-man's switch: every open order on `symbol` is cancelled by the venue itself unless this is
+        called again within `countdown_ms`; 0 disarms. The carry holding re-arms it on every tick while an order rests, so
+        a hung or dead process (seen 15 October 2026 on the testnet) leaves nothing resting at the venue."""
+        r = self._signed("POST", "/fapi/v1/countdownCancelAll", {"symbol": symbol, "countdownTime": int(countdown_ms)})
+        return int(r.get("countdownTime", countdown_ms))
+
     def funding_rate(self, symbol: str) -> tuple[Decimal, int]:
         """The last funding rate and the next funding time (ms) from the premium index."""
         r = self._public("/fapi/v1/premiumIndex", {"symbol": symbol})
@@ -496,6 +503,7 @@ class FakeVenue:
     #: the carry holding's funding: rows the fake perp venue reports from `income()`, and the current rate
     funding: list = field(default_factory=list)
     funding_rate_now: Decimal = Decimal("0.0001")
+    countdowns: dict = field(default_factory=dict)
     _seq: int = 0
 
     def instrument(self, symbol: str) -> Instrument:
@@ -563,6 +571,17 @@ class FakeVenue:
 
     def funding_rate(self, symbol):
         return self.funding_rate_now, 0
+
+    def countdown_cancel_all(self, symbol, countdown_ms):
+        self.countdowns[symbol] = int(countdown_ms)
+        return int(countdown_ms)
+
+    def expire_countdown(self, symbol):
+        """What the venue does when the countdown lapses: every open order on the symbol is cancelled."""
+        for cid, o in list(self.orders.items()):
+            if o.symbol == symbol and o.status in ("NEW", "PARTIALLY_FILLED"):
+                self.orders[cid] = Order(o.venue_order_id, o.client_id, o.symbol, o.side, "CANCELED", o.qty, o.filled, o.price)
+        self.countdowns.pop(symbol, None)
 
     def income(self, symbol, since_ms=None, kind="FUNDING_FEE"):
         return [x for x in self.funding if x["symbol"] == symbol and (since_ms is None or x["time_ms"] >= since_ms)]

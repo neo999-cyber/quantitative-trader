@@ -95,3 +95,24 @@ disallowed, and Elite's export is for the member's own screen, not a licensed da
 way to make it data would be to record a chosen screen daily forward as a point-in-time snapshot, and even
 then the events it surfaces (unusual volume, insider buys, new highs) are computable from our own primary
 feeds with history. Verdict: not a data source for this project; a useful set of eyes for a human.
+
+## app.invoapp.com — "Invo: Where Traders Are Made" (asked 15 October 2026)
+
+What it is: a mobile social/copy-trading app by Involio Inc. (no location, regulator, risk warning or legal
+entity on the site). Users follow "top traders with verified track records", "mimic their moves" in one
+click, creators "get paid to post"; "170+ futures pairs" on a "Hyperliquid-powered platform", funds
+"completely non-custodial" (a wallet on Hyperliquid). The web address is a splash screen for the phone app
+(App Store 4.2 from 462 ratings; age 18+ with "simulated gambling" in the content descriptors; the listing
+reports collecting contacts, search history and identifiers). Trust-score sites rate it "caution".
+
+What the "verified" track record is: Hyperliquid itself. Every Hyperliquid account's positions, fills and
+funding are public on-chain through the venue's own info API, so the verification is the venue's
+transparency, which anyone can read without the app — it is item 5 of our data-expansion plan (`docs/31`
+§15) and the asset-level part is already recorded hourly on the box.
+
+Why it is no use to this programme: it is discretionary copy-trading of levered perps through an
+unregulated intermediary, the opposite of a pre-registered rule; it offers no data the public chain does
+not; and the one mechanism it embodies — follow the leaders — has a literature verdict (leaders'
+outperformance does not persist; the followers pay the fees) and no point-in-time leaderboard history to
+test it on. For a person it is a way to lose money faster with company. Verdict: not for this project; not
+recommended for the owner's own money either.

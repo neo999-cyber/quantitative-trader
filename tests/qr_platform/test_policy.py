@@ -135,8 +135,11 @@ def test_the_quarterly_cap_binds_even_when_the_week_is_clear(log):
     policy = current(log)
     for name in ("a", "b", "c"):
         log.prereg(name, "x")
+    # Thirty days after the records were written: the weekly window is clear, the
+    # quarter is not. Measured from wall-clock time for the reason given above.
+    written = datetime.now(timezone.utc)
     with pytest.raises(PolicyBreach, match="last quarter"):
-        check_promotion(log, policy, now=NOW + timedelta(days=30))
+        check_promotion(log, policy, now=written + timedelta(days=30))
 
 
 # -------------------------------------------------------------------- the bar

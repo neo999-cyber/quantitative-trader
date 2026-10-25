@@ -1,0 +1,595 @@
+{
+ "rec": "/Users/anoop/qr/lake/mirror/polymarket_live",
+ "window": [
+  "2026-10-13",
+  "2026-10-26"
+ ],
+ "elapsed_s": 489.1,
+ "files": {
+  "polymarket": {
+   "n": 294,
+   "days": [
+    "2026-10-13",
+    "2026-10-14",
+    "2026-10-15",
+    "2026-10-16",
+    "2026-10-17",
+    "2026-10-18",
+    "2026-10-19",
+    "2026-10-20",
+    "2026-10-21",
+    "2026-10-22",
+    "2026-10-23",
+    "2026-10-24",
+    "2026-10-25"
+   ],
+   "truncated": 1,
+   "bad_lines": 0,
+   "lines": 73978999,
+   "bytes_gz": 2618778512,
+   "outside_window": 0,
+   "n_days": 13
+  },
+  "deribit": {
+   "n": 294,
+   "days": [
+    "2026-10-13",
+    "2026-10-14",
+    "2026-10-15",
+    "2026-10-16",
+    "2026-10-17",
+    "2026-10-18",
+    "2026-10-19",
+    "2026-10-20",
+    "2026-10-21",
+    "2026-10-22",
+    "2026-10-23",
+    "2026-10-24",
+    "2026-10-25"
+   ],
+   "truncated": 1,
+   "bad_lines": 0,
+   "lines": 4789291,
+   "bytes_gz": 73397030,
+   "outside_window": 0,
+   "n_days": 13
+  }
+ },
+ "messages": {
+  "polymarket": {
+   "total": 74090881,
+   "by_type": {
+    "price_change": 73764402,
+    "book": 255536,
+    "last_trade_price": 69529,
+    "tick_size_change": 1414
+   },
+   "per_day": {
+    "2026-10-13": 4439718,
+    "2026-10-14": 4984853,
+    "2026-10-15": 7901221,
+    "2026-10-16": 6874394,
+    "2026-10-17": 6453037,
+    "2026-10-18": 5381624,
+    "2026-10-19": 4843421,
+    "2026-10-20": 5036417,
+    "2026-10-21": 5991826,
+    "2026-10-22": 7496351,
+    "2026-10-23": 6268138,
+    "2026-10-24": 6854685,
+    "2026-10-25": 1565196
+   },
+   "price_change_entries": 73764402
+  },
+  "deribit": {
+   "total": 4789291,
+   "by_channel": {
+    "deribit_price_index.eth_usd": 835171,
+    "deribit_volatility_index.eth_usd": 1054345,
+    "deribit_price_index.sol_usd": 946454,
+    "deribit_volatility_index.btc_usd": 1054351,
+    "deribit_price_index.btc_usd": 898970
+   },
+   "per_day": {
+    "2026-10-13": 390229,
+    "2026-10-14": 404769,
+    "2026-10-15": 412205,
+    "2026-10-16": 399722,
+    "2026-10-17": 346105,
+    "2026-10-18": 379496,
+    "2026-10-19": 396635,
+    "2026-10-20": 403866,
+    "2026-10-21": 394830,
+    "2026-10-22": 404230,
+    "2026-10-23": 401477,
+    "2026-10-24": 371915,
+    "2026-10-25": 83812
+   }
+  }
+ },
+ "tokens": {
+  "with_book_snapshot": 1545,
+  "with_price_change": 1545,
+  "with_any_quote": 1545,
+  "with_trade_print": 1049,
+  "trade_prints_total": 69529,
+  "trade_prints_per_token_quantiles": {
+   "p10": 1,
+   "p50": 18,
+   "p90": 195,
+   "max": 986
+  },
+  "with_trade_ge10": 632,
+  "with_trade_ge100": 207
+ },
+ "gaps": {
+  "polymarket": {
+   "max_gap_s": 310.0,
+   "gaps_over_600s": 0,
+   "per_day_max_gap_s": {
+    "2026-10-13": 21.2,
+    "2026-10-14": 1.9,
+    "2026-10-15": 2.1,
+    "2026-10-16": 2.1,
+    "2026-10-17": 2.6,
+    "2026-10-18": 2.5,
+    "2026-10-19": 2.6,
+    "2026-10-20": 2.4,
+    "2026-10-21": 310.0,
+    "2026-10-22": 178.0,
+    "2026-10-23": 2.1,
+    "2026-10-24": 7.4,
+    "2026-10-25": 2.1
+   }
+  },
+  "deribit": {
+   "max_gap_s": 2415.5,
+   "gaps_over_600s": 1,
+   "per_day_max_gap_s": {
+    "2026-10-13": 2415.5,
+    "2026-10-14": 22.5,
+    "2026-10-15": 5.7,
+    "2026-10-16": 3.6,
+    "2026-10-17": 4.1,
+    "2026-10-18": 3.7,
+    "2026-10-19": 3.6,
+    "2026-10-20": 3.7,
+    "2026-10-21": 4.5,
+    "2026-10-22": 4.7,
+    "2026-10-23": 3.9,
+    "2026-10-24": 4.0,
+    "2026-10-25": 4.3
+   }
+  }
+ },
+ "catalogue": {
+  "lines": 871,
+  "distinct_markets": 1646,
+  "distinct_yes_tokens": 1646,
+  "first_at": "2026-09-21",
+  "last_at": "2026-10-25",
+  "tokens_in_catalogue_with_any_quote": 1545,
+  "tokens_in_catalogue_with_trade_print": 1049
+ },
+ "daily": {
+  "until": "2026-10-25T06:10:00+00:00",
+  "since": "2026-10-13T04:53:05+00:00",
+  "days_recorded": 12.1,
+  "selection": {
+   "kind": "above",
+   "start_present": true,
+   "max_life_days": 8.0,
+   "same_as": "scripts/p3a_wedge_v3.py::load_daily_markets"
+  },
+  "markets": {
+   "n": 627,
+   "by_asset": {
+    "BTC": 209,
+    "ETH": 209,
+    "SOL": 209
+   },
+   "with_any_quote": 627,
+   "with_trade_print": 486,
+   "trade_prints_total": 39724,
+   "trade_prints_per_traded_market": {
+    "p10": 2,
+    "p50": 21,
+    "p90": 252,
+    "max": 754
+   },
+   "life_days": {
+    "min": 7.0,
+    "median": 7.0,
+    "max": 7.0
+   }
+  },
+  "clusters": {
+   "all": {
+    "clusters": 57,
+    "with_any_quote": 57,
+    "with_trade_print": 56,
+    "by_asset_with_trade_print": {
+     "BTC": 19,
+     "ETH": 19,
+     "SOL": 18
+    }
+   },
+   "settled_by_until": {
+    "clusters": 36,
+    "with_any_quote": 36,
+    "with_trade_print": 36,
+    "by_asset_with_trade_print": {
+     "BTC": 12,
+     "ETH": 12,
+     "SOL": 12
+    }
+   },
+   "settling_in_v3_window": {
+    "clusters": 54,
+    "with_any_quote": 54,
+    "with_trade_print": 54,
+    "by_asset_with_trade_print": {
+     "BTC": 18,
+     "ETH": 18,
+     "SOL": 18
+    }
+   },
+   "trade_prints_per_traded_cluster": {
+    "p10": 22,
+    "p50": 232,
+    "p90": 2278,
+    "max": 3119
+   },
+   "memo_minimum_with_a_fill": 30
+  },
+  "by_settlement_date": {
+   "2026-10-13": {
+    "BTC": {
+     "markets": 11,
+     "with_trade_print": 10,
+     "prints": 931
+    },
+    "ETH": {
+     "markets": 11,
+     "with_trade_print": 6,
+     "prints": 294
+    },
+    "SOL": {
+     "markets": 11,
+     "with_trade_print": 5,
+     "prints": 44
+    }
+   },
+   "2026-10-14": {
+    "BTC": {
+     "markets": 11,
+     "with_trade_print": 11,
+     "prints": 1899
+    },
+    "ETH": {
+     "markets": 11,
+     "with_trade_print": 8,
+     "prints": 589
+    },
+    "SOL": {
+     "markets": 11,
+     "with_trade_print": 5,
+     "prints": 84
+    }
+   },
+   "2026-10-15": {
+    "BTC": {
+     "markets": 11,
+     "with_trade_print": 11,
+     "prints": 2660
+    },
+    "ETH": {
+     "markets": 11,
+     "with_trade_print": 11,
+     "prints": 783
+    },
+    "SOL": {
+     "markets": 11,
+     "with_trade_print": 8,
+     "prints": 125
+    }
+   },
+   "2026-10-16": {
+    "BTC": {
+     "markets": 11,
+     "with_trade_print": 11,
+     "prints": 3119
+    },
+    "ETH": {
+     "markets": 11,
+     "with_trade_print": 11,
+     "prints": 1147
+    },
+    "SOL": {
+     "markets": 11,
+     "with_trade_print": 7,
+     "prints": 161
+    }
+   },
+   "2026-10-17": {
+    "BTC": {
+     "markets": 11,
+     "with_trade_print": 11,
+     "prints": 1718
+    },
+    "ETH": {
+     "markets": 11,
+     "with_trade_print": 10,
+     "prints": 436
+    },
+    "SOL": {
+     "markets": 11,
+     "with_trade_print": 7,
+     "prints": 80
+    }
+   },
+   "2026-10-18": {
+    "BTC": {
+     "markets": 11,
+     "with_trade_print": 11,
+     "prints": 1696
+    },
+    "ETH": {
+     "markets": 11,
+     "with_trade_print": 10,
+     "prints": 573
+    },
+    "SOL": {
+     "markets": 11,
+     "with_trade_print": 6,
+     "prints": 84
+    }
+   },
+   "2026-10-19": {
+    "BTC": {
+     "markets": 11,
+     "with_trade_print": 11,
+     "prints": 2833
+    },
+    "ETH": {
+     "markets": 11,
+     "with_trade_print": 10,
+     "prints": 930
+    },
+    "SOL": {
+     "markets": 11,
+     "with_trade_print": 7,
+     "prints": 101
+    }
+   },
+   "2026-10-20": {
+    "BTC": {
+     "markets": 11,
+     "with_trade_print": 11,
+     "prints": 2050
+    },
+    "ETH": {
+     "markets": 11,
+     "with_trade_print": 10,
+     "prints": 973
+    },
+    "SOL": {
+     "markets": 11,
+     "with_trade_print": 7,
+     "prints": 124
+    }
+   },
+   "2026-10-21": {
+    "BTC": {
+     "markets": 11,
+     "with_trade_print": 11,
+     "prints": 2150
+    },
+    "ETH": {
+     "markets": 11,
+     "with_trade_print": 11,
+     "prints": 1052
+    },
+    "SOL": {
+     "markets": 11,
+     "with_trade_print": 9,
+     "prints": 116
+    }
+   },
+   "2026-10-22": {
+    "BTC": {
+     "markets": 11,
+     "with_trade_print": 11,
+     "prints": 2286
+    },
+    "ETH": {
+     "markets": 11,
+     "with_trade_print": 11,
+     "prints": 1028
+    },
+    "SOL": {
+     "markets": 11,
+     "with_trade_print": 11,
+     "prints": 205
+    }
+   },
+   "2026-10-23": {
+    "BTC": {
+     "markets": 11,
+     "with_trade_print": 11,
+     "prints": 2298
+    },
+    "ETH": {
+     "markets": 11,
+     "with_trade_print": 10,
+     "prints": 778
+    },
+    "SOL": {
+     "markets": 11,
+     "with_trade_print": 9,
+     "prints": 110
+    }
+   },
+   "2026-10-24": {
+    "BTC": {
+     "markets": 11,
+     "with_trade_print": 11,
+     "prints": 2278
+    },
+    "ETH": {
+     "markets": 11,
+     "with_trade_print": 11,
+     "prints": 766
+    },
+    "SOL": {
+     "markets": 11,
+     "with_trade_print": 11,
+     "prints": 51
+    }
+   },
+   "2026-10-25": {
+    "BTC": {
+     "markets": 11,
+     "with_trade_print": 11,
+     "prints": 1105
+    },
+    "ETH": {
+     "markets": 11,
+     "with_trade_print": 11,
+     "prints": 568
+    },
+    "SOL": {
+     "markets": 11,
+     "with_trade_print": 8,
+     "prints": 41
+    }
+   },
+   "2026-10-26": {
+    "BTC": {
+     "markets": 11,
+     "with_trade_print": 11,
+     "prints": 409
+    },
+    "ETH": {
+     "markets": 11,
+     "with_trade_print": 9,
+     "prints": 232
+    },
+    "SOL": {
+     "markets": 11,
+     "with_trade_print": 7,
+     "prints": 43
+    }
+   },
+   "2026-10-27": {
+    "BTC": {
+     "markets": 11,
+     "with_trade_print": 10,
+     "prints": 193
+    },
+    "ETH": {
+     "markets": 11,
+     "with_trade_print": 6,
+     "prints": 120
+    },
+    "SOL": {
+     "markets": 11,
+     "with_trade_print": 5,
+     "prints": 22
+    }
+   },
+   "2026-10-28": {
+    "BTC": {
+     "markets": 11,
+     "with_trade_print": 8,
+     "prints": 88
+    },
+    "ETH": {
+     "markets": 11,
+     "with_trade_print": 8,
+     "prints": 68
+    },
+    "SOL": {
+     "markets": 11,
+     "with_trade_print": 3,
+     "prints": 5
+    }
+   },
+   "2026-10-29": {
+    "BTC": {
+     "markets": 11,
+     "with_trade_print": 7,
+     "prints": 45
+    },
+    "ETH": {
+     "markets": 11,
+     "with_trade_print": 5,
+     "prints": 80
+    },
+    "SOL": {
+     "markets": 11,
+     "with_trade_print": 4,
+     "prints": 11
+    }
+   },
+   "2026-10-30": {
+    "BTC": {
+     "markets": 11,
+     "with_trade_print": 9,
+     "prints": 60
+    },
+    "ETH": {
+     "markets": 11,
+     "with_trade_print": 9,
+     "prints": 57
+    },
+    "SOL": {
+     "markets": 11,
+     "with_trade_print": 3,
+     "prints": 8
+    }
+   },
+   "2026-10-31": {
+    "BTC": {
+     "markets": 11,
+     "with_trade_print": 6,
+     "prints": 9
+    },
+    "ETH": {
+     "markets": 11,
+     "with_trade_print": 4,
+     "prints": 8
+    },
+    "SOL": {
+     "markets": 11,
+     "with_trade_print": 0,
+     "prints": 0
+    }
+   }
+  },
+  "note": "clusters with a trade print are an upper bound on clusters with a fill; no model probability, wedge or edge was computed",
+  "surface": {
+   "deribit": {
+    "files": 289,
+    "first": "2026-10-13T04:00:00+00:00",
+    "last": "2026-10-25T05:00:00+00:00",
+    "expected_hours_to_until": 291,
+    "missing_hours": 2,
+    "missing": [
+     "2026-10-13T09",
+     "2026-10-25T06"
+    ]
+   },
+   "hyperliquid": {
+    "files": 290,
+    "first": "2026-10-13T04:00:00+00:00",
+    "last": "2026-10-25T05:00:00+00:00",
+    "expected_hours_to_until": 291,
+    "missing_hours": 1,
+    "missing": [
+     "2026-10-25T06"
+    ]
+   }
+  }
+ }
+}

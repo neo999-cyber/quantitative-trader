@@ -755,3 +755,43 @@ forward-only:
   days. Found by the sheet on its first run: FRED's T-bill fetch had timed out in the yield recorder three
   mornings running (the pools and announcements were fine) — the fetch now retries three times with a
   pause, and the sheet falls back to the latest snapshot that has a value.
+
+## 19. 25 October 2026 — the owner's return: health, and the counts-only check of the daily-ladder recording
+
+The owner came back a day after the handover's date. In the handover's order:
+
+- **Health (05:51 UTC).** The four units active, 22 GB free, no alert since the 23rd. The five alert lines on
+  22–23 October were reconnect bursts — the venue closed three of the four Polymarket sockets at the same
+  second, 28 reconnects between 10:00 UTC on the 22nd and 02:00 on the 23rd, 361 since 13 October — the writer
+  never fell behind, and the stream pass below puts their cost at one gap of 310 seconds and one of 178. The desk
+  sheet has arrived every morning since the 15th; on the 25th it read T-bill 4.04% (the Treasury's file, 23 Oct),
+  BTC funding 6.7% a year and ETH 5.9% at the day's rate, IBIT's workbook snapshotted through the 24th.
+- **The counts-only check (note seq 981; `reports/p3/p3a_v3_counts_2026-10-25.md`).** Recording and surface
+  mirrored to the laptop (294 hourly files a venue, the catalogue byte-identical; macOS's `rsync` is openrsync
+  and refuses `--info=progress2` — plain `-a`). `scripts/p3a_dryrun_counts.py` gained a third stage, `--daily`,
+  that selects v3's universe **exactly as `scripts/p3a_wedge_v3.py::load_daily_markets` does** (the classifier's
+  `above`, a listing time, life ≤ 8 days), clusters by asset × settlement date, joins the stream's prints per
+  token, and counts the hourly surface files; the stream pass now skips day folders outside its window and
+  emits prints per token (tests on fixtures). Over 13–25 October: 74.09 M Polymarket messages (`price_change`
+  73.76 M, `book` 255,536, `last_trade_price` 69,529), 0 bad lines, no gap over ten minutes; Deribit 4.79 M with
+  one 40-minute gap on the switch day. **627 daily `above` markets** — 209 an asset, eleven strikes for each of
+  nineteen settlement dates, every one listed 7.0 days before its 16:00 UTC settlement — all quoted, **486 with a
+  trade print**, 39,724 prints (per traded market median 21, p90 252). **57 clusters, 56 with a print; 36 settled
+  by 06:10 UTC on the 25th, all 36 with a print; 54 settle inside the registered window (13–30 October), all 54
+  with a print.** BTC clusters carry ~2,000 prints, ETH 500–1,100, SOL 40–200 with five to nine of eleven strikes
+  printing; prints sit in the last 48 hours before settlement. **Reading:** the ceiling against the memo's
+  minimum of 30 clusters *with a fill* at k = 5, T = 1 is 54, and every one has traded; a print is necessary for
+  a fill, not sufficient (the wedge must be ≥ k at an hourly decision and a print must go through the posted
+  price inside the TTL). Whether 30 fill is the engine's finding on 31 October; the read stays as registered,
+  and SOL will contribute fewer fills than BTC. **Surface:** 289 Deribit hourly snapshots, one hour missing
+  (09:02 on 13 October, Deribit HTTP 503; the 08:02 snapshot covers it inside the two-hour staleness limit);
+  Hyperliquid complete. No model probability, wedge or edge was computed; nothing was run through the engine;
+  the memo (seq 951) is untouched.
+- **The rate, measured.** 4.4–7.9 M messages and 150–285 MB gzipped a day since the top-of-book rule — under
+  §17's estimate of 10 M lines and 300 MB; at 22 GB free the box has about a hundred days.
+- **Housekeeping.** The desk sheet's dated line marks the check done (deployed to the box). One test in the
+  untouched `centaur/` package now fails on its own: its example candidate's earnings date (29 October) has
+  entered rule R4's ten-day window as the calendar advanced — spun off as a separate task, not touched here.
+- **Unchanged:** 27 October, the v2 deferral note (seq 934's read is deferred by construction, §16), no run;
+  31 October, mirror, `scripts/p3a_wedge_v3.py --start 2026-10-13 --end 2026-10-30` once, the Programme 3 report.
+  Open decisions as in §18.

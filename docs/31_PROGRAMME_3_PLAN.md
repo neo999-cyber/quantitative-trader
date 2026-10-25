@@ -791,7 +791,7 @@ The owner came back a day after the handover's date. In the handover's order:
   §17's estimate of 10 M lines and 300 MB; at 22 GB free the box has about a hundred days.
 - **Housekeeping.** The desk sheet's dated line marks the check done (deployed to the box). One test in the
   untouched `centaur/` package now fails on its own: its example candidate's earnings date (29 October) has
-  entered rule R4's ten-day window as the calendar advanced — spun off as a separate task, not touched here.
+  entered rule R4's ten-day window as the calendar advanced — spun off as a separate task, not touched here; that session fixed it on this branch (a839cf9) and, through PR #2, on GitHub's then-default branch `claude/loving-maxwell-mu44wv`, a snapshot four weeks stale. Owner's decision the same evening: **`claude/funny-faraday-nizzck` is the repository's default branch** (the live line of work; the old default stays as a stale snapshot until deleted).
 - **Unchanged:** 27 October, the v2 deferral note (seq 934's read is deferred by construction, §16), no run;
   31 October, mirror, `scripts/p3a_wedge_v3.py --start 2026-10-13 --end 2026-10-30` once, the Programme 3 report.
   Open decisions as in §18.

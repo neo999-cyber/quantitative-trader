@@ -1,14 +1,43 @@
+import datetime as dt
 import json
 from pathlib import Path
+
+import pytest
 
 from centaur.brief import EveningBrief, candidate_template
 from centaur.cli import main
 from centaur.config import AccountConfig
+from centaur.rules import rulebook
 from centaur.screens.pattern_matcher import SetupSpec, scan_universe, pooled_stats
 from centaur.screens.options_flow import FlowFlag
 from conftest import make_ohlcv, inject_setup
 
 EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
+
+
+class _FrozenClock:
+    """Stand-in for the `datetime` module the rulebook imports as `dt`: `date.today()` is pinned, the rest is real."""
+
+    def __init__(self, fixed: dt.date):
+        class date(dt.date):
+            @classmethod
+            def today(cls) -> dt.date:
+                return fixed
+
+        self.date = date
+
+    def __getattr__(self, name: str):
+        return getattr(dt, name)
+
+
+@pytest.fixture
+def pinned_today(monkeypatch, today) -> dt.date:
+    """Rule R4 measures the candidate's earnings date from `dt.date.today()` and the CLI has no as-of flag, so the
+    examples' fixed `next_earnings` (2026-10-29) flips TAKE to ABORT whenever the wall clock sits inside the holding
+    window before it. Pin the clock the rulebook reads to the suite's `today` (2026-09-10) instead of the machine's.
+    `centaur/` stays untouched, so the pin lives here rather than as a CLI flag."""
+    monkeypatch.setattr(rulebook, "dt", _FrozenClock(today))
+    return today
 
 
 def _hits():
@@ -39,7 +68,7 @@ def test_candidate_template_is_1_to_3_by_construction(cfg):
     assert c.signals and c.signals[0].source == "pattern_matcher"
 
 
-def test_cli_gauntlet_examples(capsys):
+def test_cli_gauntlet_examples(capsys, pinned_today):
     rc = main(["--equity", "10000", "gauntlet", str(EXAMPLES / "candidate_aapl.json"),
                "--regime", str(EXAMPLES / "regime_risk_on.json"), "--offline"])
     out = capsys.readouterr().out
@@ -55,6 +84,10 @@ def test_cli_gauntlet_examples(capsys):
     report = json.loads(capsys.readouterr().out)
     assert rc == 2 and report["verdict"] == "ABORT"
     assert [r["rule"] for r in report["results"] if not r["passed"]] == ["R3"]
+    # R4 must have measured the earnings date from the pinned clock, not from the wall clock.
+    earnings = dt.date.fromisoformat(json.loads((EXAMPLES / "candidate_aapl.json").read_text())["next_earnings"])
+    r4 = next(r for r in report["results"] if r["rule"] == "R4")
+    assert r4["passed"] and r4["data"]["days_to_earnings"] == (earnings - pinned_today).days
 
 
 def test_cli_size_and_journal(tmp_path, capsys, monkeypatch):

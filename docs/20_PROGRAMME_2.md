@@ -573,6 +573,26 @@ metrics start 2021-12, so the sample cannot grow backwards) or on a
 second venue's OI (Bybit's is mirrored for funding only) — a new
 pre-registration, not a re-run.
 
+**27 October 2026, evening Dubai — an engine change from Programme 4's CME run (`docs/35` §8): gate 1's ceiling
+reads the forecast, not the income. No verdict moves.** Symptom: the always-in carry holding over 2020–2024
+(`p4_cot_crowding_v1_always_in`, seq 1028) read gross Sharpe 9.343 at lags 0, 1 and 2 — spike z 0.0, funding 101%
+of gross, 1.4% annual volatility — and gate 1 failed it with "the signal is reading the bar it predicts": a yield
+book with no lead-lag spike, not a leak, and the message was wrong about the cause (note 1044). C1 v1's 9.9 / 9.7 /
+9.2 on 15 September (above) was the same thing and was left as recorded, the ceiling deliberately not touched
+after a result. Cause: the ceiling (8.0, unchanged) was applied to gross, and a hedged unit's funding over years of
+near-zero variance crosses it on its own — a riskless yield has no plausible Sharpe, so the ceiling cannot judge
+income at all. Fix, with tests on a synthetic unit on both engines (`tests/qr_platform/test_gate1_ceiling.py`):
+`leakage_probe` now reports `price_sharpe` per lag (gross with the funding taken back out; equal to gross where no
+funding settles) and `carry_share_of_gross` at the honest lag, and gate 1 applies the ceiling to the price
+component (`lag1_price_sharpe`). Gross above the ceiling with the forecast below it is a **WARN** that asks the
+trial log to say the income is the instrument's own funding — not a silent pass, because a carry-accounting defect
+would inflate the same number. The 18 September cash-interest case lived outside `carry` and is still caught, as is
+a price peek on a funding venue (price-return Sharpe 13 against the ceiling, with its spike). The message now
+states the measurement and what the probe found: a spike, and it says "the signal is reading the bar it
+predicts"; a flat profile, and it says the probe places no leak inside the signal and the bars and the accounting
+are where to look. Changes gate 1 for every future run of a book that settles funding; the recorded verdicts
+(seq 1024, 1028, 1038, 1041 and C1 v1) stand as run and nothing counted was re-run.
+
 **13 October 2026, 13:30 Dubai — C2 `p2_venue_spread_v2_maker`: verdict FAIL at gate 3 (and 4, 5, 6, 7, 8); the
 twelfth candidate.** The owner ("let's do options A and B; if anything else can be done now, do it") took the
 drafted memo as read; registered seq 941 (sensitivity 942, control 943), run on the laptop 04:50–05:15 UTC, three

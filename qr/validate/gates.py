@@ -64,9 +64,15 @@ PASS, WARN, FAIL, SKIP = "PASS", "WARN", "FAIL", "SKIP"
 class GateThresholds:
     """Every number a verdict turns on. Changing one is a visible decision."""
 
-    # gate 1. A daily strategy earning a gross Sharpe above 8 over years of
+    # gate 1. A daily forecast earning a gross Sharpe above 8 over years of
     # data has a bug, not an edge; the shape test only warns, because a genuine
-    # short-horizon reversal produces the same shape as a leak.
+    # short-horizon reversal produces the same shape as a leak. The ceiling is
+    # applied to the *price* component of gross at the honest lag
+    # (`leakage_probe`'s `price_sharpe`): funding income is not a forecast,
+    # and a hedged unit's yield over years of near-zero variance crosses 8 on
+    # its own — the 2020–24 carry holding read 9.3 at every lag with no spike
+    # (`docs/35` §8). Gross above the ceiling with the forecast below it is a
+    # WARN that asks for a note, not a FAIL.
     implausible_sharpe: float = 8.0
     #: How far lag 1 may stand above its neighbours, in standard errors of a
     #: Sharpe over the sample. Three is the usual "not noise" line, and this
@@ -390,6 +396,8 @@ def gate_1_data_integrity(ctx: GateContext) -> GateResult:
 
     probe = leakage_probe(ctx.panel, ctx.strategy, ctx.costs, ctx.universe, **ctx.backtest_kwargs)
     honest = float(probe.loc[1, "gross_sharpe"])
+    forecast = float(probe.loc[1, "price_sharpe"])
+    carry_share = float(probe.attrs.get("carry_share_of_gross", float("nan")))
     spike = probe.attrs.get("spike_ratio", float("nan"))
     spike_z = probe.attrs.get("spike_z", float("nan"))
     stats.update(
@@ -397,6 +405,8 @@ def gate_1_data_integrity(ctx: GateContext) -> GateResult:
             "lag0_gross_sharpe": float(probe.loc[0, "gross_sharpe"]),
             "lag1_gross_sharpe": honest,
             "lag2_gross_sharpe": float(probe.loc[2, "gross_sharpe"]),
+            "lag1_price_sharpe": forecast,
+            "carry_share_of_gross": carry_share,
             "peek_ratio": probe.attrs.get("peek_ratio", float("nan")),
             "spike_ratio": spike,
             "spike_z": spike_z,
@@ -404,18 +414,35 @@ def gate_1_data_integrity(ctx: GateContext) -> GateResult:
         }
     )
 
-    # The blocking test is magnitude, not shape. A daily strategy does not earn
-    # a gross Sharpe of 8 over years of bars; one that appears to is reading the
-    # future somewhere inside its own signal, where the runner's shift cannot
-    # reach it.
-    if np.isfinite(honest) and abs(honest) > ctx.thresholds.implausible_sharpe:
+    # The blocking test is magnitude, not shape, and it is a test of the
+    # forecast: no daily forecast earns a gross Sharpe of 8 over years of bars.
+    # So it reads the price component of gross — funding income is not a
+    # forecast, and a hedged unit's yield crosses the ceiling on its own
+    # variance (the 2020–24 carry holding: 9.3 at every lag, spike z 0.0,
+    # `docs/35` §8). The message says what was measured and what the lag
+    # probe found; a leak is named only where the probe places one.
+    ceiling = ctx.thresholds.implausible_sharpe
+    spiked = bool(np.isfinite(spike_z) and spike_z > ctx.thresholds.max_spike_z)
+    if np.isfinite(forecast) and abs(forecast) > ceiling:
         return GateResult(
             1,
             "data integrity",
             FAIL,
-            f"gross Sharpe {honest:.1f} at the honest lag is not a plausible daily edge; "
-            f"the signal is reading the bar it predicts",
+            _ceiling_detail(forecast, honest, carry_share, ceiling, spike_z, spiked),
             stats,
+        )
+    if np.isfinite(honest) and abs(honest) > ceiling:
+        # The forecast is under the ceiling and gross is over it: the excess
+        # is funding income, which the ceiling cannot judge — a riskless yield
+        # has no plausible Sharpe — and which a carry-accounting defect would
+        # inflate just the same. Not a FAIL, and not a silent PASS either.
+        verdict = WARN
+        price_reading = f"{forecast:.1f}" if np.isfinite(forecast) else "not measurable, no price variance"
+        detail_parts.append(
+            f"gross Sharpe {honest:.1f} at the honest lag is above the {ceiling:.1f} ceiling and the "
+            f"excess is funding income ({carry_share:.0%} of gross; price-return Sharpe "
+            f"{price_reading}): a yield book, which the ceiling does not test — say in the trial "
+            f"log that the income is the instrument's own funding"
         )
     # The shuffled-ticker placebo: keep every bar's weights, attach them to the
     # wrong coins. A strategy that genuinely selects symbols collapses; one that
@@ -449,6 +476,41 @@ def gate_1_data_integrity(ctx: GateContext) -> GateResult:
     else:
         detail_parts.append("lag profile not measurable")
     return GateResult(1, "data integrity", verdict, "; ".join(detail_parts) or "clean", stats)
+
+
+def _ceiling_detail(
+    forecast: float, honest: float, carry_share: float, ceiling: float, spike_z: float, spiked: bool
+) -> str:
+    """Gate 1's FAIL message: the measurement first, then what the lag probe found.
+
+    The earlier wording asserted "the signal is reading the bar it predicts"
+    for every Sharpe over the ceiling. On 27 October 2026 it said that of a
+    carry holding with a flat lag profile, and was wrong about the cause
+    (`docs/35` §8). A leak inside the signal is the one thing the probe can
+    place, by the spike; without one the gate reports the ceiling and the
+    profile and leaves the cause to be found.
+    """
+    if np.isfinite(carry_share) and honest != forecast:
+        measured = (
+            f"price-return Sharpe {forecast:.1f} at the honest lag is above the {ceiling:.1f} ceiling "
+            f"for a daily forecast (gross {honest:.1f}, funding {carry_share:.0%} of it)"
+        )
+    else:
+        measured = f"gross Sharpe {honest:.1f} at the honest lag is above the {ceiling:.1f} ceiling for a daily forecast"
+    if spiked:
+        found = (
+            f"; it peaks there, {spike_z:.1f} standard errors over its neighbours: "
+            f"the signal is reading the bar it predicts"
+        )
+    elif np.isfinite(spike_z):
+        found = (
+            f"; the honest lag does not stand above its neighbours ({spike_z:+.1f} standard errors), "
+            f"so the lag probe places no leak inside the signal — the ceiling stands on the premise "
+            f"that no daily forecast earns this, and the bars and the accounting are where to look"
+        )
+    else:
+        found = "; the lag profile is not measurable"
+    return measured + found
 
 
 def _cost_attribution(result) -> dict[str, float]:

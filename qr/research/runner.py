@@ -446,11 +446,34 @@ def leakage_probe(
     (`docs/07_ENGINE_FIXES.md` §4). Finding the first should have prompted a
     search for the rest. It did not, and this one was found only by
     investigating the strategy it had wrongly accused.
+
+    **`price_sharpe` is the forecast's own Sharpe**: gross with the funding
+    income taken back out, and equal to gross on a venue that settles none.
+    Gate 1's ceiling reads it rather than gross, because the ceiling's premise
+    — no daily forecast earns a Sharpe of 8 — is a statement about forecasts,
+    and funding is not one. A spot-long/perp-short unit held through 2020–24
+    read gross 9.3 at every lag with a spike z of 0.0: 101% of its gross was
+    funding on a book with 1.4% annual volatility, which is what a yield looks
+    like and not what a leak looks like (`docs/35` §8). The 18 September case
+    the ceiling did catch — T-bill interest booked into gross — lived outside
+    `carry`, so it stays caught. `carry_share_of_gross` at the honest lag is
+    in `attrs` beside it.
     """
     rows = []
+    carry_share = float("nan")
     for lag in (0, 1, 2):
         result = run_backtest(panel, strategy, costs, universe, lag=lag, **backtest_kwargs)
-        rows.append({"lag": lag, "sharpe": result.sharpe(), "gross_sharpe": result.sharpe(gross=True)})
+        gross_sharpe = result.sharpe(gross=True)
+        price_sharpe = (
+            annualised_sharpe(result.gross - result.carry, result.periods_per_year)
+            if result.carry is not None
+            else gross_sharpe
+        )
+        rows.append(
+            {"lag": lag, "sharpe": result.sharpe(), "gross_sharpe": gross_sharpe, "price_sharpe": price_sharpe}
+        )
+        if lag == 1:
+            carry_share = result.stats()["carry_share_of_gross"]
     frame = pd.DataFrame(rows).set_index("lag")
     honest = frame.loc[1, "gross_sharpe"]
     neighbours = max(frame.loc[0, "gross_sharpe"], frame.loc[2, "gross_sharpe"])
@@ -465,6 +488,8 @@ def leakage_probe(
     )
     frame.attrs["sharpe_standard_error"] = float(standard_error)
     frame.attrs["honest_sharpe"] = float(honest)
+    frame.attrs["honest_price_sharpe"] = float(frame.loc[1, "price_sharpe"])
+    frame.attrs["carry_share_of_gross"] = float(carry_share)
     return frame
 
 

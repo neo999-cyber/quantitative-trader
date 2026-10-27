@@ -175,9 +175,12 @@ strategy. The ceiling is meant for a directional rule whose Sharpe is implausibl
 the always-in holding reads 9.343 at every lag with a spike z of 0.0, which is what a carry income with almost
 no variance looks like, not what a leak looks like. The gate's message ("the signal is reading the bar it
 predicts") is wrong about the cause; recorded as an engine observation (note 1044) for a ticket, and it changes
-no verdict below. The mirror (1031, in only while crowded, in the unit 18–41% of days) passed gates 1–4 with
-t 4.6 and DSR 1.0 and **failed gate 5: SPA p 0.54 against the holding** — no variant beats simply holding the
-unit.
+no verdict below. **Ticket closed the same evening (`docs/20`, 27 October):** gate 1 now applies the ceiling to
+the price component of gross at the honest lag (`lag1_price_sharpe`) and *warns* when the excess is funding
+income, and its message states the ceiling and what the lag probe found — tested on a synthetic unit on both
+engines; the verdicts in this section stand as recorded. The mirror (1031, in only while crowded, in the unit
+18–41% of days) passed gates 1–4 with t 4.6 and DSR 1.0 and **failed gate 5: SPA p 0.54 against the holding** —
+no variant beats simply holding the unit.
 
 **The memo's own test, from the saved returns.** Net of costs, a year, 2020–2024:
 

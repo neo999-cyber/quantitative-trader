@@ -17,7 +17,7 @@ twenty-five pre-registered rules and no pass; this one changes the inputs, not t
 | `p4_etf_flow_pressure_v1` — forced buying after US spot-ETF flow days | 984 | **ran once and FAILED** (run seq 991, gate 2: the gross return is not positive; §5) |
 | its four control sweeps: `_t1` (the diagnostic arm), `_mirror`, `_placebo`, `_always_long` | 985–988 | run under their own ids (seq 995, 1000, 1005, 1010); none passes gate 3 |
 | `p4_cot_crowding_v1` — CME leveraged-fund positioning as a timer for the carry holding | 989, amendment 1 at 1014, controls `_always_in`/`_mirror`/`_placebo`/`_eth` 1015–1018 | **ran once and FAILED** (run seq 1024, the sort 1027, controls 1028/1031/1038/1041, note 1044; §8): the timer earns 3–7 points a year less than the holding it times, in every year, and the placebo's random step-outs cost the same |
-| `p4_exchange_inflow_v1` — coins moving onto exchanges precede selling | 990, amendment 1 at 1019, controls `_mirror`/`_placebo`/`_random` 1020–1022 | built and counted; **deferred by construction** (71 signal days at k = 1.5 in-sample against a minimum of 80; note seq 1023); the free feed ends 23 May 2026 (§7) |
+| `p4_exchange_inflow_v1` — coins moving onto exchanges precede selling | 990, amendment 1 at 1019, controls `_mirror`/`_placebo`/`_random` 1020–1022 | built and counted; **deferred by construction** (71 signal days at k = 1.5 in-sample against a minimum of 80; note seq 1023) and **parked on the owner's word** the same evening (note 1045): the free feed ends 23 May 2026, so no forward read is possible (§7) |
 
 Nothing more is registered without a new input. The documents are stamped in the hash chain
 (`qr trial verify` walks it and checks each file against its stamp); a change to a registered memo is an
@@ -159,8 +159,10 @@ decision (`docs/34`): a pass gives the holding a timer, a fail leaves it a yield
 against a minimum of 80 — and its free data source has stopped at 23 May 2026, so the forward read the memo
 requires after any pass has nothing to read. The owner's options: re-register a v2 on a 2020–2024 in-sample
 (90 signal days; a thirteen-day holdout to May 2026; no forward feed, which makes the labelling defect
-untestable), or park it. The recommendation here is to park it: a candidate that cannot be confirmed live
-is not worth a counter.
+untestable), or park it. The recommendation here was to park it: a candidate that cannot be confirmed live
+is not worth a counter. **The owner parked it the same evening** ("park it", note 1045): no run, the registration
+stands as a record, the instrument stays in the lake, and nothing is registered on this input again until an
+exchange-flow source exists that is point-in-time and still published.
 
 ## 8. Result — 27 October 2026, 15:07 UTC: the CME timer **FAILS** in-sample
 
@@ -211,7 +213,7 @@ unstable). The holdout stays shut; nothing goes forward.
 the decision pack put it: a yield with a tail, untimed — 12.7% a year net over 2020–2024 on the unit's notional,
 half that on the capital parked at 1×, and 2.6% gross in 2026 to August against a bill at 3.6%.
 
-**Programme 4 after this run: two of three run, two fails; the third deferred by construction.**
+**Programme 4 after this run: two of three run, two fails; the third deferred by construction and parked.**
 
 ## 9. The rules, unchanged
 

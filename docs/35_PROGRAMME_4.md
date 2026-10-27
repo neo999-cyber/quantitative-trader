@@ -16,8 +16,8 @@ twenty-five pre-registered rules and no pass; this one changes the inputs, not t
 |---|---|---|
 | `p4_etf_flow_pressure_v1` — forced buying after US spot-ETF flow days | 984 | **ran once and FAILED** (run seq 991, gate 2: the gross return is not positive; §5) |
 | its four control sweeps: `_t1` (the diagnostic arm), `_mirror`, `_placebo`, `_always_long` | 985–988 | run under their own ids (seq 995, 1000, 1005, 1010); none passes gate 3 |
-| `p4_cot_crowding_v1` — CME leveraged-fund positioning as a timer for the carry holding | 989 | registered; not built (TFF parser, weekly feature, `CarryCrowdingTimer`; about a day) |
-| `p4_exchange_inflow_v1` — coins moving onto exchanges precede selling | 990 | registered; not built (Coin Metrics loader, a free mirror refresh — the mirror ends 23 May 2026 — `ExchangeInflowFade`; half a day) |
+| `p4_cot_crowding_v1` — CME leveraged-fund positioning as a timer for the carry holding | 989, amendment 1 at 1014, controls `_always_in`/`_mirror`/`_placebo`/`_eth` 1015–1018 | **built and counted** (§7: 261 reports in-sample, 63 and 71 crowded weeks at p = 90 against a minimum of 35); **the run awaits the owner's yes** |
+| `p4_exchange_inflow_v1` — coins moving onto exchanges precede selling | 990, amendment 1 at 1019, controls `_mirror`/`_placebo`/`_random` 1020–1022 | built and counted; **deferred by construction** (71 signal days at k = 1.5 in-sample against a minimum of 80; note seq 1023); the free feed ends 23 May 2026 (§7) |
 
 Nothing more is registered without a new input. The documents are stamped in the hash chain
 (`qr trial verify` walks it and checks each file against its stamp); a change to a registered memo is an
@@ -70,6 +70,37 @@ reversed), base rate (long every eligible entry session), the diagnostic arm.
    holdout's bars are pulled before it opens). Manifest hash `ce83ccec…`.
 4. **Run on the owner's "run it"** at 14:14 UTC: the family and the four controls, five counted invocations (§5).
 
+**27 October 2026, evening — the other two, on the owner's "build both".** In the same order: code on fixtures,
+the amendments and control documents registered, then the real instruments built with counts only.
+
+5. **The CME timer.** `qr/data/cot.py` — the Traders in Financial Futures parser (the CFTC's yearly zips, five
+   columns kept, read as released), the availability rule (Saturday 00:00 UTC after the report Tuesday; the
+   Tuesday after when a federal holiday falls on the Tuesday through Friday, which the memo's rule read three
+   days early), the crowd ratio and its trailing 26- and 52-report percentiles, each daily carry-unit bar
+   carrying the latest release known by its open; the instrument `carrycot-um`. `qr/strategies/cot.py` —
+   `CarryCrowdingTimer(p, window)` with the always-in, mirror and 13-week-block placebo controls.
+   `scripts/p4_cot_sort.py` — the memo's sort test (next-28-day funding, crowded against the rest, every fourth
+   report), a counted run when it reads. `qr gates --costs carry_maker` prices the unit as the memo froze it
+   (spot fee 7.5 plus the measured perp maker cost, 21.5 bps a round trip); `--basket eth` for the ETH arm.
+   Amendment 1 (seq 1014) fixes the sample at the lake's first carry-unit bar — **in-sample 1 January 2020 →
+   31 December 2024**, the 2018–2019 reports feeding the percentiles only — states the holiday rule, the
+   engine form and the controls as their own ids (1015–1018). Tests on synthetic reports and units.
+6. **The inflow fade.** `qr/data/inflow.py` — the Coin Metrics loader, the 90-day standardisation (the day
+   excluded, sixty needed) placed on the next bar, a refresh of the community files that keeps the previous
+   copy and refuses a shorter one, the instrument `inflow-um` (the perp's daily bars, the daily funding sum,
+   `cm_netflow_z`). `qr/strategies/inflow.py` — `ExchangeInflowFade(k, h)`: one position at a time, a signal
+   inside an open hold skipped; mirror, 180-day placebo and random-day controls. Amendment 1 (seq 1019): the
+   perp's bars begin 1 January 2020, so **in-sample 2020 → 2023**, the daily-bar timing (fill at the close of
+   d + 1), the controls as their own ids (1020–1022). Tests on synthetic flows and bars.
+7. **The instruments, counts only.** CME: 444 BTC reports (10 April 2018 → 6 October 2026, 35 holiday-delayed),
+   **261 released inside the in-sample; crowded at p = 90: 63 (26-week) and 71 (52-week) — the minimum of 35
+   is met**; at p = 95: 49 and 44; at p = 80: 94 and 103. ETH: 288 reports from April 2021, 195 in-sample,
+   21–22 crowded at p = 90 (thin; reported, not pooled). Inflow: the refresh fetched the community files and
+   **they still end 23 May 2026** (byte-identical to the 13 October pull: the free feed has stopped); in-sample
+   **71 signal days at k = 1.5 against the memo's minimum of 80 — deferred by construction**, note seq 1023,
+   no run. By year the k = 1.5 days are 21, 18, 14, 18 (2020–23), 19 (2024), 13 (2025), 6 (to May 2026):
+   a 2020–2024 in-sample would hold 90, with a holdout of thirteen days and no forward feed behind it.
+
 ## 5. Result — 27 October 2026, 14:14 UTC: **FAIL** in-sample
 
 Five sweeps, each stopped at its first failing gate; reports in `reports/p4/` (the lake's copies under
@@ -110,11 +141,26 @@ tested claim, stated so nobody reads the family's session losses as the signal's
 A pass sends the $200 sleeve forward for a month at the stage-1 size before any size change (`docs/31` §21:
 the first gate pass gets the sleeve). A fail is recorded as above; the series keeps growing on the box.
 
-## 7. Still to build
+## 7. The other two, built — what runs on the owner's word, and what cannot
 
-The COT timer and the exchange-inflow fade, each with its loader, its family and its tests, then one counted
-run each — on the owner's word, as the ETF one was. The carry decision (`docs/34`) and the ladder stay the
-owner's; the COT memo is the one that bears on it.
+**The CME timer is ready.** Its minimum is met (§4, item 7). The run, once, counted, then the sort and the
+controls:
+
+    qr gates --family carry_crowding_timer --hypothesis p4_cot_crowding_v1 --market carrycot-um --interval 1d \
+      --basket btc --costs carry_maker --engine ledger --benchmark buyhold \
+      --start 2020-01-01 --end 2024-12-31 --grid "p=[80,90,95]" --grid "window=[26,52]" --upto 8
+    python scripts/p4_cot_sort.py --start 2020-01-01 --end 2024-12-31
+
+then `_always_in` (`--param control=always_in --param p=90 --param window=52`), `_mirror`, `_placebo` (the
+family's grid with `--param control=…`) and `_eth` (`--basket eth`). It is the candidate that bears on the carry
+decision (`docs/34`): a pass gives the holding a timer, a fail leaves it a yield with a tail, untimed.
+
+**The inflow fade is deferred by construction** — 71 signal days at k = 1.5 in its registered in-sample
+against a minimum of 80 — and its free data source has stopped at 23 May 2026, so the forward read the memo
+requires after any pass has nothing to read. The owner's options: re-register a v2 on a 2020–2024 in-sample
+(90 signal days; a thirteen-day holdout to May 2026; no forward feed, which makes the labelling defect
+untestable), or park it. The recommendation here is to park it: a candidate that cannot be confirmed live
+is not worth a counter.
 
 ## 8. The rules, unchanged
 

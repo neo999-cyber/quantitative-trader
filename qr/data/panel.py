@@ -44,6 +44,11 @@ FIELDS = (
     # the ETF-flow instrument (qr/data/etfflow.py): the issuer's standardised
     # flow on the one bar a rule may act on it, per availability arm
     "etf_flow_z_t2", "etf_flow_z_t1",
+    # CME positioning on the carry unit (qr/data/cot.py): the leveraged-fund
+    # net short over open interest and its trailing percentiles, as released
+    "cot_crowd", "cot_pct_26", "cot_pct_52",
+    # exchange inflows (qr/data/inflow.py): yesterday's net inflow, standardised
+    "cm_netflow_z",
 )
 
 

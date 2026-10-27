@@ -65,6 +65,8 @@ FAMILIES = {
     "unlock_fade": "UnlockFade",
     "perp_pairs": "PerpPairs",
     "etf_flow_pressure": "EtfFlowPressure",
+    "carry_crowding_timer": "CarryCrowdingTimer",
+    "exchange_inflow_fade": "ExchangeInflowFade",
 }
 
 
@@ -625,6 +627,41 @@ def cmd_data_etfflow_build(args) -> int:
         lake, FundingBucket(_mirror(args)), args.symbols or None, args.interval, ticker=args.ticker,
         window=args.window, min_rows=args.min_rows, count_start=args.count_start, count_end=args.count_end,
     )
+    print(summary.T.to_string() if len(summary) == 1 else table(summary))
+    print(f"written under market {MARKET!r}; manifest hash: {lake.manifest_hash()}")
+    return 0
+
+
+def cmd_data_cot_build(args) -> int:
+    """carry-um daily bars + the CFTC TFF files -> the carry unit with the CME crowding feature (`carrycot-um`).
+
+    A join and a count: the summary says how many released weeks are crowded at each registered percentile
+    and window, so a memo's sample minimum is known before the engine runs. No funding is read against them.
+    """
+    from qr.data.cot import MARKET, build_carrycot_lake
+
+    lake = _lake(args)
+    mirror = Path(args.cftc_dir) if args.cftc_dir else Path(paths(args.root).root) / "mirror" / "cftc"
+    summary = build_carrycot_lake(lake, mirror, args.symbols or None, args.interval, count_start=args.count_start, count_end=args.count_end)
+    print(summary.T.to_string() if len(summary) == 1 else table(summary))
+    print(f"written under market {MARKET!r}; manifest hash: {lake.manifest_hash()}")
+    return 0
+
+
+def cmd_data_inflow_build(args) -> int:
+    """futures/um daily bars + funding + Coin Metrics exchange flows -> the inflow instrument (`inflow-um`).
+
+    `--refresh` fetches the community files again first (no key; the previous copy is kept). The summary
+    counts signal days per registered threshold; no price is read against them.
+    """
+    from qr.data.inflow import MARKET, build_inflow_lake, refresh_coinmetrics
+
+    lake = _lake(args)
+    mirror = Path(args.cm_dir) if args.cm_dir else Path(paths(args.root).root) / "mirror" / "coinmetrics"
+    if args.refresh:
+        for asset, info in refresh_coinmetrics(mirror).items():
+            print(f"{asset}: {info['rows_with_flows']} days with flows, last {info['last']} (was {info['previous_last']})")
+    summary = build_inflow_lake(lake, mirror, args.symbols or None, window=args.window, min_days=args.min_days, count_start=args.count_start, count_end=args.count_end)
     print(summary.T.to_string() if len(summary) == 1 else table(summary))
     print(f"written under market {MARKET!r}; manifest hash: {lake.manifest_hash()}")
     return 0
@@ -1891,10 +1928,10 @@ def _family_class(name: str):
     carry family lives beside the carry unit in `qr.strategies.carry`, which
     imports helpers from the library and so cannot be imported *by* it.
     """
-    from qr.strategies import auction, carry, etfflow, intraday, library, oi, pairs, unlocks
+    from qr.strategies import auction, carry, cot, etfflow, inflow, intraday, library, oi, pairs, unlocks
 
     cls_name = FAMILIES[name]
-    for module in (library, carry, auction, intraday, oi, unlocks, pairs, etfflow):
+    for module in (library, carry, auction, intraday, oi, unlocks, pairs, etfflow, cot, inflow):
         if hasattr(module, cls_name):
             return getattr(module, cls_name)
     raise KeyError(f"no strategy class {cls_name!r} for family {name!r}")
@@ -1925,6 +1962,14 @@ def _costs(args) -> CostModel:
         # entry is a New York session), funding settled gross by the ledger. The weekday figures, not the blend,
         # because the by-weekday haircut would re-scale a Friday position at the Saturday boundary.
         return CostModel.maker_measured(day_type="weekday")
+    if getattr(args, "costs", "spot") == "maker_dow":
+        # `p4_exchange_inflow_v1`: entries fall on any day of the week, so the weekday/weekend blend measured in stage 1
+        return CostModel.maker_measured(by_dow=True)
+    if getattr(args, "costs", "spot") == "carry_maker":
+        # `p4_cot_crowding_v1`: the holding's round trip as the memo froze it — spot at the fee alone (7.5 bps, VIP 0
+        # with BNB) and the perp leg at the maker cost measured in stage 1 (3.2 bps blended): 10.7 a side, 21.5 the
+        # round trip, both legs in and out; funding settled on the perp leg as the unit panel carries it
+        return CostModel.carry_pair(CostModel.trial(half_spread_bps=0.0), CostModel.maker_measured())
     if getattr(args, "costs", "spot") == "carry":
         spot = CostModel.trial(half_spread_bps=args.spread)
         return CostModel.carry_pair(spot, CostModel.binance_perp())
@@ -1938,7 +1983,7 @@ def _costs(args) -> CostModel:
 
 
 #: Named fixed baskets a run may use instead of a ranked universe.
-BASKETS = {"nasdaq31": "qr.data.auction:NASDAQ31", "qqq": "qr.data.intraday:QQQ_ONLY", "btc": "qr.data.etfflow:BTC_ONLY"}
+BASKETS = {"nasdaq31": "qr.data.auction:NASDAQ31", "qqq": "qr.data.intraday:QQQ_ONLY", "btc": "qr.data.etfflow:BTC_ONLY", "eth": "qr.data.cot:ETH_ONLY"}
 
 
 def _basket_symbols(name: str) -> tuple[str, ...]:
@@ -2148,6 +2193,24 @@ def build_parser() -> argparse.ArgumentParser:
     etfflow.add_argument("--count-end", dest="count_end")
     etfflow.set_defaults(func=cmd_data_etfflow_build)
 
+    cotb = data.add_parser("cot-build", help="carry-um bars + CFTC TFF files -> the carry unit with the CME crowding feature (market carrycot-um)")
+    cotb.add_argument("--symbols", nargs="*", help="default: BTCUSDT (ETHUSDT reads the CME Ether rows)")
+    cotb.add_argument("--interval", default="1d")
+    cotb.add_argument("--cftc-dir", dest="cftc_dir", help="where the fut_fin_txt_<year>.zip files are (default <lake>/mirror/cftc)")
+    cotb.add_argument("--count-start", dest="count_start", help="also count crowded weeks released inside this window (the registered in-sample)")
+    cotb.add_argument("--count-end", dest="count_end")
+    cotb.set_defaults(func=cmd_data_cot_build)
+
+    infb = data.add_parser("inflow-build", help="futures/um daily bars + funding + Coin Metrics exchange flows -> the inflow instrument (market inflow-um)")
+    infb.add_argument("--symbols", nargs="*", help="default: BTCUSDT")
+    infb.add_argument("--cm-dir", dest="cm_dir", help="where the Coin Metrics community csv files are (default <lake>/mirror/coinmetrics)")
+    infb.add_argument("--refresh", action="store_true", help="fetch the community files again first (no key)")
+    infb.add_argument("--window", type=int, default=90)
+    infb.add_argument("--min-days", type=int, default=60, dest="min_days")
+    infb.add_argument("--count-start", dest="count_start", help="also count signal days inside this window (the registered in-sample)")
+    infb.add_argument("--count-end", dest="count_end")
+    infb.set_defaults(func=cmd_data_inflow_build)
+
     auction = data.add_parser(
         "auction-build",
         help="Databento XNAS daily bars + closing-cross snapshots -> overnight-return panel (market auction-xnas)",
@@ -2317,12 +2380,14 @@ def build_parser() -> argparse.ArgumentParser:
     gt.add_argument("--spread", type=float, default=2.0)
     gt.add_argument(
         "--costs",
-        choices=("spot", "carry", "alpaca", "perp", "maker", "xvenue", "xvenue_maker", "xvenue_maker_both"),
+        choices=("spot", "carry", "carry_maker", "alpaca", "perp", "maker", "maker_dow", "xvenue", "xvenue_maker", "xvenue_maker_both"),
         default="spot",
         help="spot: the trial's Binance spot model; carry: spot plus Binance perp, both legs taker; "
         "alpaca: $0 commission, 2 bps half-spread, 1 bp slippage, whole shares; "
         "perp: Binance USDT-M perpetual, regular user with BNB, taker, funding settled gross; "
         "maker: one leg on the Binance perp at the weekday maker cost measured in stage 1 (docs/33), funding gross; "
+        "maker_dow: the same at the weekday/weekend blend; "
+        "carry_maker: the carry unit at spot fee 7.5 plus the measured perp maker cost (21.5 bps a round trip, docs/34); "
         "xvenue: Binance perp plus Bybit perp, both legs taker (the cross-venue unit); "
         "xvenue_maker: the Binance leg at the maker cost measured in stage 1 (docs/33), Bybit taker; "
         "xvenue_maker_both: both legs at the measured maker cost (Bybit assumed, the pre-stated sensitivity)",

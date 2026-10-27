@@ -1,0 +1,21 @@
+  gate 0 preregistration…
+  gate 0 pre-registration: PASS (0s)
+  gate 1 data integrity…
+  gate 1 data integrity: PASS (2s)
+  gate 2 cost survival…
+  gate 2 cost survival: PASS (1s)
+  gate 3 significance…
+  gate 3 single-strategy significance: FAIL (1s)
+| gate | name | verdict | detail |
+|---|---|---|---|
+| 0 | pre-registration | PASS | registered 2026-10-27T13:54:33 |
+| 1 | data integrity | PASS | no lag spike (-0.3 standard errors over its neighbours) |
+| 2 | cost survival | PASS | 69% of gross survives; Sharpe 0.26 at 2x costs; capacity about $100,000 before impact takes a further 10% of gross |
+| 3 | single-strategy significance | FAIL | HAC t = 0.71 |
+
+
+verdict: FAIL — stopped at gate 3 (single-strategy significance): HAC t = 0.71
+
+wrote /Users/anoop/qr/lake/reports/p4_etf_flow_pressure_v1_mirror.md
+      /Users/anoop/qr/lake/reports/p4_etf_flow_pressure_v1_mirror.json
+      /Users/anoop/qr/lake/reports/p4_etf_flow_pressure_v1_mirror_variant_returns.parquet

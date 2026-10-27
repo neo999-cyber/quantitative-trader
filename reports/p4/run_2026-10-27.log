@@ -1,0 +1,11 @@
+=== p4_etf_flow_pressure_v1  14:14:00 UTC ===
+exit 1  14:14:07 UTC
+=== p4_etf_flow_pressure_v1_t1  14:14:07 UTC ===
+exit 1  14:14:15 UTC
+=== p4_etf_flow_pressure_v1_mirror  14:14:15 UTC ===
+exit 1  14:14:23 UTC
+=== p4_etf_flow_pressure_v1_placebo  14:14:23 UTC ===
+exit 1  14:14:31 UTC
+=== p4_etf_flow_pressure_v1_always_long  14:14:31 UTC ===
+exit 1  14:14:37 UTC
+ALL DONE 14:14:37 UTC

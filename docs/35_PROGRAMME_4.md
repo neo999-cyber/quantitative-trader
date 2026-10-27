@@ -14,8 +14,8 @@ twenty-five pre-registered rules and no pass; this one changes the inputs, not t
 
 | hypothesis | seq | status |
 |---|---|---|
-| `p4_etf_flow_pressure_v1` — forced buying after US spot-ETF flow days | 984 | registered; family and instrument built; **the run awaits the owner's yes** |
-| its four control sweeps: `_t1` (the diagnostic arm), `_mirror`, `_placebo`, `_always_long` | 985–988 | registered beside it, run under their own ids |
+| `p4_etf_flow_pressure_v1` — forced buying after US spot-ETF flow days | 984 | **ran once and FAILED** (run seq 991, gate 2: the gross return is not positive; §5) |
+| its four control sweeps: `_t1` (the diagnostic arm), `_mirror`, `_placebo`, `_always_long` | 985–988 | run under their own ids (seq 995, 1000, 1005, 1010); none passes gate 3 |
 | `p4_cot_crowding_v1` — CME leveraged-fund positioning as a timer for the carry holding | 989 | registered; not built (TFF parser, weekly feature, `CarryCrowdingTimer`; about a day) |
 | `p4_exchange_inflow_v1` — coins moving onto exchanges precede selling | 990 | registered; not built (Coin Metrics loader, a free mirror refresh — the mirror ends 23 May 2026 — `ExchangeInflowFade`; half a day) |
 
@@ -68,22 +68,55 @@ reversed), base rate (long every eligible entry session), the diagnostic arm.
    window: **599 primary decision bars; |z| ≥ 0.5 on 342, ≥ 1.0 on 225, ≥ 1.5 on 152** — the minimum of 60 at
    k = 1.0 is met nearly four times over. No collisions; 31 rows after 31 August 2026 have no bar yet (the
    holdout's bars are pulled before it opens). Manifest hash `ce83ccec…`.
-4. **Not run.** The command is in the memo (§3 there); one invocation, counted, then the four controls.
+4. **Run on the owner's "run it"** at 14:14 UTC: the family and the four controls, five counted invocations (§5).
 
-## 5. What a result means
+## 5. Result — 27 October 2026, 14:14 UTC: **FAIL** in-sample
+
+Five sweeps, each stopped at its first failing gate; reports in `reports/p4/` (the lake's copies under
+`~/qr/lake/reports/`), the per-trade reading in `reports/p4/p4_etf_flow_pressure_v1_trades_2026-10-27.md`
+(`scripts/p4_etf_trade_table.py`, from the saved returns, no re-run). In-sample 11 January 2024 → 30 June
+2026, net of the weekday measured maker cost (2.1 bps a side), ledger engine, benchmark cash.
+
+| sweep | entries at k = 1 | net per entry, bps (t) | best net Sharpe | stopped at |
+|---|---|---|---|---|
+| **the family, T + 2** (seq 991) | 225 (184 long, 41 short) | session −15.7 (−1.2); 24 h −11.0 (−0.7); every variant negative, −2 to −17 | −0.09 | gate 2: gross Sharpe −0.02, nothing to survive |
+| diagnostic arm, T + 1 (995) | 226 | session +4.9 (+0.4); 24 h +16.8 (+1.0); best +23.6 at k = 1.5 (+1.3) | 0.73 | gate 3: HAC t 1.17, PSR 0.88 |
+| mirror (1000) | 225 | session +11.5 (+0.9); 24 h +8.4 (+0.5) | 0.47 | gate 3: HAC t 0.71 |
+| placebo, flows permuted within month (1005) | 225 | session +8.1 (+0.6); 24 h +31.4 (+2.0); best +31.5 at k = 0.5 (+2.4) | 1.38 | gate 3: HAC t 2.28 |
+| base rate, long every eligible session (1010) | 599 | session −10.1 (−1.3); 24 h +0.8 (+0.1) | 0.02 | gate 2: gross not positive |
+
+**Reading.** The registered claim — a positive session return at T + 2 after large flows, 10–20 bps an
+entry — is rejected outright: at our own data path's timing the real flows did worse than holding long on
+every eligible session (−16 bps against −10 for the session hold) and worse than the same flows permuted
+among the month's days. The T + 1 arm's point estimates are positive (17–24 bps a day-long hold, the size the
+memo named) but at t ≈ 1.2 they sit inside noise, and the placebo's permuted flows reached t 2.4 on the
+same days — six tries on three hundred noisy daily bets produce that; it is why gate 4 exists, and it is
+what "diagnostic positive while the primary is not" looks like when it is not evidence. Reaching the gate at
+the T + 1 mean would need about four times the entries, ten years of the series. The memo's falsifiers that
+fired: mean net edge below the round trip (T + 2), |t| < 2 with ≥ 60 entries (every arm), the placebo not
+separated from the family (it is above it). No gate past 3 was reached, so no DSR, PBO or SPA number exists
+for this family; the holdout stays shut and the forward read is unnecessary.
+
+**Two things worth keeping.** (1) The series itself: the instrument is built, the issuer's row arrives daily,
+the aggregator's T + 1 table has been recorded since 15 October; if the T + 1 effect is real it will show in
+the recording at no cost, and nothing is registered on it. (2) The base-rate control: over these 599 sessions
+bitcoin lost 10 bps a US cash session net and was flat over the day — an in-sample fact from a control, not a
+tested claim, stated so nobody reads the family's session losses as the signal's doing.
+
+**Programme 4 after this run: one of three run, one fail.** The sleeve stays where it is.
+
+## 6. What a result means
 
 A pass sends the $200 sleeve forward for a month at the stage-1 size before any size change (`docs/31` §21:
-the first gate pass gets the sleeve). A fail is the twenty-sixth, and the diagnostic arm says whether the
-effect is merely faster than our data path (a live T + 1 feed to record, not a trade). Either way the series
-keeps growing on the box.
+the first gate pass gets the sleeve). A fail is recorded as above; the series keeps growing on the box.
 
-## 6. Still to build
+## 7. Still to build
 
 The COT timer and the exchange-inflow fade, each with its loader, its family and its tests, then one counted
 run each — on the owner's word, as the ETF one was. The carry decision (`docs/34`) and the ladder stay the
 owner's; the COT memo is the one that bears on it.
 
-## 7. The rules, unchanged
+## 8. The rules, unchanged
 
 Nothing runs, is registered or spends without the owner's yes; the owner moves money, never the code; Claude
 never places, closes or starts live orders and never handles key values; every engine run is counted in the

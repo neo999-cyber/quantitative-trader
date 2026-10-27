@@ -31,8 +31,8 @@ V3_START = datetime(2026, 10, 13, 4, 53, tzinfo=timezone.utc)   # the daily ladd
 V3_MIN_CLUSTERS = 30
 MEASURED = {"perp_maker_bps_side": 3.2, "carry_round_trip_bps": 21.4, "stage1_fill_pct": 94.2}
 DESK_NOTES = """\
-**Dated (Claude's):** 25 Oct counts-only check of the daily-ladder recording done (`reports/p3/p3a_v3_counts_2026-10-25.md`) · 27 Oct v2's deferral note written (seq 982), no run · 27 Oct Programme 4 registered (seq 984–990); the ETF-flow candidate ran once and **FAILED** in-sample (seq 991–1013: T + 2 negative, T + 1 inside noise, placebo above both; `docs/35` §5) · 27 Oct evening: the CME timer ran once and **FAILED** (seq 1024–1044: every variant behind the holding it times, placebo equal, sort t −0.5; `docs/35` §8); the inflow fade built and **deferred by construction** (71 signal days vs 80; the free feed stopped in May; note 1023) · 31 Oct mirror, the v3 read once, the Programme 3 report.
-**Open decisions (owner's):** the ladder / carry holding (`docs/34`) · the carry holding, now with no timer (`docs/34`) · whether to re-register or park the inflow candidate (no forward feed).
+**Dated (Claude's):** 25 Oct counts-only check of the daily-ladder recording done (`reports/p3/p3a_v3_counts_2026-10-25.md`) · 27 Oct v2's deferral note written (seq 982), no run · 27 Oct Programme 4 registered (seq 984–990); the ETF-flow candidate ran once and **FAILED** in-sample (seq 991–1013: T + 2 negative, T + 1 inside noise, placebo above both; `docs/35` §5) · 27 Oct evening: the CME timer ran once and **FAILED** (seq 1024–1044: every variant behind the holding it times, placebo equal, sort t −0.5; `docs/35` §8); the inflow fade built, **deferred by construction** and **parked** by the owner (71 signal days vs 80; the free feed stopped in May; notes 1023, 1045) · 31 Oct mirror, the v3 read once, the Programme 3 report.
+**Open decisions (owner's):** the ladder / carry holding (`docs/34`) · the carry holding, now with no timer (`docs/34`).
 **Standing:** no live orders; the live key's futures and spot trading are off; Programme 3 counter four of four; Programme 2 twelve for twelve."""
 
 

@@ -1,0 +1,16 @@
+restricted panel to 1 of 2 symbols (the rest are never in the universe)
+  gate 0 preregistration…
+  gate 0 pre-registration: PASS (0s)
+  gate 1 data integrity…
+  gate 1 data integrity: FAIL (0s)
+| gate | name | verdict | detail |
+|---|---|---|---|
+| 0 | pre-registration | PASS | registered 2026-10-27T14:38:17 |
+| 1 | data integrity | FAIL | gross Sharpe 8.3 at the honest lag is not a plausible daily edge; the signal is reading the bar it predicts |
+
+
+verdict: FAIL — stopped at gate 1 (data integrity): gross Sharpe 8.3 at the honest lag is not a plausible daily edge; the signal is reading the bar it predicts
+
+wrote /Users/anoop/qr/lake/reports/p4_cot_crowding_v1_placebo.md
+      /Users/anoop/qr/lake/reports/p4_cot_crowding_v1_placebo.json
+      /Users/anoop/qr/lake/reports/p4_cot_crowding_v1_placebo_variant_returns.parquet

@@ -16,7 +16,7 @@ twenty-five pre-registered rules and no pass; this one changes the inputs, not t
 |---|---|---|
 | `p4_etf_flow_pressure_v1` — forced buying after US spot-ETF flow days | 984 | **ran once and FAILED** (run seq 991, gate 2: the gross return is not positive; §5) |
 | its four control sweeps: `_t1` (the diagnostic arm), `_mirror`, `_placebo`, `_always_long` | 985–988 | run under their own ids (seq 995, 1000, 1005, 1010); none passes gate 3 |
-| `p4_cot_crowding_v1` — CME leveraged-fund positioning as a timer for the carry holding | 989, amendment 1 at 1014, controls `_always_in`/`_mirror`/`_placebo`/`_eth` 1015–1018 | **built and counted** (§7: 261 reports in-sample, 63 and 71 crowded weeks at p = 90 against a minimum of 35); **the run awaits the owner's yes** |
+| `p4_cot_crowding_v1` — CME leveraged-fund positioning as a timer for the carry holding | 989, amendment 1 at 1014, controls `_always_in`/`_mirror`/`_placebo`/`_eth` 1015–1018 | **ran once and FAILED** (run seq 1024, the sort 1027, controls 1028/1031/1038/1041, note 1044; §8): the timer earns 3–7 points a year less than the holding it times, in every year, and the placebo's random step-outs cost the same |
 | `p4_exchange_inflow_v1` — coins moving onto exchanges precede selling | 990, amendment 1 at 1019, controls `_mirror`/`_placebo`/`_random` 1020–1022 | built and counted; **deferred by construction** (71 signal days at k = 1.5 in-sample against a minimum of 80; note seq 1023); the free feed ends 23 May 2026 (§7) |
 
 Nothing more is registered without a new input. The documents are stamped in the hash chain
@@ -134,7 +134,7 @@ the recording at no cost, and nothing is registered on it. (2) The base-rate con
 bitcoin lost 10 bps a US cash session net and was flat over the day — an in-sample fact from a control, not a
 tested claim, stated so nobody reads the family's session losses as the signal's doing.
 
-**Programme 4 after this run: one of three run, one fail.** The sleeve stays where it is.
+**Programme 4 after this run: one of three run, one fail.** The sleeve stays where it is. (The second ran the same evening: §8.)
 
 ## 6. What a result means
 
@@ -162,7 +162,58 @@ requires after any pass has nothing to read. The owner's options: re-register a 
 untestable), or park it. The recommendation here is to park it: a candidate that cannot be confirmed live
 is not worth a counter.
 
-## 8. The rules, unchanged
+## 8. Result — 27 October 2026, 15:07 UTC: the CME timer **FAILS** in-sample
+
+Six sweeps and the sort, each counted; reports in `reports/p4/`, the per-variant reading in
+`reports/p4/p4_cot_crowding_v1_rules_2026-10-27.md` (`scripts/p4_cot_rule_table.py`, from the saved returns, no
+re-run), the sort in `reports/p4/p4_cot_sort_2026-10-27.md`. In-sample 1 January 2020 → 31 December 2024 on the
+BTCUSDT carry unit at 21.5 bps a round trip, ledger engine, the holding as the comparator.
+
+**What the gates said.** The family (run 1024), the holding with no rule (1028), the placebo (1038) and the ETH
+arm (1041) all stopped at **gate 1**: gross Sharpe 8.3–9.3 against the engine's ceiling of 8.0 for a daily
+strategy. The ceiling is meant for a directional rule whose Sharpe is implausible; here it caught a yield book —
+the always-in holding reads 9.343 at every lag with a spike z of 0.0, which is what a carry income with almost
+no variance looks like, not what a leak looks like. The gate's message ("the signal is reading the bar it
+predicts") is wrong about the cause; recorded as an engine observation (note 1044) for a ticket, and it changes
+no verdict below. The mirror (1031, in only while crowded, in the unit 18–41% of days) passed gates 1–4 with
+t 4.6 and DSR 1.0 and **failed gate 5: SPA p 0.54 against the holding** — no variant beats simply holding the
+unit.
+
+**The memo's own test, from the saved returns.** Net of costs, a year, 2020–2024:
+
+| book | net a year | against the holding | years ahead of it | days in the unit |
+|---|---|---|---|---|
+| the holding, no rule (always-in) | **12.7%** | — | — | 100% |
+| the timer, p = 90, 52-week window | 7.3% | −5.3 | 0 of 5 | 74% |
+| the timer, p = 95, 52-week (its best) | 9.3% | −3.4 | 0 of 5 | 84% |
+| the timer, p = 80, 26-week (its worst) | 5.8% | −6.9 | 0 of 5 | 65% |
+| the placebo, p = 80 (random 13-week blocks out) | 7.1–7.6% | −5.0 to −5.6 | 0 of 5 | 62–66% |
+| the mirror, p = 80 (in only while crowded) | 5.0–5.5% | −7.2 to −7.7 | 0 of 5 | 38–41% |
+
+Every timer variant earns less than the holding, in every one of the five years; stepping out in the crowded
+weeks costs what stepping out at random costs. The weeks the timer sits out paid as much as the rest or more.
+
+**The sort** (the memo's first test, registered statistic: every fourth report, p = 90): crowded weeks' next
+four weeks of funding 2.8 points a year lower (26-week window −2.79, t −0.50; 52-week −2.88, t −0.58) against a
+predicted 3–6 points at t ≥ 2; on the other three phases the sign is the other way (+1 to +11 points). The one
+large number, −12.6 points at p = 95 on the 52-week window (t −4.8), stands on eight crowded weeks and does not
+repeat on any other phase. The ETH arm (21–22 crowded weeks) adds nothing: the same ceiling, 16% a year as a
+holding.
+
+**Reading.** The registered claim — crowded CME positioning predicts lower funding, and a holding that steps out
+while crowded beats one that stays in — is rejected on both tests. The crowd was long the basis exactly when
+the basis paid; the timer sold the yield at the wrong moments and paid 21.5 bps each time. The falsifiers that
+fired: the rule's net yield below always-in after its round trips (every variant, every year); the placebo
+matching (it does); crowded weeks no different from the rest (|t| < 2 at the registered statistic, the sign
+unstable). The holdout stays shut; nothing goes forward.
+
+**For the carry decision (`docs/34`).** This was the one candidate that bore on it. It leaves the holding where
+the decision pack put it: a yield with a tail, untimed — 12.7% a year net over 2020–2024 on the unit's notional,
+half that on the capital parked at 1×, and 2.6% gross in 2026 to August against a bill at 3.6%.
+
+**Programme 4 after this run: two of three run, two fails; the third deferred by construction.**
+
+## 9. The rules, unchanged
 
 Nothing runs, is registered or spends without the owner's yes; the owner moves money, never the code; Claude
 never places, closes or starts live orders and never handles key values; every engine run is counted in the

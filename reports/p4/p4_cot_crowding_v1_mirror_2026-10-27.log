@@ -1,0 +1,28 @@
+restricted panel to 1 of 2 symbols (the rest are never in the universe)
+  gate 0 preregistration…
+  gate 0 pre-registration: PASS (0s)
+  gate 1 data integrity…
+  gate 1 data integrity: PASS (0s)
+  gate 2 cost survival…
+  gate 2 cost survival: PASS (0s)
+  gate 3 significance…
+  gate 3 single-strategy significance: PASS (1s)
+  gate 4 deflation…
+  gate 4 multiple-testing deflation: PASS (0s)
+  gate 5 selection…
+  gate 5 selection overfitting: FAIL (0s)
+| gate | name | verdict | detail |
+|---|---|---|---|
+| 0 | pre-registration | PASS | registered 2026-10-27T14:38:17 |
+| 1 | data integrity | PASS | no lag spike (-0.1 standard errors over its neighbours) |
+| 2 | cost survival | PASS | 84% of gross survives; Sharpe 3.35 at 2x costs; capacity about $1,000,000,000 before impact takes a further 10% of gross |
+| 3 | single-strategy significance | PASS | t = 4.61, PSR = 1.000, CI excludes zero |
+| 4 | multiple-testing deflation | PASS | DSR = 1.000 over 6 trials (effective rank 2), haircut Sharpe 3.82 |
+| 5 | selection overfitting | FAIL | PBO = 0.03 over 12870 splits of 6 variants; SPA p = 0.542 vs buy-and-hold — no variant beats simply holding the universe |
+
+
+verdict: FAIL — stopped at gate 5 (selection overfitting): PBO = 0.03 over 12870 splits of 6 variants; SPA p = 0.542 vs buy-and-hold — no variant beats simply holding the universe
+
+wrote /Users/anoop/qr/lake/reports/p4_cot_crowding_v1_mirror.md
+      /Users/anoop/qr/lake/reports/p4_cot_crowding_v1_mirror.json
+      /Users/anoop/qr/lake/reports/p4_cot_crowding_v1_mirror_variant_returns.parquet

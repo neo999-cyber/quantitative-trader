@@ -108,3 +108,36 @@ fill in our absence — though the journal handled that case too. Exercised once
 (armed 10 s, disarmed). The journal accepts the resulting venue-side cancel from a resting state. Spot has
 no such switch: a spot maker exit left resting by a dead process stays until cancelled by hand or by the
 next run, which is one more reason the spot leg is the one that is taken, not left.
+
+## The numbers for the decision (27 October 2026)
+
+`scripts/carry_decision_pack.py` reads the lake's carry units and FRED's bill and writes
+`reports/carry/funding_history_2026-10-27.md` (trial-log note under `p2_funding_carry_v1_always_in`: a
+descriptive read, no rule). Annualised funding collected by an always-held short perp, gross, against the
+year's mean 3-month bill:
+
+| year | BTC | ETH | SOL | T-bill | BTC − bill | ETH − bill |
+|---|---|---|---|---|---|---|
+| 2020 | 17.2 | 27.4 | −12.6 | 0.4 | +16.8 | +27.1 |
+| 2021 | 30.6 | 37.5 | 28.6 | 0.0 | +30.6 | +37.5 |
+| 2022 | 4.2 | 0.8 | −38.6 | 2.0 | +2.1 | −1.2 |
+| 2023 | 7.9 | 8.3 | 1.3 | 5.1 | +2.8 | +3.2 |
+| 2024 | 11.9 | 13.0 | 13.6 | 5.0 | +7.0 | +8.0 |
+| 2025 | 5.1 | 4.9 | 0.4 | 4.1 | +1.1 | +0.9 |
+| 2026 → Aug | 2.6 | 1.6 | −1.7 | 3.6 | −1.0 | −2.1 |
+
+Over the last 365 days of the lake (to 31 August 2026) BTC paid 3.4% gross, 3.2% after one round trip, **1.6%
+on the capital at 1×** (the perp margin earns nothing) and 2.3% at 2.5×; ETH 2.4% gross, 1.1% at 1×; SOL
+negative. BTC and ETH have had six negative months in eighty (8%), SOL twenty-one in seventy-two with a
+90-day stretch at −42% (the alt tail). The equal-weight universe of every perp with a year of history paid
+−10% in 2025 and −16% in 2026: the "any perp pays about the same" placebo finding was a 2020–24 statement,
+and the alts now pay their shorts.
+
+**What this says.** The carry beat the bill by a wide margin when rates were near zero and longs were crowded
+(2020–21), by seven to eight points in the 2024 bull market, by one to three points in 2023 and 2025, and has
+trailed it in 2026 — on parked capital at 1×, by two points, with the exchange as counterparty for the whole
+holding. Today's rate (BTC 7.9% a year on the 27th) is above the trailing year's realised 3.4%, which is the
+usual shape: the rate is high on the days it is read and lower over the days it is held. The holding pays for
+its risk only in crowded-long regimes; the open question is whether a regime input can say when, which is what
+`docs/prereg/p4_cot_crowding_v1.md` (drafted, not registered) proposes to test. The decision stays the
+owner's; the execution leg above is ready either way.

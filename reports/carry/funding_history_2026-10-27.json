@@ -1,0 +1,130 @@
+{
+ "date": "2026-10-27",
+ "yearly": {
+  "2020": {
+   "BTCUSDT": 17.2,
+   "ETHUSDT": 27.4,
+   "SOLUSDT": -12.6,
+   "T-bill": 0.4,
+   "BTCUSDT \u2212 T-bill": 16.8,
+   "ETHUSDT \u2212 T-bill": 27.1,
+   "SOLUSDT \u2212 T-bill": -12.9
+  },
+  "2021": {
+   "BTCUSDT": 30.6,
+   "ETHUSDT": 37.5,
+   "SOLUSDT": 28.6,
+   "T-bill": 0.0,
+   "BTCUSDT \u2212 T-bill": 30.6,
+   "ETHUSDT \u2212 T-bill": 37.5,
+   "SOLUSDT \u2212 T-bill": 28.5
+  },
+  "2022": {
+   "BTCUSDT": 4.2,
+   "ETHUSDT": 0.8,
+   "SOLUSDT": -38.6,
+   "T-bill": 2.0,
+   "BTCUSDT \u2212 T-bill": 2.1,
+   "ETHUSDT \u2212 T-bill": -1.2,
+   "SOLUSDT \u2212 T-bill": -40.6
+  },
+  "2023": {
+   "BTCUSDT": 7.9,
+   "ETHUSDT": 8.3,
+   "SOLUSDT": 1.3,
+   "T-bill": 5.1,
+   "BTCUSDT \u2212 T-bill": 2.8,
+   "ETHUSDT \u2212 T-bill": 3.2,
+   "SOLUSDT \u2212 T-bill": -3.8
+  },
+  "2024": {
+   "BTCUSDT": 11.9,
+   "ETHUSDT": 13.0,
+   "SOLUSDT": 13.6,
+   "T-bill": 5.0,
+   "BTCUSDT \u2212 T-bill": 7.0,
+   "ETHUSDT \u2212 T-bill": 8.0,
+   "SOLUSDT \u2212 T-bill": 8.6
+  },
+  "2025": {
+   "BTCUSDT": 5.1,
+   "ETHUSDT": 4.9,
+   "SOLUSDT": 0.4,
+   "T-bill": 4.1,
+   "BTCUSDT \u2212 T-bill": 1.1,
+   "ETHUSDT \u2212 T-bill": 0.9,
+   "SOLUSDT \u2212 T-bill": -3.7
+  },
+  "2026": {
+   "BTCUSDT": 2.6,
+   "ETHUSDT": 1.6,
+   "SOLUSDT": -1.7,
+   "T-bill": 3.6,
+   "BTCUSDT \u2212 T-bill": -1.0,
+   "ETHUSDT \u2212 T-bill": -2.1,
+   "SOLUSDT \u2212 T-bill": -5.3
+  }
+ },
+ "stats": {
+  "BTCUSDT": {
+   "from": "2020-01-01",
+   "to": "2026-08-31",
+   "days": 2435,
+   "months": 80,
+   "negative_months": 6,
+   "share_days_funding_le_0": 0.123,
+   "median_annualised_pct": 8.3,
+   "worst_90d_pct": -0.39,
+   "worst_90d_ends": "2026-05-06",
+   "best_90d_pct": 16.65,
+   "last_365d_pct": 3.4
+  },
+  "ETHUSDT": {
+   "from": "2020-01-01",
+   "to": "2026-08-31",
+   "days": 2435,
+   "months": 80,
+   "negative_months": 6,
+   "share_days_funding_le_0": 0.12,
+   "median_annualised_pct": 8.8,
+   "worst_90d_pct": -1.67,
+   "worst_90d_ends": "2022-11-24",
+   "best_90d_pct": 21.47,
+   "last_365d_pct": 2.4
+  },
+  "SOLUSDT": {
+   "from": "2020-09-14",
+   "to": "2026-08-31",
+   "days": 2173,
+   "months": 72,
+   "negative_months": 21,
+   "share_days_funding_le_0": 0.287,
+   "median_annualised_pct": 7.1,
+   "worst_90d_pct": -42.38,
+   "worst_90d_ends": "2023-01-13",
+   "best_90d_pct": 19.62,
+   "last_365d_pct": -1.7
+  }
+ },
+ "last_365d_on_capital": {
+  "BTCUSDT": {
+   "gross_pct": 3.4,
+   "net_of_one_round_trip_pct": 3.19,
+   "on_capital_at_1x_pct": 1.59,
+   "on_capital_at_2_5x_pct": 2.28
+  },
+  "ETHUSDT": {
+   "gross_pct": 2.4,
+   "net_of_one_round_trip_pct": 2.19,
+   "on_capital_at_1x_pct": 1.09,
+   "on_capital_at_2_5x_pct": 1.56
+  },
+  "SOLUSDT": {
+   "gross_pct": -1.7,
+   "net_of_one_round_trip_pct": -1.92,
+   "on_capital_at_1x_pct": -0.96,
+   "on_capital_at_2_5x_pct": -1.37
+  }
+ },
+ "round_trip_bps": 21.5
+}

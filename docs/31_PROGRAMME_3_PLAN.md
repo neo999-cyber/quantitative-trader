@@ -807,3 +807,28 @@ universe (seq 951), read once on 31 October. Box health the same morning (03:30 
 23rd, 21 GB free, 60 daily-ladder clusters seen and 39 settled after 13.1 days (the ceiling, not the count).
 The owner deleted the three merged branches on GitHub on the 26th; `claude/admiring-ptolemy-tfp528` (two
 unmerged September commits, the account-size sweep) is kept.
+
+## 21. 27 October 2026, later — the four days before the read: the owner's "how do we use the time"
+
+The owner asked for research, drills and strategies people use, with a little more risk accepted "to make some
+money". The honest frame given: twenty-five pre-registered rules in two months and none passed; what held up
+were measured facts (maker fills, the bill beating the stablecoin tiers, funding as a yield); at $2,000 the
+yields pay tens of dollars a year, so the money question is not losing the capital and finding one validated
+edge that scales. Done the same day, all $0, nothing registered or run:
+
+- **The carry decision pack** (`docs/34`, last section; `scripts/carry_decision_pack.py`;
+  `reports/carry/funding_history_2026-10-27.md`; note seq 983): funding by year against the bill — ahead by
+  17–38 points in 2020–21, by 7–8 in 2024, by 1–3 in 2023 and 2025, behind in 2026; the last 365 days 1.6% on
+  capital at 1× for BTC. The holding pays only in crowded-long regimes.
+- **Three Programme 4 memos drafted, not registered** — the data-expansion programme of §15, now that its
+  inputs are in the lake: `p4_etf_flow_pressure_v1` (forced ETF buying, with the honest T+2 timing of our own
+  data path and a T+1 diagnostic arm), `p4_cot_crowding_v1` (CME leveraged-fund positioning as a timing input
+  for the carry holding — the one memo that serves the decision above), `p4_exchange_inflow_v1` (Coin
+  Metrics exchange inflows, with the address-labelling look-ahead stated up front). Each names its build
+  (half a day to a day), its sample minimum, its controls and its falsifiers. Registration opens a new counter
+  on the owner's yes.
+- **Alert-path drill on the box**: a copy of `recorder_health.sh` with the disk threshold forced, writing to
+  its own log, produced the WRONG line and sent the push titled "recorder ALERT (DRILL)" (curl exit 0). The
+  recorders were not touched; v3's window is intact.
+- **The risk sleeve**: the first gate pass gets the $200 sleeve — v3 on the 31st is the nearest candidate; a
+  paper book of registered rules on the box is the $0 way to run several ideas in parallel.

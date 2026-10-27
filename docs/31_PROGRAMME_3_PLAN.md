@@ -795,3 +795,15 @@ The owner came back a day after the handover's date. In the handover's order:
 - **Unchanged:** 27 October, the v2 deferral note (seq 934's read is deferred by construction, §16), no run;
   31 October, mirror, `scripts/p3a_wedge_v3.py --start 2026-10-13 --end 2026-10-30` once, the Programme 3 report.
   Open decisions as in §18.
+
+## 20. 27 October 2026 — v2's read date: deferred by construction (note seq 982), no run
+
+The date `p3_threshold_wedge_v2_intraday` (seq 934) named for its single read. As §16 established on 13
+October, the recording holds 17 clusters of the memo's universe (the monthly and quarterly `reach`/`dip`
+ladders), 3 settled by today and 6 by 30 November, against a minimum of 30 with a fill — settlement dates are
+fixed at listing, so nothing since could have changed the count. The engine was not run; a note records the
+deferral; the memo's next date, 30 November, is short by the same arithmetic. The daily ladders are v3's
+universe (seq 951), read once on 31 October. Box health the same morning (03:30 UTC): no alert since the
+23rd, 21 GB free, 60 daily-ladder clusters seen and 39 settled after 13.1 days (the ceiling, not the count).
+The owner deleted the three merged branches on GitHub on the 26th; `claude/admiring-ptolemy-tfp528` (two
+unmerged September commits, the account-size sweep) is kept.

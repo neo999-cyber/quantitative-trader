@@ -31,7 +31,7 @@ V3_START = datetime(2026, 10, 13, 4, 53, tzinfo=timezone.utc)   # the daily ladd
 V3_MIN_CLUSTERS = 30
 MEASURED = {"perp_maker_bps_side": 3.2, "carry_round_trip_bps": 21.4, "stage1_fill_pct": 94.2}
 DESK_NOTES = """\
-**Dated (Claude's):** 25 Oct counts-only check of the daily-ladder recording done (`reports/p3/p3a_v3_counts_2026-10-25.md`) · 27 Oct the v2 deferral note, no run · 31 Oct mirror, the v3 read once, the Programme 3 report.
+**Dated (Claude's):** 25 Oct counts-only check of the daily-ladder recording done (`reports/p3/p3a_v3_counts_2026-10-25.md`) · 27 Oct v2's deferral note written (seq 982), no run · 31 Oct mirror, the v3 read once, the Programme 3 report.
 **Open decisions (owner's):** the ladder / carry holding (`docs/34`) · whether to open the data-expansion programme (the ETF-flow series is in the lake).
 **Standing:** no live orders; the live key's futures and spot trading are off; Programme 3 counter four of four; Programme 2 twelve for twelve."""
 

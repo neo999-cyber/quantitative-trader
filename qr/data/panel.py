@@ -41,6 +41,9 @@ FIELDS = (
     "imb_age_1550", "imb_age_1555", "imb_age_1558",
     # the two-bars-a-session instrument (qr/data/intraday.py)
     "ret_to_decision", "is_late",
+    # the ETF-flow instrument (qr/data/etfflow.py): the issuer's standardised
+    # flow on the one bar a rule may act on it, per availability arm
+    "etf_flow_z_t2", "etf_flow_z_t1",
 )
 
 

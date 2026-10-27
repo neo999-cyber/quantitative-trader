@@ -832,3 +832,7 @@ edge that scales. Done the same day, all $0, nothing registered or run:
   recorders were not touched; v3's window is intact.
 - **The risk sleeve**: the first gate pass gets the $200 sleeve — v3 on the 31st is the nearest candidate; a
   paper book of registered rules on the box is the $0 way to run several ideas in parallel.
+- **Registered the same evening on the owner's yes** ("register programme 4 and build the ETF one"): the three
+  memos and the ETF family's four control sweeps, seq 984–990; the ETF-flow family and its instrument built
+  on fixtures first, then the real instrument (counts only: 599 primary decision bars in the registered
+  window, 225 at k = 1.0 against a minimum of 60). Programme 4 has its own file from here: `docs/35`.

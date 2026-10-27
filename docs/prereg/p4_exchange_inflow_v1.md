@@ -31,7 +31,10 @@ is the long side and is run as its own arm, not pooled).
 
 ## Universe
 
-BTCUSDT on Binance spot as a maker; ETH as a second arm from Coin Metrics' `eth.csv`, reported separately.
+BTCUSDT on Binance's USDⓈ-M perpetual as a maker, both sides — the instrument the fill rule and the fee were
+measured on (`docs/33`), and the one that carries a short without a borrow; funding over the hold is settled
+gross by the ledger (a short receives a positive rate). ETH as a second arm from Coin Metrics' `eth.csv`,
+reported separately.
 
 ## Signal and horizon
 
@@ -44,8 +47,9 @@ hold `h` days, then exit at the touch (cross at the end of a TTL as in stage 1).
 
 ## Cost model
 
-`CostModel.maker_measured(by_dow=True)`, 3.23 bps a side; borrow for the short leg is modelled as the perp's
-funding over the hold (the short is taken on the USDⓈ-M perp, `CostModel.binance_perp` for that leg). Frozen.
+`CostModel.maker_measured(by_dow=True)` (`qr gates --costs maker` once a daily-bar variant of it exists;
+entries fall on any weekday, so the weekday/weekend blend), 3.2 bps a side; the short's carrying cost is the
+perp's funding over the hold, settled gross. Frozen.
 
 ## Sample and period
 

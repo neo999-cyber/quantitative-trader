@@ -64,6 +64,7 @@ FAMILIES = {
     "oi_reversal": "OIReversal",
     "unlock_fade": "UnlockFade",
     "perp_pairs": "PerpPairs",
+    "etf_flow_pressure": "EtfFlowPressure",
 }
 
 
@@ -607,6 +608,26 @@ def cmd_data_carry_build(args) -> int:
     built = int((summary["days"] > 0).sum())
     print(f"{built} carry units written under market {'carry-um'!r}; manifest hash: {lake.manifest_hash()}")
     return 0 if built else 1
+
+
+def cmd_data_etfflow_build(args) -> int:
+    """futures/um hourly bars + the funding mirror + the issuer's flow series -> the ETF-flow instrument (`etfflow-um`).
+
+    A join and a count: the summary says how many decision bars carry a standardised flow and how many
+    clear each registered threshold, so a memo's sample minimum is known before the engine runs. No flow
+    is read against a price here.
+    """
+    from qr.data.etfflow import MARKET, build_etfflow_lake
+    from qr.data.funding import FundingBucket
+
+    lake = _lake(args)
+    summary = build_etfflow_lake(
+        lake, FundingBucket(_mirror(args)), args.symbols or None, args.interval, ticker=args.ticker,
+        window=args.window, min_rows=args.min_rows, count_start=args.count_start, count_end=args.count_end,
+    )
+    print(summary.T.to_string() if len(summary) == 1 else table(summary))
+    print(f"written under market {MARKET!r}; manifest hash: {lake.manifest_hash()}")
+    return 0
 
 
 def cmd_data_riskfree_pull(args) -> int:
@@ -1870,10 +1891,10 @@ def _family_class(name: str):
     carry family lives beside the carry unit in `qr.strategies.carry`, which
     imports helpers from the library and so cannot be imported *by* it.
     """
-    from qr.strategies import auction, carry, intraday, library, oi, pairs, unlocks
+    from qr.strategies import auction, carry, etfflow, intraday, library, oi, pairs, unlocks
 
     cls_name = FAMILIES[name]
-    for module in (library, carry, auction, intraday, oi, unlocks, pairs):
+    for module in (library, carry, auction, intraday, oi, unlocks, pairs, etfflow):
         if hasattr(module, cls_name):
             return getattr(module, cls_name)
     raise KeyError(f"no strategy class {cls_name!r} for family {name!r}")
@@ -1898,6 +1919,12 @@ def _costs(args) -> CostModel:
 
         as_binance = replace(CostModel.maker_measured(by_dow=True), name="bybit_perp_assumed_as_binance_maker_measured", verified_on="unverified")
         return CostModel.carry_pair(CostModel.maker_measured(by_dow=True), as_binance)
+    if getattr(args, "costs", "spot") == "maker":
+        # Programme 4 (`docs/prereg/p4_etf_flow_pressure_v1.md`): one leg on the Binance USDⓈ-M perp at the maker
+        # cost measured in stage 1 on weekdays (`docs/33`: 96.0% filled inside the deadline, +0.50 bps mark; every
+        # entry is a New York session), funding settled gross by the ledger. The weekday figures, not the blend,
+        # because the by-weekday haircut would re-scale a Friday position at the Saturday boundary.
+        return CostModel.maker_measured(day_type="weekday")
     if getattr(args, "costs", "spot") == "carry":
         spot = CostModel.trial(half_spread_bps=args.spread)
         return CostModel.carry_pair(spot, CostModel.binance_perp())
@@ -1911,7 +1938,7 @@ def _costs(args) -> CostModel:
 
 
 #: Named fixed baskets a run may use instead of a ranked universe.
-BASKETS = {"nasdaq31": "qr.data.auction:NASDAQ31", "qqq": "qr.data.intraday:QQQ_ONLY"}
+BASKETS = {"nasdaq31": "qr.data.auction:NASDAQ31", "qqq": "qr.data.intraday:QQQ_ONLY", "btc": "qr.data.etfflow:BTC_ONLY"}
 
 
 def _basket_symbols(name: str) -> tuple[str, ...]:
@@ -2108,6 +2135,19 @@ def build_parser() -> argparse.ArgumentParser:
     carry.add_argument("--interval", default="1d")
     carry.set_defaults(func=cmd_data_carry_build)
 
+    etfflow = data.add_parser(
+        "etfflow-build",
+        help="futures/um hourly bars + funding + the issuer's flow series -> the ETF-flow instrument (market etfflow-um)",
+    )
+    etfflow.add_argument("--symbols", nargs="*", help="default: BTCUSDT")
+    etfflow.add_argument("--interval", default="1h")
+    etfflow.add_argument("--ticker", default="IBIT", help="the issuer series to standardise (reference etf_flows_ishares_daily)")
+    etfflow.add_argument("--window", type=int, default=60, help="rows of trailing |flow| the scale averages")
+    etfflow.add_argument("--min-rows", type=int, default=20, dest="min_rows")
+    etfflow.add_argument("--count-start", dest="count_start", help="also count decision bars and |z| >= k inside this window (the registered in-sample)")
+    etfflow.add_argument("--count-end", dest="count_end")
+    etfflow.set_defaults(func=cmd_data_etfflow_build)
+
     auction = data.add_parser(
         "auction-build",
         help="Databento XNAS daily bars + closing-cross snapshots -> overnight-return panel (market auction-xnas)",
@@ -2277,11 +2317,12 @@ def build_parser() -> argparse.ArgumentParser:
     gt.add_argument("--spread", type=float, default=2.0)
     gt.add_argument(
         "--costs",
-        choices=("spot", "carry", "alpaca", "perp", "xvenue", "xvenue_maker", "xvenue_maker_both"),
+        choices=("spot", "carry", "alpaca", "perp", "maker", "xvenue", "xvenue_maker", "xvenue_maker_both"),
         default="spot",
         help="spot: the trial's Binance spot model; carry: spot plus Binance perp, both legs taker; "
         "alpaca: $0 commission, 2 bps half-spread, 1 bp slippage, whole shares; "
         "perp: Binance USDT-M perpetual, regular user with BNB, taker, funding settled gross; "
+        "maker: one leg on the Binance perp at the weekday maker cost measured in stage 1 (docs/33), funding gross; "
         "xvenue: Binance perp plus Bybit perp, both legs taker (the cross-venue unit); "
         "xvenue_maker: the Binance leg at the maker cost measured in stage 1 (docs/33), Bybit taker; "
         "xvenue_maker_both: both legs at the measured maker cost (Bybit assumed, the pre-stated sensitivity)",

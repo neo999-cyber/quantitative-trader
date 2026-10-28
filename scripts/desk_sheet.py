@@ -30,9 +30,10 @@ from pathlib import Path
 V3_START = datetime(2026, 10, 13, 4, 53, tzinfo=timezone.utc)   # the daily ladders admitted (docs/31 §17)
 V3_MIN_CLUSTERS = 30
 MEASURED = {"perp_maker_bps_side": 3.2, "carry_round_trip_bps": 21.4, "stage1_fill_pct": 94.2}
+FUNDING_WINDOWS = (30, 90, 365)                                   # trailing days for the realised-funding lines
 DESK_NOTES = """\
-**Dated (Claude's):** 25 Oct counts-only check of the daily-ladder recording done (`reports/p3/p3a_v3_counts_2026-10-25.md`) · 27 Oct v2's deferral note written (seq 982), no run · 27 Oct Programme 4 registered (seq 984–990); the ETF-flow candidate ran once and **FAILED** in-sample (seq 991–1013: T + 2 negative, T + 1 inside noise, placebo above both; `docs/35` §5) · 27 Oct evening: the CME timer ran once and **FAILED** (seq 1024–1044: every variant behind the holding it times, placebo equal, sort t −0.5; `docs/35` §8); the inflow fade built, **deferred by construction** and **parked** by the owner (71 signal days vs 80; the free feed stopped in May; notes 1023, 1045) · 31 Oct mirror, the v3 read once, the Programme 3 report.
-**Open decisions (owner's):** the ladder / carry holding (`docs/34`) · the carry holding, now with no timer (`docs/34`).
+**Dated (Claude's):** 25 Oct counts-only check of the daily-ladder recording done (`reports/p3/p3a_v3_counts_2026-10-25.md`) · 27 Oct v2's deferral note written (seq 982), no run · 27 Oct Programme 4 registered (seq 984–990); the ETF-flow candidate ran once and **FAILED** in-sample (seq 991–1013: T + 2 negative, T + 1 inside noise, placebo above both; `docs/35` §5) · 27 Oct evening: the CME timer ran once and **FAILED** (seq 1024–1044: every variant behind the holding it times, placebo equal, sort t −0.5; `docs/35` §8); the inflow fade built, **deferred by construction** and **parked** by the owner (71 signal days vs 80; the free feed stopped in May; notes 1023, 1045) · 28 Oct the carry decision pack put to the owner (`docs/34`, last section), no decision; the realised-funding lines below added so the regime is read from the days held, not from one morning's rate · 31 Oct mirror, the v3 read once, the Programme 3 report.
+**Open decisions (owner's):** the carry holding, untimed (`docs/34`): no, not now, or an amount and a leverage; the yield sleeve stays in the bill until then.
 **Standing:** no live orders; the live key's futures and spot trading are off; Programme 3 counter four of four; Programme 2 twelve for twelve."""
 
 
@@ -173,8 +174,50 @@ def funding_now(symbols=("BTCUSDT", "ETHUSDT")) -> dict:
     return out
 
 
+def _fetch_funding(symbol: str, start_ms: int, limit: int = 1000) -> list[dict]:
+    """Every funding settlement for `symbol` since `start_ms`, paged through the public endpoint (no key, like `funding_now`)."""
+    rows: list[dict] = []
+    for _ in range(6):
+        url = f"https://fapi.binance.com/fapi/v1/fundingRate?symbol={symbol}&startTime={start_ms}&limit={limit}"
+        with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"}), timeout=20) as r:
+            page = json.loads(r.read())
+        rows += page
+        if len(page) < limit:
+            break
+        start_ms = int(page[-1]["fundingTime"]) + 1
+    return rows
+
+
+def funding_trailing(symbols=("BTCUSDT", "ETHUSDT"), windows=FUNDING_WINDOWS, now: datetime | None = None, fetch=_fetch_funding) -> dict:
+    """What a short perp held every day actually collected over the trailing windows, annualised: gross, and on the capital a 1×
+    holding ties up (the spot notional plus the full perp margin, one round trip of costs taken once a year). The morning rate in
+    `funding_now` is read on one day and overstates this (`docs/34`, the decision section); this is the number against the bill."""
+    now = now or datetime.now(timezone.utc)
+    now_ms = now.timestamp() * 1000
+    rt = MEASURED["carry_round_trip_bps"] / 100.0
+    out: dict = {}
+    for s in symbols:
+        try:
+            rows = fetch(s, int((now - timedelta(days=max(windows) + 1)).timestamp() * 1000))
+            pts = sorted((int(r["fundingTime"]), float(r["fundingRate"])) for r in rows if int(r["fundingTime"]) <= now_ms)
+            res: dict = {}
+            for w in windows:
+                since = now_ms - w * 86_400_000
+                sel = [(t, rate) for t, rate in pts if t >= since]
+                if not sel:
+                    continue
+                covered = any(t < since for t, _ in pts)                          # data reaches past the window's start
+                days = float(w) if covered else max((now_ms - sel[0][0]) / 86_400_000, 1.0)
+                gross = sum(rate for _, rate in sel) * 365 / days * 100
+                res[w] = {"days": round(days, 1), "n": len(sel), "gross_pct": round(gross, 2), "on_capital_1x_pct": round((gross - rt) / 2, 2)}
+            out[s] = res
+        except Exception as exc:  # noqa: BLE001
+            out[s] = {"error": type(exc).__name__}
+    return out
+
+
 # ------------------------------------------------------------------ the page
-def render(h: dict, p: dict, c: dict, l: dict, f: dict, now: datetime) -> str:
+def render(h: dict, p: dict, c: dict, l: dict, f: dict, now: datetime, t: dict | None = None) -> str:
     def yn(b): return "yes" if b else "**no**"
     lines = [f"# Desk sheet — {now.strftime('%Y-%m-%d %H:%M')} UTC", ""]
     lines += ["## Recorders", f"- Health: {'**WRONG** — ' if h['wrong'] else 'clean — '}`{h['last_line'] or 'no health line yet'}`",
@@ -194,6 +237,21 @@ def render(h: dict, p: dict, c: dict, l: dict, f: dict, now: datetime) -> str:
         lines += ["- T-bill (DTB3): no value in the last seven snapshots"]
     for s, v in f.items():
         lines += [f"- {s} funding now: {v.get('rate_8h', '?')} per 8 h = {v.get('annualised_pct', '?')}%/yr at today's rate" if "rate_8h" in v else f"- {s} funding: {v['error']}"]
+    for s, v in (t or {}).items():
+        if "error" in v:
+            lines += [f"- {s} funding realised: {v['error']}"]
+            continue
+        parts = [f"{w} d {x['gross_pct']}% / {x['on_capital_1x_pct']}%" + (f" ({x['days']} d of data)" if x["days"] < w - 1 else "") for w, x in sorted(v.items())]
+        lines += [f"- {s} funding realised, annualised (gross / at 1× on the capital it ties up): " + "; ".join(parts)]
+    if t and l.get("dtb3") is not None:
+        gaps = []
+        for s, v in t.items():
+            x = v.get(max(FUNDING_WINDOWS)) if "error" not in v else None
+            if x:
+                d = x["on_capital_1x_pct"] - float(l["dtb3"])
+                gaps.append(f"{s[:3]} {'+' if d >= 0 else '−'}{abs(d):.1f}")
+        if gaps:
+            lines += [f"- The carry at 1× against the bill ({l['dtb3']}%), last {max(FUNDING_WINDOWS)} days, in points: " + ", ".join(gaps) + " — the rate above is one morning's; this is what the days held paid"]
     lines += [f"- Measured costs: perp maker {MEASURED['perp_maker_bps_side']} bps a side (stage 1, {MEASURED['stage1_fill_pct']}% fill); a carry round trip ≈ {MEASURED['carry_round_trip_bps']} bps", ""]
     lines += ["## Notes", DESK_NOTES, ""]
     return "\n".join(lines)
@@ -216,7 +274,8 @@ def main(argv=None) -> int:
     c = collectors(a.flows, a.yield_dir)
     l = ladder(a.yield_dir)
     f = {} if a.no_net else funding_now()
-    page = render(h, p, c, l, f, now)
+    t = {} if a.no_net else funding_trailing()
+    page = render(h, p, c, l, f, now, t)
     a.out.mkdir(parents=True, exist_ok=True)
     (a.out / f"desk_{now.date().isoformat()}.md").write_text(page)
     (a.out / "latest.md").write_text(page)

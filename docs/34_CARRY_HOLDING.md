@@ -141,3 +141,17 @@ usual shape: the rate is high on the days it is read and lower over the days it 
 its risk only in crowded-long regimes; the open question is whether a regime input can say when, which is what
 `docs/prereg/p4_cot_crowding_v1.md` (drafted, not registered) proposes to test. The decision stays the
 owner's; the execution leg above is ready either way.
+
+**28 October 2026 — put to the owner; no decision.** The pack above was read to the owner in plain terms (what the holding is, the
+by-year table, the $1,300 yield sleeve at 1× and at 2.5× against the bill, the exchange tail, the three ways to decide: no, not now,
+or an amount and a leverage). No position; the sleeve stays where it is. Two things done at $0 the same morning: the desk sheet
+now carries *realised* trailing funding — 30, 90 and 365 days, annualised, gross and at 1× on the capital — read from the venue's
+own public funding history (`scripts/desk_sheet.py`, `funding_trailing`; deployed to the box), with the gap to the bill in points, so
+the regime is read from the days held and not from one morning's rate; and that read confirms the lake's figure independently
+(BTC last 365 days 3.43% gross at the venue, 3.4% in the lake). On the 28th: BTC 30 d 4.3%, 90 d 5.8%, 365 d 3.4% gross; at 1×
+2.0 / 2.8 / 1.6%; the bill 4.05% (13-week discount, 27 October): −2.4 points at a year, ETH −2.9. The CME timer that was to say
+*when* failed on the 27th (`docs/35` §8), so the holding stays untimed. It does not touch Friday's v3 read: a different venue, a
+different sleeve. Opening it would need, in the owner's hands: the amount, the coin and the leverage; *Enable Futures* and spot
+trading on the live key (checked by the key's permission flags, not a balance read); a funded spot wallet and futures margin; a
+live config beside `study/carry.testnet.json`; the carry code on the box next to stage 1 (the key answers only from there); and the
+typed `<config hash> CARRY` line at the terminal. Claude places nothing.

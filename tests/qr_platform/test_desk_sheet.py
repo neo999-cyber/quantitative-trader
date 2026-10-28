@@ -51,3 +51,29 @@ def test_ladder_reads_a_tbill_record_with_its_source(tmp_path):
     (y / "2026-10-15.jsonl").write_text(json.dumps({"recorded_at": "x", "pools": [], "tbill": {"date": "2026-10-14", "dtb3": 4.10, "source": "treasury_13w_bank_discount"}}) + "\n")
     l = ds.ladder(tmp_path)
     assert l["dtb3"] == 4.10 and l["dtb3_date"] == "2026-10-14 treasury_13w_bank_discount"
+
+
+def test_funding_trailing_annualises_the_days_held_and_renders_against_the_bill(tmp_path):
+    now = datetime(2026, 10, 28, 6, 40, tzinfo=timezone.utc)
+    eight_h = 8 * 3600 * 1000
+
+    def fetch(symbol, start_ms):                                              # 400 days of 8-hourly settlements at 0.0001, newest first is fine
+        n = 400 * 3 if symbol == "BTCUSDT" else 30                            # ETH: a listing only ten days old
+        return [{"fundingTime": int(now.timestamp() * 1000) - (k + 1) * eight_h, "fundingRate": "0.00010000"} for k in range(n)]
+
+    t = ds.funding_trailing(now=now, fetch=fetch)
+    btc = t["BTCUSDT"]
+    assert set(btc) == {30, 90, 365} and all(btc[w]["n"] == 3 * w for w in btc)
+    assert all(btc[w]["gross_pct"] == 10.95 for w in btc)                     # 0.0001 × 3 × 365
+    assert btc[365]["on_capital_1x_pct"] == round((10.95 - 0.214) / 2, 2)      # one round trip a year, half the capital earns nothing
+    eth = t["ETHUSDT"]
+    assert eth[365]["days"] == 10.0 and eth[365]["gross_pct"] == 10.95 and eth[30]["days"] == 10.0
+    assert ds.funding_trailing(symbols=("X",), now=now, fetch=lambda s, m: 1 / 0)["X"] == {"error": "ZeroDivisionError"}
+    y = tmp_path / "yields"
+    y.mkdir()
+    (y / "2026-10-28.jsonl").write_text(json.dumps({"recorded_at": "x", "pools": [], "dtb3": 3.6}) + "\n")
+    page = ds.render({"last_line": "ok", "wrong": False, "pm_mb_yesterday": "1", "reconnects_24h": 0, "surface_files_yesterday": 24, "disk_free": "1G"},
+                     ds.recording_progress(tmp_path / "none.jsonl"), {"ibit_today": True, "etha_today": True, "table_rows": 0, "equities_flows_age_h": 1.0, "yield_today": True, "latest_yield_file": "x"},
+                     ds.ladder(tmp_path), {}, now, {"BTCUSDT": {365: {"days": 365.0, "n": 1095, "gross_pct": 3.4, "on_capital_1x_pct": 1.6}}, "ETHUSDT": {"error": "URLError"}})
+    assert "BTCUSDT funding realised, annualised (gross / at 1× on the capital it ties up): 365 d 3.4% / 1.6%" in page
+    assert "against the bill (3.6%), last 365 days, in points: BTC −2.0" in page and "ETHUSDT funding realised: URLError" in page

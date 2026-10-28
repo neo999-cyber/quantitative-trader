@@ -155,3 +155,23 @@ different sleeve. Opening it would need, in the owner's hands: the amount, the c
 trading on the live key (checked by the key's permission flags, not a balance read); a funded spot wallet and futures margin; a
 live config beside `study/carry.testnet.json`; the carry code on the box next to stage 1 (the key answers only from there); and the
 typed `<config hash> CARRY` line at the terminal. Claude places nothing.
+
+**28 October, later — what fixes the three values, asked by the owner.** *The amount* is fixed by the owner's own ladder decision
+(`docs/31` §7, item 3: tiers 1–2 only, tier 3 "sUSDe-type funding-carry risk" **out**; this holding is tier 3 by construction, §13 B),
+not by the yield: the yield per dollar is the same at any size (one round trip 21 bps; 1.6% at 1× over the last year), so size
+buys no return, only a larger unsecured claim on the venue — both legs, the whole amount. Under the standing decision the amount
+is zero; changing it is a bucket move, recorded in `docs/31`. The floor is the perp's lot: 0.001 BTC a leg (the perp's step; its
+minimum notional 50 USDT, spot 5 USDT), about $80 of coin and $80 of margin at 1×. *The coin* is fixed by the measurements: BTC —
+fewest negative months (6 of 80), the highest realised funding (3.4% last 365 days; ETH 2.4%, SOL negative, the equal-weight
+universe −16% in 2026), the deepest book, the symbol the harness was rehearsed on, and the smaller forward rises (below).
+*The leverage* is fixed by the liquidation distance against how far the price has run while nobody watched: a short at L× on
+USDT margin is liquidated at a rise of about 1/L (the maintenance margin takes about half a point more), and the spot leg's gain
+is unrealised, so a top-up needs fresh USDT. From the perp daily bars 2020-01-01 → 2026-08-31, the largest rise from a close to
+the highest high of the next 30 days, by year — BTC: 2020 +134%, 2021 +92%, 2022 +45%, 2023 +46%, 2024 +63%, 2025 +37%,
+2026 +30% (to August); ETH: +203, +105, +87, +41, +70, +74, +39%. So without a top-up: 5× (liquidated at +20%) goes every
+year; 2.5× (+40%, the rehearsal's setting) in five of the seven, last in November 2024; 2× (+50%) in 2020, 2021 and 2024;
+1.5× (+67%) in 2020–21; 1× (+100%) once, December 2020. The leverage buys 0.7 points a year on capital (1.6% → 2.3%); the
+liquidation costs the basis loss, a taker exit, and leaves the spot leg outright. The programme's reading: 1× or nothing. The
+honest form of leverage is the coin itself as margin (the venue's multi-assets mode), which the harness does not do and would be a
+build and a rehearsal first. The other config values are not the owner's: the maker wait, the imbalance tolerance and the dollar
+stop come from stage 1 and the rehearsal. Descriptive read, no rule, nothing registered or run.

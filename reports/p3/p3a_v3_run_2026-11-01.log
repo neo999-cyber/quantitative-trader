@@ -1,0 +1,21 @@
+858 daily-ladder markets in the recording, 627 resolved
+k5_T1                      attempts=  55 filled=  23 clusters= 23 fill_rate=0.42 edge= -6.49pt t=-0.86 book_sharpe=-0.34 fallbacks=0
+k5_Tresolution             attempts=  55 filled=  23 clusters= 23 fill_rate=0.42 edge= -6.49pt t=-0.86 book_sharpe=-0.34 fallbacks=0
+k8_T1                      attempts=  25 filled=  19 clusters= 19 fill_rate=0.76 edge=-15.61pt t=-1.48 book_sharpe=-3.83 fallbacks=0
+k8_Tresolution             attempts=  25 filled=  19 clusters= 19 fill_rate=0.76 edge=-16.18pt t=-1.53 book_sharpe=-4.34 fallbacks=0
+mirror_k5_T1               attempts=  26 filled=  13 clusters= 13 fill_rate=0.50 edge=-12.23pt t=-1.80 book_sharpe=-4.13 fallbacks=0
+mirror_k5_Tresolution      attempts=  26 filled=  13 clusters= 13 fill_rate=0.50 edge=-12.23pt t=-1.80 book_sharpe=-4.13 fallbacks=0
+mirror_k8_T1               attempts=   7 filled=   3 clusters=  3 fill_rate=0.43 edge=-17.40pt t=-0.53 book_sharpe=nan fallbacks=0
+mirror_k8_Tresolution      attempts=   7 filled=   3 clusters=  3 fill_rate=0.43 edge=-17.40pt t=-0.53 book_sharpe=nan fallbacks=0
+placebo_k5_T1              attempts=  61 filled=  17 clusters= 17 fill_rate=0.28 edge= -1.36pt t=-0.24 book_sharpe=-3.15 fallbacks=0
+placebo_k5_Tresolution     attempts=  61 filled=  17 clusters= 17 fill_rate=0.28 edge= -1.31pt t=-0.23 book_sharpe=-3.48 fallbacks=0
+placebo_k8_T1              attempts=  45 filled=  23 clusters= 23 fill_rate=0.51 edge=  8.05pt t= 1.11 book_sharpe=4.47 fallbacks=0
+placebo_k8_Tresolution     attempts=  45 filled=  23 clusters= 23 fill_rate=0.51 edge=  6.79pt t= 0.89 book_sharpe=4.10 fallbacks=0
+dvol_k5_T1                 attempts=  64 filled=  10 clusters= 10 fill_rate=0.16 edge=  3.18pt t= 0.46 book_sharpe=1.64 fallbacks=0
+dvol_k5_Tresolution        attempts=  64 filled=  10 clusters= 10 fill_rate=0.16 edge=  9.69pt t= 1.36 book_sharpe=4.60 fallbacks=0
+dvol_k8_T1                 attempts=  50 filled=  15 clusters= 15 fill_rate=0.30 edge= 14.19pt t= 1.62 book_sharpe=6.44 fallbacks=0
+dvol_k8_Tresolution        attempts=  50 filled=  15 clusters= 15 fill_rate=0.30 edge= 13.28pt t= 1.51 book_sharpe=5.49 fallbacks=0
+naive_le20c                attempts=  75 filled=   5 clusters=  5 fill_rate=0.07 edge=  0.80pt t= 3.00 book_sharpe=nan fallbacks=0
+family clusters at k=5, T=1: 23 (minimum 30) → DEFERRED (below the cluster minimum)
+trial log seq 1047
+exit 0

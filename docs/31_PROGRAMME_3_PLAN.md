@@ -836,3 +836,20 @@ edge that scales. Done the same day, all $0, nothing registered or run:
   memos and the ETF family's four control sweeps, seq 984–990; the ETF-flow family and its instrument built
   on fixtures first, then the real instrument (counts only: 599 primary decision bars in the registered
   window, 225 at k = 1.0 against a minimum of 60). Programme 4 has its own file from here: `docs/35`.
+
+## 22. 1 November 2026 — the registered v3 read: 23 clusters with a fill against 30, deferred to 30 November; the Programme 3 report
+
+On the owner's "run it" (1 November, a day after the memo's date; note 1046 written before the run): the
+recording and the surface mirrored from the box (5.8 GB, 28 MB), then `scripts/p3a_wedge_v3.py --start
+2026-10-13 --end 2026-10-30` once (run seq 1047, seventeen sessions on one pass, no surface fallback). **The
+family has 23 asset × settlement-date clusters with a fill at k = 5, T = 1, against the memo's minimum of 30: the
+read is deferred by the memo's own rule to 30 November, with the window extended to 29 November, and the memo
+is not touched** (note 1048; a second shortfall is reported as underpowered and closes the family, note 1049,
+stated before the data). What the run showed is recorded in `docs/36` §2 as seen and not as a verdict: the
+family's per-share edge negative (−6.5 points at k = 5, t −0.9; −16 at k = 8), the mirror negative too, the
+placebo at zero, the DVOL arm positive inside noise on fewer fills — the term-structure shape the memo named as
+the failure mode. **The Programme 3 report is written: `docs/36_PROGRAMME_3_REPORT.md`** (the §4 deliverable: the
+wedge's status, the measured maker cost, the ladder with its number, the small-size income refuted three ways,
+P3-C's fail, what keeps running). Also on 1 November, asked by the owner: a site review of London Strategic Edge
+(`docs/research/11`) — a derived, scraped archive, prototyping and cross-check only, two datasets worth a QA pass
+on a free key. Dated next: 30 November.

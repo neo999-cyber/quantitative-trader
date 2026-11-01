@@ -1,0 +1,1639 @@
+{
+ "_meta": {
+  "run_date": "2026-11-01",
+  "keep": "/Users/anoop/qr/lake/mirror/lse/qa_2026-11-01",
+  "qr_root": "/Users/anoop/qr/lake",
+  "prior_calls": 25,
+  "calls": 25
+ },
+ "A": {
+  "usage": {
+   "plan": "free",
+   "product": "global",
+   "calls_per_minute": 60,
+   "rate_mbit": 50.0,
+   "connections": 1,
+   "rows": {
+    "day": "2026-11-01",
+    "per_day": 12500000,
+    "per_export": 2500000,
+    "resets_in_seconds": 36744,
+    "used_today": 0
+   },
+   "weekly": {
+    "allowance_bytes": 13421772800,
+    "used_bytes": 0,
+    "week": "2026-W44"
+   },
+   "withheld": null
+  },
+  "markets": [
+   {
+    "folder": "futures",
+    "label": "Futures",
+    "allowed": true,
+    "derived": true,
+    "pairs": 33,
+    "time_zone": "UTC",
+    "levels": [
+     "L1"
+    ],
+    "required_plan": null,
+    "capabilities": {
+     "book": false,
+     "candles": true,
+     "greeks": false,
+     "orders": false,
+     "quotes": false,
+     "tick": true,
+     "trades": false
+    }
+   },
+   {
+    "folder": "us_stocks",
+    "label": "US stocks",
+    "allowed": true,
+    "derived": true,
+    "pairs": 13529,
+    "time_zone": "America/New_York",
+    "levels": [
+     "L1"
+    ],
+    "required_plan": null,
+    "capabilities": {
+     "book": false,
+     "candles": true,
+     "greeks": false,
+     "orders": false,
+     "quotes": false,
+     "tick": true,
+     "trades": false
+    }
+   },
+   {
+    "folder": "uk_stocks",
+    "label": "UK stocks",
+    "allowed": true,
+    "derived": true,
+    "pairs": 6354,
+    "time_zone": "Europe/London",
+    "levels": [
+     "L1"
+    ],
+    "required_plan": null,
+    "capabilities": {
+     "book": false,
+     "candles": true,
+     "greeks": false,
+     "orders": false,
+     "quotes": false,
+     "tick": true,
+     "trades": false
+    }
+   },
+   {
+    "folder": "ca_stocks",
+    "label": "Canadian stocks",
+    "allowed": true,
+    "derived": true,
+    "pairs": 1677,
+    "time_zone": "America/Toronto",
+    "levels": [
+     "L1"
+    ],
+    "required_plan": null,
+    "capabilities": {
+     "book": false,
+     "candles": true,
+     "greeks": false,
+     "orders": false,
+     "quotes": false,
+     "tick": true,
+     "trades": false
+    }
+   },
+   {
+    "folder": "indices",
+    "label": "Indices",
+    "allowed": true,
+    "derived": true,
+    "pairs": 99,
+    "time_zone": "UTC",
+    "levels": [
+     "L1"
+    ],
+    "required_plan": null,
+    "capabilities": {
+     "book": false,
+     "candles": true,
+     "greeks": false,
+     "orders": false,
+     "quotes": false,
+     "tick": true,
+     "trades": false
+    }
+   },
+   {
+    "folder": "nasdaq",
+    "label": "Nasdaq TotalView",
+    "allowed": false,
+    "derived": false,
+    "pairs": 33980,
+    "time_zone": "America/New_York",
+    "levels": [
+     "L1",
+     "L2",
+     "L3"
+    ],
+    "required_plan": {
+     "market": "nasdaq",
+     "name": "Nasdaq Lite",
+     "subscribe_url": "/data?tab=subscriptions",
+     "tier": "lite"
+    },
+    "capabilities": {
+     "book": true,
+     "candles": true,
+     "greeks": false,
+     "orders": true,
+     "quotes": true,
+     "tick": true,
+     "trades": true
+    }
+   },
+   {
+    "folder": "cme",
+    "label": "CME Globex",
+    "allowed": false,
+    "derived": false,
+    "pairs": 468755,
+    "time_zone": "America/Chicago",
+    "levels": [
+     "L1",
+     "L2",
+     "L3"
+    ],
+    "required_plan": {
+     "market": "cme",
+     "name": "CME Group Lite",
+     "subscribe_url": "/data?tab=subscriptions",
+     "tier": "lite"
+    },
+    "capabilities": {
+     "book": true,
+     "candles": true,
+     "greeks": false,
+     "orders": true,
+     "quotes": true,
+     "tick": true,
+     "trades": true
+    }
+   },
+   {
+    "folder": "forex",
+    "label": "Forex",
+    "allowed": true,
+    "derived": true,
+    "pairs": 60,
+    "time_zone": "UTC",
+    "levels": [
+     "L1"
+    ],
+    "required_plan": null,
+    "capabilities": {
+     "book": false,
+     "candles": true,
+     "greeks": false,
+     "orders": false,
+     "quotes": false,
+     "tick": false,
+     "trades": false
+    }
+   },
+   {
+    "folder": "commodities",
+    "label": "Commodities",
+    "allowed": true,
+    "derived": true,
+    "pairs": 18,
+    "time_zone": "UTC",
+    "levels": [
+     "L1"
+    ],
+    "required_plan": null,
+    "capabilities": {
+     "book": false,
+     "candles": true,
+     "greeks": false,
+     "orders": false,
+     "quotes": false,
+     "tick": false,
+     "trades": false
+    }
+   },
+   {
+    "folder": "us_options",
+    "label": "US options",
+    "allowed": true,
+    "derived": false,
+    "pairs": 67245479,
+    "time_zone": "America/New_York",
+    "levels": [
+     "L1"
+    ],
+    "required_plan": null,
+    "capabilities": {
+     "book": false,
+     "candles": true,
+     "greeks": true,
+     "orders": false,
+     "quotes": false,
+     "tick": true,
+     "trades": false
+    }
+   },
+   {
+    "folder": "crypto",
+    "label": "Crypto",
+    "allowed": true,
+    "derived": true,
+    "pairs": 56,
+    "time_zone": "UTC",
+    "levels": [
+     "L1"
+    ],
+    "required_plan": null,
+    "capabilities": {
+     "book": false,
+     "candles": true,
+     "greeks": false,
+     "orders": false,
+     "quotes": false,
+     "tick": true,
+     "trades": false
+    }
+   }
+  ],
+  "manifest_built_at": 1793538009
+ },
+ "B": {
+  "columns": [
+   "time",
+   "open",
+   "high",
+   "low",
+   "close",
+   "volume",
+   "trades"
+  ],
+  "window": [
+   "2026-10-13",
+   "2026-10-30"
+  ],
+  "against_binance_zips": {
+   "n_lse": 25920,
+   "n_ref": 25920,
+   "n_common": 25920,
+   "missing_in_lse": 0,
+   "extra_in_lse": 0,
+   "expected_n": 25920,
+   "open": {
+    "exact": 0.4538,
+    "within_1bp": 0.9995,
+    "within_5bp": 1.0,
+    "median_bps": 0.001,
+    "p99_bps": 0.11,
+    "max_bps": 2.35
+   },
+   "high": {
+    "exact": 0.4541,
+    "within_1bp": 0.9998,
+    "within_5bp": 1.0,
+    "median_bps": 0.001,
+    "p99_bps": 0.09,
+    "max_bps": 2.09
+   },
+   "low": {
+    "exact": 0.469,
+    "within_1bp": 0.9998,
+    "within_5bp": 1.0,
+    "median_bps": 0.001,
+    "p99_bps": 0.13,
+    "max_bps": 2.57
+   },
+   "close": {
+    "exact": 0.417,
+    "within_1bp": 0.9962,
+    "within_5bp": 1.0,
+    "median_bps": 0.001,
+    "p99_bps": 0.63,
+    "max_bps": 3.53
+   },
+   "volume_ratio": {
+    "median": 34793970.39473046,
+    "p10": 28775498.642648675,
+    "p90": 40847216.46899037
+   },
+   "trades_exact": 0.0,
+   "missing_sample": [],
+   "extra_sample": []
+  },
+  "volume_scale_guess": {
+   "median_ratio": 34793970.39473046,
+   "share_ratio_equal_1e8_within_1pct": 0.0,
+   "share_ratio_equal_1_within_1pct": 0.0,
+   "median_ratio_to_quote_volume": 427.623163431161
+  },
+  "sample_of_binance_test": {
+   "trades_ratio_median": 0.4,
+   "trades_ratio_p10": 0.329,
+   "trades_ratio_p90": 0.474,
+   "share_trades_at_or_below_binance": 1.0,
+   "volume_over_1e8_ratio_median": 0.348,
+   "share_volume_over_1e8_at_or_below_binance": 1.0,
+   "corr_volume": 0.989,
+   "corr_trades": 0.986,
+   "share_high_above_binance_high": 0.3324,
+   "share_low_below_binance_low": 0.3
+  }
+ },
+ "C": {
+  "1h_aug_2026_vs_lake": {
+   "n_lse": 744,
+   "n_ref": 744,
+   "n_common": 744,
+   "missing_in_lse": 0,
+   "extra_in_lse": 0,
+   "expected_n": 744,
+   "open": {
+    "exact": 0.4637,
+    "within_1bp": 0.9973,
+    "within_5bp": 1.0,
+    "median_bps": 0.001,
+    "p99_bps": 0.03,
+    "max_bps": 2.05
+   },
+   "high": {
+    "exact": 0.4328,
+    "within_1bp": 1.0,
+    "within_5bp": 1.0,
+    "median_bps": 0.001,
+    "p99_bps": 0.08,
+    "max_bps": 0.19
+   },
+   "low": {
+    "exact": 0.4355,
+    "within_1bp": 1.0,
+    "within_5bp": 1.0,
+    "median_bps": 0.001,
+    "p99_bps": 0.17,
+    "max_bps": 0.59
+   },
+   "close": {
+    "exact": 0.4449,
+    "within_1bp": 0.996,
+    "within_5bp": 1.0,
+    "median_bps": 0.001,
+    "p99_bps": 0.58,
+    "max_bps": 1.82
+   },
+   "volume_ratio": {
+    "median": 34833024.07656285,
+    "p10": 33439266.02355199,
+    "p90": 36300777.73481918
+   },
+   "trades_exact": 0.0,
+   "missing_sample": [],
+   "extra_sample": []
+  },
+  "1d_stamp_hours_utc": {
+   "0": 974
+  },
+  "1d_2024_2026-08_vs_lake": {
+   "n_lse": 974,
+   "n_ref": 974,
+   "n_common": 974,
+   "missing_in_lse": 0,
+   "extra_in_lse": 0,
+   "expected_n": 974,
+   "open": {
+    "exact": 0.9209,
+    "within_1bp": 1.0,
+    "within_5bp": 1.0,
+    "median_bps": 0.0,
+    "p99_bps": 0.0,
+    "max_bps": 0.01
+   },
+   "high": {
+    "exact": 0.4261,
+    "within_1bp": 1.0,
+    "within_5bp": 1.0,
+    "median_bps": 0.001,
+    "p99_bps": 0.18,
+    "max_bps": 0.51
+   },
+   "low": {
+    "exact": 0.4281,
+    "within_1bp": 0.999,
+    "within_5bp": 1.0,
+    "median_bps": 0.001,
+    "p99_bps": 0.16,
+    "max_bps": 1.42
+   },
+   "close": {
+    "exact": 0.4107,
+    "within_1bp": 0.9969,
+    "within_5bp": 1.0,
+    "median_bps": 0.001,
+    "p99_bps": 0.66,
+    "max_bps": 2.3
+   },
+   "volume_ratio": {
+    "median": 34911210.30509099,
+    "p10": 34423745.97486939,
+    "p90": 35381693.7421836
+   },
+   "trades_exact": 0.0,
+   "missing_sample": [],
+   "extra_sample": []
+  }
+ },
+ "D": {
+  "columns": [
+   "time",
+   "open",
+   "high",
+   "low",
+   "close",
+   "volume",
+   "trades"
+  ],
+  "n_lse": 23654,
+  "n_databento": 18008,
+  "stamp_reading": {
+   "0": {
+    "n_common": 17790,
+    "close_exact": 0.197,
+    "close_median_bps": 0.326
+   },
+   "-4": {
+    "n_common": 14060,
+    "close_exact": 0.0016,
+    "close_median_bps": 38.39
+   },
+   "4": {
+    "n_common": 16876,
+    "close_exact": 0.0021,
+    "close_median_bps": 33.401
+   },
+   "-5": {
+    "n_common": 13370,
+    "close_exact": 0.0011,
+    "close_median_bps": 45.199
+   },
+   "5": {
+    "n_common": 15742,
+    "close_exact": 0.0024,
+    "close_median_bps": 40.449
+   }
+  },
+  "all_minutes_utc_reading": {
+   "n_lse": 23654,
+   "n_ref": 18008,
+   "n_common": 17790,
+   "missing_in_lse": 218,
+   "extra_in_lse": 5864,
+   "open": {
+    "exact": 0.1954,
+    "within_1bp": 0.7736,
+    "within_5bp": 0.9722,
+    "median_bps": 0.327,
+    "p99_bps": 8.09,
+    "max_bps": 41.67
+   },
+   "high": {
+    "exact": 0.1469,
+    "within_1bp": 0.6308,
+    "within_5bp": 0.9027,
+    "median_bps": 0.643,
+    "p99_bps": 16.92,
+    "max_bps": 43.15
+   },
+   "low": {
+    "exact": 0.145,
+    "within_1bp": 0.6321,
+    "within_5bp": 0.9065,
+    "median_bps": 0.644,
+    "p99_bps": 18.26,
+    "max_bps": 64.05
+   },
+   "close": {
+    "exact": 0.197,
+    "within_1bp": 0.7829,
+    "within_5bp": 0.9781,
+    "median_bps": 0.326,
+    "p99_bps": 7.13,
+    "max_bps": 46.2
+   },
+   "volume_ratio": {
+    "median": 2.3855226044494597,
+    "p10": 0.9701093516856834,
+    "p90": 10.656339285714285
+   },
+   "missing_sample": [
+    "2026-08-03 09:20:00+00:00",
+    "2026-08-04 08:44:00+00:00",
+    "2026-08-04 08:56:00+00:00",
+    "2026-08-04 10:04:00+00:00",
+    "2026-08-04 22:15:00+00:00",
+    "2026-08-04 22:54:00+00:00"
+   ],
+   "extra_sample": [
+    "2026-08-03 04:01:00+00:00",
+    "2026-08-03 04:02:00+00:00",
+    "2026-08-03 04:03:00+00:00",
+    "2026-08-03 04:04:00+00:00",
+    "2026-08-03 04:05:00+00:00",
+    "2026-08-03 04:06:00+00:00"
+   ]
+  },
+  "regular_session_only": {
+   "n_lse": 8190,
+   "n_ref": 8190,
+   "n_common": 8190,
+   "missing_in_lse": 0,
+   "extra_in_lse": 0,
+   "open": {
+    "exact": 0.221,
+    "within_1bp": 0.878,
+    "within_5bp": 0.9691,
+    "median_bps": 0.322,
+    "p99_bps": 9.28,
+    "max_bps": 36.9
+   },
+   "high": {
+    "exact": 0.1442,
+    "within_1bp": 0.6325,
+    "within_5bp": 0.8379,
+    "median_bps": 0.629,
+    "p99_bps": 20.9,
+    "max_bps": 42.65
+   },
+   "low": {
+    "exact": 0.1328,
+    "within_1bp": 0.6117,
+    "within_5bp": 0.8359,
+    "median_bps": 0.641,
+    "p99_bps": 21.51,
+    "max_bps": 41.76
+   },
+   "close": {
+    "exact": 0.2243,
+    "within_1bp": 0.9225,
+    "within_5bp": 0.9849,
+    "median_bps": 0.32,
+    "p99_bps": 6.35,
+    "max_bps": 42.66
+   },
+   "volume_ratio": {
+    "median": 2.3918991560280416,
+    "p10": 1.5722921675890311,
+    "p90": 3.714858742347899
+   },
+   "missing_sample": [],
+   "extra_sample": []
+  },
+  "lse_minutes_by_et_hour": {
+   "0": 970,
+   "1": 978,
+   "2": 1037,
+   "3": 1007,
+   "4": 1185,
+   "5": 1139,
+   "6": 1163,
+   "7": 1246,
+   "8": 1256,
+   "9": 1259,
+   "10": 1260,
+   "11": 1260,
+   "12": 1260,
+   "13": 1260,
+   "14": 1260,
+   "15": 1260,
+   "16": 1241,
+   "17": 1210,
+   "18": 1200,
+   "19": 1203
+  }
+ },
+ "E": {
+  "n_lse": 668,
+  "stamp_hours_utc": {
+   "4": 426,
+   "5": 216,
+   "6": 20,
+   "7": 2,
+   "8": 4
+  },
+  "vs_databento_1d": {
+   "n_lse": 668,
+   "n_ref": 668,
+   "n_common": 668,
+   "missing_in_lse": 0,
+   "extra_in_lse": 0,
+   "expected_n": 668,
+   "open": {
+    "exact": 0.006,
+    "within_1bp": 0.0449,
+    "within_5bp": 0.1856,
+    "median_bps": 14.295,
+    "p99_bps": 195.85,
+    "max_bps": 300.21
+   },
+   "high": {
+    "exact": 0.1677,
+    "within_1bp": 0.6766,
+    "within_5bp": 0.8323,
+    "median_bps": 0.562,
+    "p99_bps": 90.4,
+    "max_bps": 259.2
+   },
+   "low": {
+    "exact": 0.1632,
+    "within_1bp": 0.6332,
+    "within_5bp": 0.7964,
+    "median_bps": 0.595,
+    "p99_bps": 75.14,
+    "max_bps": 244.47
+   },
+   "close": {
+    "exact": 0.0704,
+    "within_1bp": 0.3473,
+    "within_5bp": 0.7365,
+    "median_bps": 2.164,
+    "p99_bps": 32.72,
+    "max_bps": 91.54
+   },
+   "volume_ratio": {
+    "median": 1.3400903711037255,
+    "p10": 1.1117280307501864,
+    "p90": 1.6114179771453183
+   },
+   "missing_sample": [],
+   "extra_sample": []
+  },
+  "vs_regular_session_from_minutes": {
+   "n_lse": 668,
+   "n_ref": 668,
+   "n_common": 668,
+   "missing_in_lse": 0,
+   "extra_in_lse": 0,
+   "expected_n": 668,
+   "open": {
+    "exact": 0.003,
+    "within_1bp": 0.012,
+    "within_5bp": 0.0704,
+    "median_bps": 38.435,
+    "p99_bps": 277.93,
+    "max_bps": 432.14
+   },
+   "high": {
+    "exact": 0.1302,
+    "within_1bp": 0.5359,
+    "within_5bp": 0.6302,
+    "median_bps": 0.867,
+    "p99_bps": 260.44,
+    "max_bps": 764.09
+   },
+   "low": {
+    "exact": 0.1123,
+    "within_1bp": 0.4461,
+    "within_5bp": 0.5314,
+    "median_bps": 2.425,
+    "p99_bps": 240.17,
+    "max_bps": 744.26
+   },
+   "close": {
+    "exact": 0.006,
+    "within_1bp": 0.0404,
+    "within_5bp": 0.1901,
+    "median_bps": 15.523,
+    "p99_bps": 297.39,
+    "max_bps": 709.16
+   },
+   "volume_ratio": {
+    "median": 2.3963514340981042,
+    "p10": 1.984549428358699,
+    "p90": 2.9061525952808753
+   },
+   "missing_sample": [],
+   "extra_sample": []
+  },
+  "lake_databento_1d_is": {
+   "close_equals_last_minute_of_day": 1.0,
+   "open_equals_first_minute_of_day": 1.0,
+   "close_equals_1600_cross_minute": 0.006
+  },
+  "close_vs_last_minute_of_day": {
+   "n_lse": 668,
+   "n_ref": 668,
+   "n_common": 668,
+   "missing_in_lse": 0,
+   "extra_in_lse": 0,
+   "expected_n": 668,
+   "close": {
+    "exact": 0.0704,
+    "within_1bp": 0.3473,
+    "within_5bp": 0.7365,
+    "median_bps": 2.164,
+    "p99_bps": 32.72,
+    "max_bps": 91.54
+   },
+   "missing_sample": [],
+   "extra_sample": []
+  },
+  "close_vs_1600_cross_minute": {
+   "n_lse": 668,
+   "n_ref": 665,
+   "n_common": 665,
+   "missing_in_lse": 0,
+   "extra_in_lse": 3,
+   "expected_n": 665,
+   "close": {
+    "exact": 0.006,
+    "within_1bp": 0.0466,
+    "within_5bp": 0.1925,
+    "median_bps": 15.272,
+    "p99_bps": 298.34,
+    "max_bps": 710.4
+   },
+   "missing_sample": [],
+   "extra_sample": [
+    "2024-11-29 00:00:00+00:00",
+    "2024-12-24 00:00:00+00:00",
+    "2025-12-24 00:00:00+00:00"
+   ]
+  }
+ },
+ "F": {
+  "chain_IBIT": {
+   "contracts": 2609,
+   "greeks_as_of": "2026-10-30 20:14:21.601625279",
+   "underlying_price": 44.18,
+   "underlying_at": "2026-10-31 04:57:41.708528000",
+   "rows_fetched": 2609,
+   "columns": [
+    "contract_type",
+    "delta",
+    "dte",
+    "expiry",
+    "gamma",
+    "greeks_at",
+    "greeks_underlying_price",
+    "iv",
+    "last_price",
+    "last_trade_at",
+    "pair_id",
+    "premium_today",
+    "strike",
+    "symbol",
+    "theta",
+    "ticker",
+    "underlying",
+    "vega",
+    "volume_today"
+   ],
+   "has_open_interest_column": false,
+   "with_iv": 1567,
+   "with_delta": 1567,
+   "with_last_price": 1681,
+   "expiries": 27,
+   "volume_today_total": 0.0,
+   "traded_in_last_7_days": 1681,
+   "newest_last_trade": "2026-10-30 20:14:59.186467863+00:00",
+   "iv_sample_nearest": [
+    {
+     "expiry": "2026-11-02",
+     "strike": 34.0,
+     "contract_type": "put",
+     "iv": 1.055615,
+     "delta": -0.006883842
+    },
+    {
+     "expiry": "2026-11-02",
+     "strike": 44.5,
+     "contract_type": "put",
+     "iv": 0.3566648,
+     "delta": -0.7333876
+    },
+    {
+     "expiry": "2026-11-02",
+     "strike": 45.0,
+     "contract_type": "call",
+     "iv": 0.34404972,
+     "delta": 0.13295159
+    },
+    {
+     "expiry": "2026-11-02",
+     "strike": 45.0,
+     "contract_type": "put",
+     "iv": 0.34701902,
+     "delta": -0.89287364
+    }
+   ]
+  },
+  "flow_IBIT": {
+   "from": "2026-10-25 00:00:00",
+   "limit": 1000,
+   "offset": 0,
+   "order": "desc",
+   "returned": 1000,
+   "to": "2026-11-02 00:00:00",
+   "underlying": "IBIT",
+   "rows_returned": 1000,
+   "columns": [
+    "contract_type",
+    "delta",
+    "dte",
+    "expiry",
+    "gamma",
+    "iv",
+    "pair_id",
+    "premium",
+    "price",
+    "size",
+    "strike",
+    "symbol",
+    "theta",
+    "ticker",
+    "ts",
+    "underlying",
+    "underlying_price",
+    "vega",
+    "venue"
+   ],
+   "premium_total": 867448.0,
+   "size_total": 9314.0,
+   "first_print": "2026-10-30 19:59:24.086268590+00:00",
+   "last_print": "2026-10-30 20:14:59.186467863+00:00"
+  },
+  "chain_ETHA": {
+   "contracts": 1712,
+   "greeks_as_of": "2026-10-30 19:55:16.361695083",
+   "underlying_price": 50.56,
+   "underlying_at": "2026-10-31 04:59:50.005998000",
+   "rows_fetched": 1712,
+   "columns": [
+    "contract_type",
+    "delta",
+    "dte",
+    "expiry",
+    "gamma",
+    "greeks_at",
+    "greeks_underlying_price",
+    "iv",
+    "last_price",
+    "last_trade_at",
+    "pair_id",
+    "premium_today",
+    "strike",
+    "symbol",
+    "theta",
+    "ticker",
+    "underlying",
+    "vega",
+    "volume_today"
+   ],
+   "has_open_interest_column": false,
+   "with_iv": 472,
+   "with_delta": 472,
+   "with_last_price": 568,
+   "expiries": 14,
+   "volume_today_total": 0.0,
+   "traded_in_last_7_days": 568,
+   "newest_last_trade": "2026-10-30 19:59:59.574304764+00:00",
+   "iv_sample_nearest": [
+    {
+     "expiry": "2026-11-06",
+     "strike": 44.5,
+     "contract_type": "put",
+     "iv": 0.7823185,
+     "delta": -0.11136204
+    },
+    {
+     "expiry": "2026-11-06",
+     "strike": 53.5,
+     "contract_type": "call",
+     "iv": 0.55425024,
+     "delta": 0.23358943
+    },
+    {
+     "expiry": "2026-11-06",
+     "strike": 53.5,
+     "contract_type": "put",
+     "iv": 0.5667019,
+     "delta": -0.7613288
+    },
+    {
+     "expiry": "2026-11-06",
+     "strike": 54.0,
+     "contract_type": "call",
+     "iv": 0.5652629,
+     "delta": 0.20511386
+    }
+   ]
+  },
+  "flow_ETHA": {
+   "from": "2026-10-25 00:00:00",
+   "limit": 1000,
+   "offset": 0,
+   "order": "desc",
+   "returned": 1000,
+   "to": "2026-11-02 00:00:00",
+   "underlying": "ETHA",
+   "rows_returned": 1000,
+   "columns": [
+    "contract_type",
+    "delta",
+    "dte",
+    "expiry",
+    "gamma",
+    "iv",
+    "pair_id",
+    "premium",
+    "price",
+    "size",
+    "strike",
+    "symbol",
+    "theta",
+    "ticker",
+    "ts",
+    "underlying",
+    "underlying_price",
+    "vega",
+    "venue"
+   ],
+   "premium_total": 1159262.0,
+   "size_total": 6830.0,
+   "first_print": "2026-10-30 19:05:40.676356227+00:00",
+   "last_print": "2026-10-30 19:59:59.574304764+00:00"
+  }
+ },
+ "G": {
+  "datasets": [
+   {
+    "dataset": "sovereign_yields",
+    "category": "research",
+    "rows": 11215298,
+    "series": 88,
+    "first": "2010-01-01",
+    "last": "2026-10-26",
+    "columns": [
+     "symbol",
+     "bucket",
+     "date",
+     "field",
+     "value"
+    ],
+    "time_column": "date",
+    "as_of": "2026-10-26T22:30:01Z"
+   },
+   {
+    "dataset": "corporate_bonds",
+    "category": "research",
+    "rows": 3349210,
+    "series": 192,
+    "first": "2020-01-01",
+    "last": "2026-10-26",
+    "columns": [
+     "symbol",
+     "bucket",
+     "date",
+     "field",
+     "value"
+    ],
+    "time_column": "date",
+    "as_of": "2026-10-26T22:30:01Z"
+   },
+   {
+    "dataset": "credit_indices",
+    "category": "research",
+    "rows": 5294342,
+    "series": 79,
+    "first": "2010-01-04",
+    "last": "2026-10-23",
+    "columns": [
+     "symbol",
+     "bucket",
+     "date",
+     "field",
+     "value"
+    ],
+    "time_column": "date",
+    "as_of": "2026-10-26T22:30:01Z"
+   },
+   {
+    "dataset": "bond_futures",
+    "category": "research",
+    "rows": 145987,
+    "series": 2,
+    "first": "2010-01-04",
+    "last": "2026-10-26",
+    "columns": [
+     "symbol",
+     "bucket",
+     "date",
+     "field",
+     "value"
+    ],
+    "time_column": "date",
+    "as_of": "2026-10-26T22:30:01Z"
+   },
+   {
+    "dataset": "fx_derivatives",
+    "category": "research",
+    "rows": 2265970,
+    "series": 63,
+    "first": "2015-01-01",
+    "last": "2026-10-26",
+    "columns": [
+     "symbol",
+     "bucket",
+     "date",
+     "field",
+     "value"
+    ],
+    "time_column": "date",
+    "as_of": "2026-10-26T22:30:01Z"
+   },
+   {
+    "dataset": "bond_yields",
+    "category": "reference",
+    "rows": 716820,
+    "series": 202,
+    "first": "1990-01-01",
+    "last": "2026-09-10",
+    "columns": [
+     "id",
+     "symbol",
+     "country_iso2",
+     "country_name",
+     "maturity",
+     "maturity_days",
+     "currency",
+     "date",
+     "open",
+     "high",
+     "low",
+     "close",
+     "fetched_at"
+    ],
+    "time_column": "date",
+    "as_of": "2026-10-14T18:16:57Z"
+   },
+   {
+    "dataset": "bond_yields_intraday",
+    "category": "reference",
+    "rows": 40488,
+    "series": 167,
+    "first": "2025-07-07 00:00:00",
+    "last": "2026-07-03 20:58:00",
+    "columns": [
+     "symbol",
+     "country_iso2",
+     "country_name",
+     "maturity",
+     "maturity_days",
+     "currency",
+     "ts",
+     "close"
+    ],
+    "time_column": "ts",
+    "as_of": "2026-10-14T18:20:02Z"
+   },
+   {
+    "dataset": "company_profiles",
+    "category": "reference",
+    "rows": 8304,
+    "series": 8304,
+    "first": "2026-04-08 11:37:43",
+    "last": "2026-10-13 05:08:52",
+    "columns": [
+     "id",
+     "symbol",
+     "company_name",
+     "exchange",
+     "exchange_full_name",
+     "currency",
+     "country",
+     "sector",
+     "industry",
+     "ceo",
+     "description",
+     "website",
+     "phone",
+     "full_time_employees",
+     "address",
+     "city",
+     "state",
+     "zip",
+     "cik",
+     "isin",
+     "cusip",
+     "price",
+     "market_cap",
+     "beta",
+     "last_dividend",
+     "price_range",
+     "volume",
+     "average_volume",
+     "is_etf",
+     "is_adr",
+     "is_fund",
+     "is_actively_trading",
+     "ipo_date",
+     "image_url_light",
+     "created_at",
+     "updated_at",
+     "image_url_dark"
+    ],
+    "time_column": "updated_at",
+    "as_of": "2026-10-14T18:08:39Z"
+   },
+   {
+    "dataset": "cot",
+    "category": "reference",
+    "rows": 34548,
+    "series": 65,
+    "first": "2015-01-06",
+    "last": "2026-10-06",
+    "columns": [
+     "id",
+     "symbol",
+     "date",
+     "name",
+     "sector",
+     "open_interest",
+     "noncomm_long",
+     "noncomm_short",
+     "noncomm_spread",
+     "comm_long",
+     "comm_short",
+     "nonrept_long",
+     "nonrept_short",
+     "change_open_interest",
+     "change_noncomm_long",
+     "change_noncomm_short",
+     "change_comm_long",
+     "change_comm_short",
+     "pct_noncomm_long",
+     "pct_noncomm_short",
+     "pct_comm_long",
+     "pct_comm_short",
+     "created_at",
+     "lse_symbol",
+     "candle_name",
+     "release_date"
+    ],
+    "time_column": "date",
+    "as_of": "2026-10-14T18:17:07Z"
+   },
+   {
+    "dataset": "dividends",
+    "category": "reference",
+    "rows": 1192741,
+    "series": 53570,
+    "first": "1962-02-06",
+    "last": "2029-09-14",
+    "columns": [
+     "id",
+     "symbol",
+     "effective_date",
+     "declaration_date",
+     "record_date",
+     "payment_date",
+     "dividend_amount",
+     "currency",
+     "dividend_type",
+     "frequency",
+     "created_at"
+    ],
+    "time_column": "effective_date",
+    "as_of": "2026-11-01T08:17:02Z"
+   },
+   {
+    "dataset": "earnings_calendar",
+    "category": "reference",
+    "rows": 681446,
+    "series": 12886,
+    "first": "1985-01-31",
+    "last": "2027-11-30",
+    "columns": [
+     "id",
+     "symbol",
+     "date",
+     "eps_estimated",
+     "eps_actual",
+     "revenue_estimated",
+     "revenue_actual",
+     "last_updated",
+     "created_at",
+     "updated_at"
+    ],
+    "time_column": "date",
+    "as_of": "2026-11-01T05:36:32Z"
+   },
+   {
+    "dataset": "economic_calendar",
+    "category": "reference",
+    "rows": 148742,
+    "series": 26656,
+    "first": "2015-01-01",
+    "last": "2027-01-27",
+    "columns": [
+     "id",
+     "date",
+     "time",
+     "datetime",
+     "region_code",
+     "event",
+     "period_hint",
+     "actual",
+     "previous",
+     "consensus",
+     "forecast",
+     "actual_revised",
+     "previous_revised",
+     "consensus_revised",
+     "forecast_revised",
+     "created_at",
+     "updated_at"
+    ],
+    "time_column": "date",
+    "as_of": "2026-11-01T05:35:06Z"
+   },
+   {
+    "dataset": "financial_reports",
+    "category": "reference",
+    "rows": 5725039,
+    "series": 16147,
+    "first": "1984-12-31",
+    "last": "2026-12-31",
+    "columns": [
+     "id",
+     "symbol",
+     "report_type",
+     "date",
+     "fiscal_year",
+     "period",
+     "reported_currency",
+     "data",
+     "filing_date",
+     "accepted_date",
+     "cik",
+     "created_at",
+     "updated_at"
+    ],
+    "time_column": "date",
+    "as_of": "2026-10-26T05:36:28Z"
+   },
+   {
+    "dataset": "insider_trades",
+    "category": "reference",
+    "rows": 63622,
+    "series": 499,
+    "first": "2003-12-23",
+    "last": "2026-10-13",
+    "columns": [
+     "id",
+     "symbol",
+     "trade_type",
+     "filing_date",
+     "transaction_date",
+     "transaction_type",
+     "acquisition_or_disposition",
+     "reporting_name",
+     "reporting_cik",
+     "company_cik",
+     "type_of_owner",
+     "securities_transacted",
+     "securities_owned",
+     "price",
+     "security_name",
+     "form_type",
+     "direct_or_indirect",
+     "url",
+     "first_name",
+     "last_name",
+     "office",
+     "district",
+     "owner",
+     "asset_description",
+     "asset_type",
+     "amount",
+     "capital_gains_over_200",
+     "comment",
+     "link",
+     "created_at"
+    ],
+    "time_column": "filing_date",
+    "as_of": "2026-10-14T18:18:43Z"
+   },
+   {
+    "dataset": "stock_fundamentals",
+    "category": "reference",
+    "rows": 8304,
+    "series": 8304,
+    "first": "2026-04-08 11:37:43",
+    "last": "2026-10-13 05:08:52",
+    "columns": [
+     "symbol",
+     "name",
+     "exchange",
+     "currency",
+     "sector",
+     "industry",
+     "country",
+     "ipo_date",
+     "current_price",
+     "market_cap",
+     "beta",
+     "logo_url",
+     "website",
+     "description",
+     "pe_ratio",
+     "week_52_high",
+     "week_52_low",
+     "dividend_yield",
+     "revenue_ttm",
+     "profit_margin",
+     "updated_at"
+    ],
+    "time_column": "updated_at",
+    "as_of": "2026-10-14T18:19:40Z"
+   },
+   {
+    "dataset": "stock_splits",
+    "category": "reference",
+    "rows": 51696,
+    "series": 27119,
+    "first": "1930-05-25",
+    "last": "2026-12-02",
+    "columns": [
+     "id",
+     "symbol",
+     "effective_date",
+     "split_from",
+     "split_to",
+     "created_at"
+    ],
+    "time_column": "effective_date",
+    "as_of": "2026-11-01T08:24:02Z"
+   },
+   {
+    "dataset": "currency_index",
+    "category": "research",
+    "rows": 1235029,
+    "series": 1,
+    "first": "2026-06-30 21:23:16.000000",
+    "last": "2026-10-07 16:45:06.000000",
+    "columns": [
+     "ts",
+     "symbol",
+     "price",
+     "volume",
+     "ask",
+     "bid"
+    ],
+    "time_column": "ts",
+    "as_of": "2026-10-14T18:20:11Z"
+   },
+   {
+    "dataset": "volatility",
+    "category": "research",
+    "rows": 306363,
+    "series": 1,
+    "first": "2026-07-01 13:15:16.000000",
+    "last": "2026-10-07 16:45:01.000000",
+    "columns": [
+     "ts",
+     "symbol",
+     "price",
+     "volume",
+     "ask",
+     "bid"
+    ],
+    "time_column": "ts",
+    "as_of": "2026-10-14T18:20:22Z"
+   },
+   {
+    "dataset": "interest_rates",
+    "category": "research",
+    "rows": 4162732,
+    "series": 4,
+    "first": "2026-06-30 22:00:55.082754",
+    "last": "2026-10-14 18:20:20.358307",
+    "columns": [
+     "ts",
+     "symbol",
+     "price",
+     "volume",
+     "ask",
+     "bid"
+    ],
+    "time_column": "ts",
+    "as_of": "2026-10-14T18:20:33Z"
+   }
+  ],
+  "insider_dataset": "insider_trades",
+  "insider_NVDA": {
+   "series_symbol": "NVDA",
+   "series_seen": [
+    "NVDA"
+   ],
+   "rows": 153,
+   "columns": [
+    "id",
+    "symbol",
+    "trade_type",
+    "filing_date",
+    "transaction_date",
+    "transaction_type",
+    "acquisition_or_disposition",
+    "reporting_name",
+    "reporting_cik",
+    "company_cik",
+    "type_of_owner",
+    "securities_transacted",
+    "securities_owned",
+    "price",
+    "security_name",
+    "form_type",
+    "direct_or_indirect",
+    "url",
+    "first_name",
+    "last_name",
+    "office",
+    "district",
+    "owner",
+    "asset_description",
+    "asset_type",
+    "amount",
+    "capital_gains_over_200",
+    "comment",
+    "link",
+    "created_at"
+   ],
+   "exact_duplicate_rows": 0,
+   "duplicate_on_key_columns": 7,
+   "key_columns_used": [
+    "trade_type",
+    "filing_date",
+    "transaction_date",
+    "transaction_type",
+    "reporting_name",
+    "type_of_owner",
+    "price",
+    "security_name",
+    "form_type",
+    "first_name",
+    "last_name",
+    "owner",
+    "asset_type"
+   ],
+   "filing_date_range": [
+    "2026-01-06",
+    "2026-10-13"
+   ],
+   "transaction_date_range": [
+    "2026-01-02",
+    "2026-10-07"
+   ]
+  },
+  "insider_AAPL": {
+   "series_symbol": "AAPL",
+   "series_seen": [
+    "AAPL"
+   ],
+   "rows": 116,
+   "columns": [
+    "id",
+    "symbol",
+    "trade_type",
+    "filing_date",
+    "transaction_date",
+    "transaction_type",
+    "acquisition_or_disposition",
+    "reporting_name",
+    "reporting_cik",
+    "company_cik",
+    "type_of_owner",
+    "securities_transacted",
+    "securities_owned",
+    "price",
+    "security_name",
+    "form_type",
+    "direct_or_indirect",
+    "url",
+    "first_name",
+    "last_name",
+    "office",
+    "district",
+    "owner",
+    "asset_description",
+    "asset_type",
+    "amount",
+    "capital_gains_over_200",
+    "comment",
+    "link",
+    "created_at"
+   ],
+   "exact_duplicate_rows": 0,
+   "duplicate_on_key_columns": 9,
+   "key_columns_used": [
+    "trade_type",
+    "filing_date",
+    "transaction_date",
+    "transaction_type",
+    "reporting_name",
+    "type_of_owner",
+    "price",
+    "security_name",
+    "form_type",
+    "first_name",
+    "last_name",
+    "owner",
+    "asset_type"
+   ],
+   "filing_date_range": [
+    "2026-01-02",
+    "2026-10-08"
+   ],
+   "transaction_date_range": [
+    "2025-12-16",
+    "2026-10-06"
+   ]
+  },
+  "factors_AAPL": {
+   "keys": [
+    "data_pair_id",
+    "dividends",
+    "market",
+    "pair_id",
+    "splits",
+    "symbol"
+   ],
+   "splits": [
+    {
+     "date": "1987-06-16",
+     "price_factor": 0.5,
+     "type": "split",
+     "volume_factor": 2.0
+    },
+    {
+     "date": "2000-06-21",
+     "price_factor": 0.5,
+     "type": "split",
+     "volume_factor": 2.0
+    },
+    {
+     "date": "2005-02-28",
+     "price_factor": 0.5,
+     "type": "split",
+     "volume_factor": 2.0
+    },
+    {
+     "date": "2014-06-09",
+     "price_factor": 0.14285714285714285,
+     "type": "split",
+     "volume_factor": 7.0
+    },
+    {
+     "date": "2020-08-31",
+     "price_factor": 0.25,
+     "type": "split",
+     "volume_factor": 4.0
+    }
+   ],
+   "n_dividends": null,
+   "dividend_sample": null
+  }
+ },
+ "H": {
+  "rows": 0,
+  "estimated_bytes": 0,
+  "message": "Omega has no stored data for this selection",
+  "mode": "stream",
+  "basis": "stored orders of ES in the months 202610 to 202610, as counted daily",
+  "download": {
+   "code": "plan-required",
+   "message": "This feed requires a subscription",
+   "status": 403
+  },
+  "required_plan": {
+   "market": "cme",
+   "tier": "lite",
+   "name": "CME Group Lite"
+  }
+ }
+}

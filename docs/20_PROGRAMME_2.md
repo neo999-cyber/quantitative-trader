@@ -573,6 +573,16 @@ metrics start 2021-12, so the sample cannot grow backwards) or on a
 second venue's OI (Bybit's is mirrored for funding only) — a new
 pre-registration, not a re-run.
 
+**1 November 2026 — a lake observation from the London Strategic Edge quality pass (`docs/research/11` §7). No
+verdict moves.** Comparing that site's AAPL daily bar against the lake's showed what the lake's own Databento daily bars
+are: under `raw/databento/xnas/klines/interval=1d/` the open equals the first 04:00 ET minute's open and the close the
+last 19:59 ET minute's close in 100% of days (2024-01-01 → 2026-08-31), and the close equals the 16:00 closing-cross
+print in 0.6% — the extended day, not the session. `qr/data/auction.py` copies those into `session_open` and
+`session_close`, so the equity families of this programme read extended-day marks as the session open and close. All
+of them failed, and a wrong mark does not turn a fail into a pass, so nothing is reopened; a 09:30/16:00 mark built
+from the minute bars (the lake holds them, `interval=1m`) is the build note for any future equity family, written
+before its registration. Found uncounted, by a data check; no run.
+
 **27 October 2026, evening Dubai — an engine change from Programme 4's CME run (`docs/35` §8): gate 1's ceiling
 reads the forecast, not the income. No verdict moves.** Symptom: the always-in carry holding over 2020–2024
 (`p4_cot_crowding_v1_always_in`, seq 1028) read gross Sharpe 9.343 at lags 0, 1 and 2 — spike z 0.0, funding 101%

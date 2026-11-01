@@ -152,3 +152,75 @@ and whose own bug list records whole-session delivery failures. Two of its datas
 other free source reviewed here provides: **US options chains and flow** (and, if IBIT and ETHA are there, a
 second bitcoin vol surface and a dealer-hedging mechanism to test) and **US equities at one minute with Form 4
 filings**. Worth the free key and the QA pass in §5. Not worth changing any live thread for.
+
+## 7. The stage-0 quality pass — run 1 November 2026
+
+The owner created the free key on 1 November and put it in `~/.qr/secrets.env` as `LSE_API_KEY`. `scripts/lse_qa.py`
+ran once, uncounted (a data check, not a backtest): 25 calls, about 80k rows, inside the free plan. Binance's eighteen
+daily 1m zips for 13–30 October were fetched with their SHA-256 checks and kept in the bucket's own layout under
+`~/qr/lake/mirror/binance/data/spot/daily/klines/BTCUSDT/1m/`; the raw LSE pulls are under
+`~/qr/lake/mirror/lse/qa_2026-11-01/`; the report is `reports/lse_qa/lse_qa_2026-11-01.md` (and `.json`). Nothing
+registered.
+
+**What the key opens.** Plan `free`: 60 calls a minute, 12.5 M rows a day, 2.5 M rows an export, 12.5 GiB a week,
+one download at a time. Nine included markets; the server flags every one of them `derived: true` except `us_options`.
+`nasdaq` (33,980 pairs) and `cme` (468,755) need the "lite" tier. Time zones: crypto, forex, commodities, indices and
+"futures" in UTC; US stocks and US options America/New_York.
+
+**Crypto, BTCUSDT.** Coverage complete at every resolution tried: 25,920 of 25,920 minutes (13–30 October), 744 of 744
+hours (August 2026, against the lake), 974 of 974 days (2024-01-01 → 2026-08-31, against the lake). Prices sit on
+Binance's: every field within 1 bp in 99.6–100% of bars, median 0.001 bps, worst 3.5 bps at one minute, and the daily
+open exact 92% of the time. But the bars are not Binance's bars. Trade counts never equal (LSE's run at 40% of
+Binance's, p10 0.33, p90 0.47, never above); volume, read as 1e-8 units, runs at 35% (never above); both correlate
+0.99 with Binance's — and yet the LSE high exceeds Binance's high in 33% of minutes and its low undercuts Binance's in
+30%, which a sample of Binance's own tape cannot do. So: a different tape — another venue, or a stream with its own bar
+boundaries — that prices like Binance. Usable as a price proxy at an hour or a day; its volumes and counts are not
+Binance's; the lake's bucket mirror stays the record and is both free and better.
+
+**US stocks, AAPL at one minute (August 2026, against Databento XNAS 1m in the lake).** The stamps are UTC (shifting
+them by ±4 or ±5 hours destroys the match). Minutes are present from 00:00 to 19:59 ET — 23,654 in the month against
+Databento's 18,008, which start at 04:00 on Nasdaq only — so the feed carries overnight prints. The regular session is
+complete: 8,190 minutes, 21 days × 390, none missing. Closes agree with Nasdaq's last print within 1 bp in 92% of
+minutes (median 0.32 bps, p99 6 bps, worst 43 bps); highs and lows within 1 bp in 61–63% (a consolidated tape prints
+outside Nasdaq's range); volume 2.4× Nasdaq's (p10 1.6, p90 3.7), consistent with consolidated volume. Reading: a
+consolidated, split-adjusted minute tape, sound inside the session.
+
+**US stocks, AAPL daily (2024-01-01 → 2026-08-31).** Not session bars. The candle's stamp is the first print after
+00:00 ET (04:00–08:00 UTC); the open is an overnight print (median 38 bps from the 09:30 open; 14 bps from the 04:00
+pre-market first print); the close is a post-market print near 20:00 ET (median 2.2 bps from Nasdaq's 19:59 last
+print, 15 bps from the 16:00 closing cross, p99 3% and worst 7% on earnings nights). Any daily equity work on this
+source builds its session bars from the minutes, which §D shows is sound.
+
+**A finding about our own lake, found by the same comparison.** The Databento daily bars under
+`raw/databento/xnas/klines/interval=1d/` are the 04:00–19:59 ET extended day: the open equals the first 04:00 minute's
+open and the close the last 19:59 minute's close in 100% of days, and the close equals the 16:00 cross in 0.6%.
+`qr/data/auction.py` copies them into `session_open` and `session_close`, so Programme 2's equity families read
+extended-day marks as the session. Every one of those families failed, so no verdict moves; a 09:30/16:00 mark built
+from the minutes is a build note for any future equity family (`docs/20`, 1 November).
+
+**Options.** IBIT: 2,609 contracts over 27 expiries, IV and greeks on 1,567 (60%), a last price on 1,681, greeks as of
+30 October 20:14 UTC, the underlying stamped. ETHA: 1,712 over 14, IV on 472 (28%), a last price on 568. **No
+open-interest field anywhere in the chain** — the site's "OI" is not in the API. The flow tape is dense: one page of
+1,000 prints covered the last fifteen minutes of 30 October for IBIT ($867k premium) and the last 55 for ETHA
+($1.16 M), each print with IV, greeks and a venue. Usable for a stage-0 of an IBIT/ETHA surface against Deribit's at
+matching tenors, and as a dealer-flow tape; without OI the gamma-positioning mechanism cannot be built from it.
+
+**Reference.** 19 collections. `insider_trades`: 63,622 rows but **499 symbols** since 2003 — a curated subset, not
+Form 4 entire; NVDA 2026 153 rows and AAPL 116, no exact duplicates, 7–9 same-key rows that read as multi-lot filings
+(the 26-fold repetition on the rendered page is a display defect, not in the data); `filing_date` and
+`transaction_date` both present. `cot`: 65 series from 2015 with a `release_date` column — a cross-check for
+`qr/data/cot.py`. `financial_reports`: 16,147 symbols from 1984 with `filing_date` and `accepted_date` — point-in-time
+fundamentals, the dataset Programme 2 did not have at $0. `earnings_calendar`: 12,886 symbols, estimated and actual
+EPS and revenue from 1985. `dividends` 53,570 symbols, `stock_splits` 27,119. AAPL's five splits are right (1987,
+2000, 2005, 2014 7:1, 2020 4:1).
+
+**Paid.** One day of ES orders answers `plan-required` ("CME Group Lite") and "no stored data for this selection";
+the paid tiers cannot be judged from outside.
+
+**Verdict after the pass.** (1) Crypto: a within-1-bp price proxy, not a record; nothing to adopt. (2) US equities at
+one minute: a consolidated tape, session-complete, usable for prototyping and as a cross-check of the lake's
+Nasdaq-only bars once session bars are built from it; still derived and undocumented, so not a system of record. (3)
+Options: the one dataset with no counterpart in the lake — a stage-0 candidate for an IBIT/ETHA surface control, with
+the OI gap on the record. (4) Reference: `insider_trades` is too thin for the insider-purchase family's universe;
+`financial_reports` with `accepted_date` is the valuable one and would get its own QA before any use. Any family is a
+new counter on the owner's yes; nothing is registered.

@@ -11,11 +11,13 @@ protocol, the controls and the bars are P3-C's by reference (`docs/prereg/p3_for
 the two results read side by side. Programmes 1–4 are twenty-eight pre-registered rules and no pass; this one
 changes the model class, not the question.
 
-## 2. The counter — one registered
+## 2. The counter — one registered, one run, one fail
 
 | hypothesis | seq | status |
 |---|---|---|
-| `p5_forecastability_tsfm_v1` — three zero-shot TimesFM arms on P3-C's three targets | 1052 | **registered 2 November 2026** on the owner's "download and register it"; weights downloaded and pinned (note 1051); run script built on fixtures; **not run** — the run needs the owner's "run it" |
+| `p5_forecastability_tsfm_v1` — three zero-shot TimesFM arms on P3-C's three targets | 1052 | registered 2 November 2026 on the owner's "download and register it" (weights pinned and downloaded, note 1051); **ran once the same evening on the owner's "ok run it" — run seq 1053, note 1054 — and FAILED in-sample** (§5): nine of nine pairs below their bars, the covariate arm no better than the univariate one on any target, no `timesfm25` pair at its bar so no money test; holdout shut |
+
+**Programme 5: one of one run, one fail — closed unless a new input arrives.**
 
 The document is stamped in the hash chain (`qr trial verify` walks it and checks the file against its stamp);
 a change to it is an amendment file, never an edit.
@@ -74,27 +76,85 @@ a change to it is an amendment file, never an edit.
    the arms' checkpoint, revision, backend and licence in the summary and in the trial-log record; outputs
    `reports/p5/p5_<sample>_{summary.json,forecasts.parquet,report.md}`. Two tests on its seams. It reads the
    lake only when run.
+5. **Checkpointing** (commit `a64a3d7`), before the counted run: each walk-forward pass is saved under the
+   lake's `reports/p5/cache/` (27 files for a full run) and a rerun of the same command resumes from it, so a
+   sleeping laptop or a crash costs nothing already forecast; a heartbeat in the log; rehearsed end to end on
+   fixtures with stand-in arms, including the forced money-test path and the resume.
+6. **A false start** (19:47, nothing counted): the start-of-run print raised `AttributeError` on the
+   TimesFM-2.5 arm's `backend` attribute before any forecast, any GARCH fit or any cache write. The rehearsal's
+   stand-in arms all carried `backend`, which masked the real class's missing attribute. Fix (commit
+   `413736e`): the attribute on the class, the print tolerant of its absence, and the rehearsal turned into a
+   test that drives the script through the real arm classes on stand-in models
+   (`tests/qr_platform/test_p5_script.py`). The log is kept as `reports/p5/p5_insample_falsestart_2026-11-02.log`.
+7. **The run**, 19:49:50 → 23:32:32 local on the owner's "ok run it": §5.
+8. After the run: the heartbeat's "ms each" was wall-clock since the arm's wrapper was built divided by its
+   count — right for the first arm's first pair, misleading after (the log's later figures include the other
+   arms' time). It now times the calls themselves. Cosmetic; nothing scored reads it.
 
-## 5. What a result means
+## 5. The result — ran once, FAILED (2 November 2026, run seq 1053)
+
+**One counted run, in-sample 2023-01-01 → 2026-05-31, 1,227 test days, 33,111 forecasts in 3 h 43 min**
+(nine pairs × three passes × 1,227 days, less six on the permuted 7-day control; TimesFM-3 on MLX, TimesFM-2.5
+on PyTorch on the CPU; both checkpoints at the pinned commits). `qr trial verify` after: 1,055 records, 2,600
+trials, the documents match their stamps. Outputs, copied from the lake into the repo:
+`reports/p5/p5_insample_{summary.json,report.md,forecasts.parquet,run.log}`.
+
+| pair | score | permuted / extra-lag control | bar | P3-C's best on the target (run 938) |
+|---|---|---|---|---|
+| direction `timesfm3` | 49.4% vs base 49.2%, t 0.07; Brier skill −0.004 | 50.9% (t 0.80) / 49.9% (t 0.22) | > base at t ≥ 3 — **fail** | gbt 49.9%, t 0.39 |
+| direction `timesfm3_cov` | 50.9%, t 0.90; Brier skill −0.005 | 51.7% (t 1.33) / 48.0% (t −0.74) | **fail** | |
+| direction `timesfm25` | 47.8%, t −0.68; Brier skill −0.009 | 52.0% (t 1.44) / 51.7% (t 1.07) | **fail** | |
+| ret7 `timesfm3` | R² −0.012, DM t −1.27 | −0.005 (−0.87) / −0.011 (−1.15) | R² > 0 at DM t ≥ 3 — **fail** | chronos −0.012, t −0.92 |
+| ret7 `timesfm3_cov` | R² −0.040, DM t −2.61 | −0.028 (−3.37) / −0.042 (−2.76) | **fail** | |
+| ret7 `timesfm25` | R² −0.010, DM t −0.60 | +0.003 (0.25) / −0.014 (−0.89) | **fail** | |
+| logrv `timesfm3` | QLIKE 0.439 (DVOL 0.473, GARCH 0.525); DM t vs DVOL 0.79, vs GARCH 1.91 | 0.664 (−4.25) / 0.769 (−5.31) | beats DVOL at t ≥ 3 — **fail** | gbt 0.416, t 1.97 vs DVOL |
+| logrv `timesfm3_cov` | 0.479; vs DVOL −0.15, vs GARCH 1.04 | 0.651 (−4.12) / 0.798 (−5.42) | **fail** | |
+| logrv `timesfm25` | 0.448; vs DVOL 0.54, vs GARCH 1.61 | 0.668 (−4.20) / 0.777 (−5.62) | **fail** | |
+
+What it says:
+
+- **Direction and the 7-day return are at the base rate, as P3-C found.** Direction runs 47.8–50.9% against
+  49.2% at |t| ≤ 0.9, and on every direction pair the permuted-target control scores at least as high as the
+  real forecast — the memo's second falsifier, noise of the same size. The 7-day covariate arm is *worse* than a
+  zero forecast (DM t −2.6) and its permuted control worse still.
+- **Variance: beats GARCH, not DVOL — P3-C's finding verbatim.** All three arms beat GARCH at t 1.0–1.9 (below
+  the bar) and none beats the implied vol (t −0.15 to 0.79). The univariate TimesFM-3 (0.439) sits between
+  P3-C's GBT (0.416) and Chronos (0.477). The variance controls collapse (t −4 to −5.6), so the arms do read
+  real persistence; the option market already prices it.
+- **The one new claim — covariates help — is false on every target.** The covariate arm is worse on the 7-day
+  return (−0.040 against −0.012) and on variance (0.479 against 0.439), and 1.5 points better on direction
+  inside noise (t 0.9 against 0.07). The 43 inputs through the variate attention add noise, not signal.
+- **Money test: none ran.** No `timesfm25` pair reached its bar. Nothing goes forward, the sleeve is unchanged,
+  the holdout stays shut.
+- **Compute, measured on the run** (from the pair timestamps, not the heartbeat): `timesfm3` 30–70 ms a
+  forecast, `timesfm3_cov` 870–935 ms (the smoke test's 663 ms was optimistic by a third), `timesfm25`
+  240–290 ms. $0.
+
+What it closes: the question for this model class — a zero-shot foundation model, with or without the inputs,
+on these targets — as P3-C closed it for Chronos and the fitted models. A new input would have to be a
+different target or resolution with its own memo, or fine-tuning (permitted for 2.5 under Apache-2.0, research-only
+for 3.0), each a new counter against a public record that is already negative. The weights (2.1 GB,
+`~/qr/models/hf`) stay on disk until the owner says delete; nothing reads them.
+
+## 6. What a result would have meant
 
 A `timesfm25` pair above its bar **and** through the money test (net Sharpe ≥ 1.0, alpha t ≥ 2 against cash,
-DSR ≥ 0.90) goes to the owner as a candidate under the standing sleeve rule (`docs/35` §6: a first gate pass
-sends the $200 sleeve forward for a month at the stage-1 size). A TimesFM-3 pair above its bar is reported as a
-research finding with no money test; the memo states what acting on it would take (BigQuery's metered
-TimesFM, costed against the sleeve, a separate decision of the owner's). A fail closes the question for this
-model class as P3-C closed it for Chronos; the holdout stays shut.
+DSR ≥ 0.90) would have gone to the owner as a candidate under the standing sleeve rule (`docs/35` §6: a first gate
+pass sends the $200 sleeve forward for a month at the stage-1 size). A TimesFM-3 pair above its bar would have been
+reported as a research finding with no money test; the memo states what acting on it would take (BigQuery's
+metered TimesFM, costed against the sleeve, a separate decision of the owner's). The result was the third case:
+a fail closes the question for this model class as P3-C closed it for Chronos; the holdout stays shut.
 
-## 6. What runs on the owner's word
+## 7. What ran on the owner's word
 
-Once, in-sample:
+Once, in-sample, 2 November 2026 (run seq 1053, `variants = 9`):
 
     QR_ROOT=~/qr/lake .venv/bin/python scripts/p5_tsfm_forecast.py
 
-One trial-log record, `variants = 9`; the holdout (`--holdout`) opens once and only after an in-sample pass.
-Compute: about 11,200 primary forecasts (nine pairs × about 1,247 test days) and twice that again for the two
-controls — about three hours on the laptop at the measured speeds, two of them the covariate arm.
+Nothing further runs. The holdout (`--holdout`) would have opened once and only after an in-sample pass; it
+did not.
 
-## 7. The rules, unchanged
+## 8. The rules, unchanged
 
 Nothing runs, is registered or spends without the owner's yes; the owner moves money, never the code; Claude
 never places, closes or starts live orders and never handles key values; every engine run is counted in the

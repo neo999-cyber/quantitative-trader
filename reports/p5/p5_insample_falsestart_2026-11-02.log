@@ -1,0 +1,16 @@
+/Users/anoop/quantitative-trader/.venv/lib/python3.14/site-packages/pandas/core/arraylike.py:402: RuntimeWarning: divide by zero encountered in log
+  result = getattr(ufunc, method)(*inputs, **kwargs)
+/Users/anoop/quantitative-trader/.venv/lib/python3.14/site-packages/pandas/core/arraylike.py:402: RuntimeWarning: divide by zero encountered in log
+  result = getattr(ufunc, method)(*inputs, **kwargs)
+/Users/anoop/quantitative-trader/.venv/lib/python3.14/site-packages/pandas/core/arraylike.py:402: RuntimeWarning: divide by zero encountered in log
+  result = getattr(ufunc, method)(*inputs, **kwargs)
+Traceback (most recent call last):
+  File "/Users/anoop/quantitative-trader/scripts/p5_tsfm_forecast.py", line 241, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "/Users/anoop/quantitative-trader/scripts/p5_tsfm_forecast.py", line 145, in main
+    print(f"{HYP} {tag} {t0.date()} → {t1.date()} arms={models} backends={[arms[m].backend for m in models]}  [{time.strftime('%H:%M:%S')}]", flush=True)
+                                                                           ^^^^^^^^^^^^^^^
+  File "/Users/anoop/quantitative-trader/scripts/p5_tsfm_forecast.py", line 63, in __getattr__
+    return getattr(self._arm, k)
+AttributeError: 'TimesFM25Arm' object has no attribute 'backend'

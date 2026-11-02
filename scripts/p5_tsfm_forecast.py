@@ -54,19 +54,28 @@ def build_arms(names, backend: str = "auto") -> dict:
 
 
 class Counted:
-    """An arm with a heartbeat: counts its forecasts and prints the running speed every `every` calls."""
+    """An arm with a heartbeat: counts its forecasts and, every `every` calls, prints the mean time spent inside them.
+
+    The time is measured inside the calls, not since the wrapper was built: the counted run of 2 November 2026
+    printed wall-clock-over-count, which was right for the first arm's first pair and misleading after (it
+    included the other arms' time). Cosmetic — nothing scored reads it.
+    """
 
     def __init__(self, arm, name: str, every: int = 1000):
-        self._arm, self.name, self.every, self.n, self.t0 = arm, name, every, 0, time.time()
+        self._arm, self.name, self.every, self.n, self.spent = arm, name, every, 0, 0.0
 
     def __getattr__(self, k):
         return getattr(self._arm, k)
 
     def forecast(self, *args, **kw):
-        self.n += 1
-        if self.n % self.every == 0:
-            print(f"  … {self.name}: {self.n} forecasts, {(time.time() - self.t0) / self.n * 1000:.0f} ms each  [{time.strftime('%H:%M:%S')}]", flush=True)
-        return self._arm.forecast(*args, **kw)
+        t = time.perf_counter()
+        try:
+            return self._arm.forecast(*args, **kw)
+        finally:
+            self.spent += time.perf_counter() - t
+            self.n += 1
+            if self.n % self.every == 0:
+                print(f"  … {self.name}: {self.n} forecasts, {self.spent / self.n * 1000:.0f} ms each in the model  [{time.strftime('%H:%M:%S')}]", flush=True)
 
 
 def arm_record(arm) -> dict:

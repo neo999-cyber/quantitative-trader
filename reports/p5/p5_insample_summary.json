@@ -1,0 +1,312 @@
+{
+ "hypothesis": "p5_forecastability_tsfm_v1",
+ "sample": "insample",
+ "window": [
+  "2023-01-01",
+  "2026-05-31"
+ ],
+ "models": [
+  "timesfm3",
+  "timesfm3_cov",
+  "timesfm25"
+ ],
+ "arms": {
+  "timesfm3": {
+   "checkpoint": "google/timesfm-3.0-pytorch",
+   "revision": "43046b85ec22d584a13f8098c2ed39c889e129c2",
+   "context": 1024,
+   "backend": "mlx",
+   "covariates": false,
+   "licence": "TimesFM Non-Commercial License v1.0: research and evaluation only; outputs may not be used in commercial decisions or any revenue-generating activity. Commercial use needs Google Cloud (BigQuery AI.FORECAST) or a licence from Google."
+  },
+  "timesfm3_cov": {
+   "checkpoint": "google/timesfm-3.0-pytorch",
+   "revision": "43046b85ec22d584a13f8098c2ed39c889e129c2",
+   "context": 1024,
+   "backend": "mlx",
+   "covariates": true,
+   "licence": "TimesFM Non-Commercial License v1.0: research and evaluation only; outputs may not be used in commercial decisions or any revenue-generating activity. Commercial use needs Google Cloud (BigQuery AI.FORECAST) or a licence from Google."
+  },
+  "timesfm25": {
+   "checkpoint": "google/timesfm-2.5-200m-pytorch",
+   "revision": "1d952420fba87f3c6dee4f240de0f1a0fbc790e3",
+   "context": 1024,
+   "backend": "torch",
+   "covariates": false,
+   "licence": "Apache-2.0"
+  }
+ },
+ "n_forecasts": 33111,
+ "elapsed_s": 13362.45054602623,
+ "results": {
+  "direction:timesfm3": {
+   "score": {
+    "n": 1227,
+    "accuracy": 0.4938875305623472,
+    "base_rate_accuracy": 0.49225753871230643,
+    "t_vs_base": 0.07135365866009255,
+    "brier_skill": -0.003553201472321854,
+    "t_brier": -1.170621268908119
+   },
+   "controls": {
+    "permuted": {
+     "n": 1227,
+     "accuracy": 0.508557457212714,
+     "base_rate_accuracy": 0.4906275468622657,
+     "t_vs_base": 0.8037036211395988,
+     "brier_skill": 0.004988804091687671,
+     "t_brier": 1.981726575862924
+    },
+    "extra_lag": {
+     "n": 1227,
+     "accuracy": 0.49877750611246946,
+     "base_rate_accuracy": 0.4938875305623472,
+     "t_vs_base": 0.2156436745550119,
+     "brier_skill": 0.00209430509157027,
+     "t_brier": 0.779942830710931
+    }
+   },
+   "money": {
+    "skipped": "research-only licence: a pass is a finding, not a trade"
+   }
+  },
+  "direction:timesfm3_cov": {
+   "score": {
+    "n": 1227,
+    "accuracy": 0.508557457212714,
+    "base_rate_accuracy": 0.49225753871230643,
+    "t_vs_base": 0.8969271122672672,
+    "brier_skill": -0.005494021571178065,
+    "t_brier": -1.0673081251090544
+   },
+   "controls": {
+    "permuted": {
+     "n": 1227,
+     "accuracy": 0.5167074164629177,
+     "base_rate_accuracy": 0.4906275468622657,
+     "t_vs_base": 1.3289543401227812,
+     "brier_skill": 0.0007232350491261919,
+     "t_brier": 0.14072069211266774
+    },
+    "extra_lag": {
+     "n": 1227,
+     "accuracy": 0.4800325998370008,
+     "base_rate_accuracy": 0.4938875305623472,
+     "t_vs_base": -0.7417209834428178,
+     "brier_skill": -0.01254841035280374,
+     "t_brier": -2.5502837344953733
+    }
+   },
+   "money": {
+    "skipped": "research-only licence: a pass is a finding, not a trade"
+   }
+  },
+  "direction:timesfm25": {
+   "score": {
+    "n": 1227,
+    "accuracy": 0.47758761206193967,
+    "base_rate_accuracy": 0.49225753871230643,
+    "t_vs_base": -0.6798427450915171,
+    "brier_skill": -0.008607434791055635,
+    "t_brier": -1.9126044316470994
+   },
+   "controls": {
+    "permuted": {
+     "n": 1227,
+     "accuracy": 0.5199674001629991,
+     "base_rate_accuracy": 0.4906275468622657,
+     "t_vs_base": 1.438652095235619,
+     "brier_skill": 0.005273587046366601,
+     "t_brier": 1.26690802985678
+    },
+    "extra_lag": {
+     "n": 1227,
+     "accuracy": 0.5167074164629177,
+     "base_rate_accuracy": 0.4938875305623472,
+     "t_vs_base": 1.0746182061116376,
+     "brier_skill": 0.001366765725059671,
+     "t_brier": 0.3175568914802061
+    }
+   },
+   "money": {
+    "skipped": "below its statistical bar"
+   }
+  },
+  "ret7:timesfm3": {
+   "score": {
+    "n": 1227,
+    "oos_r2": -0.012277425390693875,
+    "dm_t_vs_zero": -1.2728720894326884
+   },
+   "controls": {
+    "permuted": {
+     "n": 1221,
+     "oos_r2": -0.0051485587505089025,
+     "dm_t_vs_zero": -0.8713080970965402
+    },
+    "extra_lag": {
+     "n": 1227,
+     "oos_r2": -0.01108525998826071,
+     "dm_t_vs_zero": -1.152066881098111
+    }
+   },
+   "money": {
+    "skipped": "research-only licence: a pass is a finding, not a trade"
+   }
+  },
+  "ret7:timesfm3_cov": {
+   "score": {
+    "n": 1227,
+    "oos_r2": -0.04016216374669335,
+    "dm_t_vs_zero": -2.610801254543461
+   },
+   "controls": {
+    "permuted": {
+     "n": 1221,
+     "oos_r2": -0.027790662711919767,
+     "dm_t_vs_zero": -3.374033230564852
+    },
+    "extra_lag": {
+     "n": 1227,
+     "oos_r2": -0.04150826013162323,
+     "dm_t_vs_zero": -2.763495859355155
+    }
+   },
+   "money": {
+    "skipped": "research-only licence: a pass is a finding, not a trade"
+   }
+  },
+  "ret7:timesfm25": {
+   "score": {
+    "n": 1227,
+    "oos_r2": -0.009876629625262812,
+    "dm_t_vs_zero": -0.5989455809972178
+   },
+   "controls": {
+    "permuted": {
+     "n": 1221,
+     "oos_r2": 0.0025143391186659425,
+     "dm_t_vs_zero": 0.2530329932726215
+    },
+    "extra_lag": {
+     "n": 1227,
+     "oos_r2": -0.014393588380410938,
+     "dm_t_vs_zero": -0.8899711495946844
+    }
+   },
+   "money": {
+    "skipped": "below its statistical bar"
+   }
+  },
+  "logrv:timesfm3": {
+   "score": {
+    "n": 1227,
+    "qlike_model": 0.439178221549556,
+    "qlike_dvol": 0.47273146548464434,
+    "qlike_garch": 0.525018805032042,
+    "dm_t_vs_dvol": 0.7892583626169428,
+    "dm_t_vs_garch": 1.905515435436273
+   },
+   "controls": {
+    "permuted": {
+     "n": 1227,
+     "qlike_model": 0.6642564365061934,
+     "qlike_dvol": 0.47273146548464434,
+     "qlike_garch": 0.525018805032042,
+     "dm_t_vs_dvol": -4.247648976992117,
+     "dm_t_vs_garch": -2.774790085202236
+    },
+    "extra_lag": {
+     "n": 1227,
+     "qlike_model": 0.7691229076619416,
+     "qlike_dvol": 0.47485245478353494,
+     "qlike_garch": 0.5276661601831414,
+     "dm_t_vs_dvol": -5.305047291714186,
+     "dm_t_vs_garch": -4.1501050070974195
+    }
+   }
+  },
+  "logrv:timesfm3_cov": {
+   "score": {
+    "n": 1227,
+    "qlike_model": 0.47885776032980404,
+    "qlike_dvol": 0.47273146548464434,
+    "qlike_garch": 0.525018805032042,
+    "dm_t_vs_dvol": -0.1475973694169938,
+    "dm_t_vs_garch": 1.0368362670114417
+   },
+   "controls": {
+    "permuted": {
+     "n": 1227,
+     "qlike_model": 0.6508713264525021,
+     "qlike_dvol": 0.47273146548464434,
+     "qlike_garch": 0.525018805032042,
+     "dm_t_vs_dvol": -4.1170360559240065,
+     "dm_t_vs_garch": -2.602989896287632
+    },
+    "extra_lag": {
+     "n": 1227,
+     "qlike_model": 0.7979240324919786,
+     "qlike_dvol": 0.47485245478353494,
+     "qlike_garch": 0.5276661601831414,
+     "dm_t_vs_dvol": -5.416241750645339,
+     "dm_t_vs_garch": -4.334495375295092
+    }
+   }
+  },
+  "logrv:timesfm25": {
+   "score": {
+    "n": 1227,
+    "qlike_model": 0.4484471557074267,
+    "qlike_dvol": 0.47273146548464434,
+    "qlike_garch": 0.525018805032042,
+    "dm_t_vs_dvol": 0.540060874459103,
+    "dm_t_vs_garch": 1.6093783068591392
+   },
+   "controls": {
+    "permuted": {
+     "n": 1227,
+     "qlike_model": 0.6683969171422773,
+     "qlike_dvol": 0.47273146548464434,
+     "qlike_garch": 0.525018805032042,
+     "dm_t_vs_dvol": -4.201977597486095,
+     "dm_t_vs_garch": -2.7720631660327397
+    },
+    "extra_lag": {
+     "n": 1227,
+     "qlike_model": 0.7765602840579023,
+     "qlike_dvol": 0.47485245478353494,
+     "qlike_garch": 0.5276661601831414,
+     "dm_t_vs_dvol": -5.624109904543256,
+     "dm_t_vs_garch": -4.391254915039857
+    }
+   }
+  }
+ },
+ "passes": {
+  "direction:timesfm3": false,
+  "direction:timesfm3_cov": false,
+  "direction:timesfm25": false,
+  "ret7:timesfm3": false,
+  "ret7:timesfm3_cov": false,
+  "ret7:timesfm25": false,
+  "logrv:timesfm3": false,
+  "logrv:timesfm3_cov": false,
+  "logrv:timesfm25": false
+ },
+ "gates": {
+  "n_trials": 9,
+  "money_tested": []
+ },
+ "verdict": {
+  "statistical_passes": [],
+  "research_findings_no_money_test": [],
+  "money_passes": [],
+  "covariates_beat_univariate": {
+   "direction": false,
+   "ret7": false,
+   "logrv": false
+  },
+  "PASS": false
+ }
+}

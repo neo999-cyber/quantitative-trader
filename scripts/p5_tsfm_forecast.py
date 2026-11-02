@@ -53,6 +53,22 @@ def build_arms(names, backend: str = "auto") -> dict:
     return arms
 
 
+class Counted:
+    """An arm with a heartbeat: counts its forecasts and prints the running speed every `every` calls."""
+
+    def __init__(self, arm, name: str, every: int = 1000):
+        self._arm, self.name, self.every, self.n, self.t0 = arm, name, every, 0, time.time()
+
+    def __getattr__(self, k):
+        return getattr(self._arm, k)
+
+    def forecast(self, *args, **kw):
+        self.n += 1
+        if self.n % self.every == 0:
+            print(f"  … {self.name}: {self.n} forecasts, {(time.time() - self.t0) / self.n * 1000:.0f} ms each  [{time.strftime('%H:%M:%S')}]", flush=True)
+        return self._arm.forecast(*args, **kw)
+
+
 def arm_record(arm) -> dict:
     return {"checkpoint": arm.checkpoint, "revision": getattr(arm, "revision", None), "context": arm.context,
             "backend": getattr(arm, "backend", "torch"), "covariates": bool(getattr(arm, "uses_covariates", False)),
@@ -98,6 +114,7 @@ def main(argv=None) -> int:
     ap.add_argument("--models", default=",".join(fc.TSFM_MODELS), help="comma-separated subset of " + ",".join(fc.TSFM_MODELS))
     ap.add_argument("--backend", default="auto", choices=("auto", "mlx", "torch"))
     ap.add_argument("--no-log", action="store_true")
+    ap.add_argument("--no-resume", action="store_true", help="recompute every pass even if its checkpoint exists under reports/p5/cache")
     a = ap.parse_args(argv)
     models = [m for m in a.models.split(",") if m]
     for m in models:
@@ -110,7 +127,22 @@ def main(argv=None) -> int:
     X, Y = fc.features(df), fc.targets(df)
     t0, t1 = (fc.HOLDOUT if a.holdout else (fc.TEST_START, fc.IN_SAMPLE_END))
     tag = "holdout" if a.holdout else "insample"
-    arms = build_arms(models, backend=a.backend)
+    arms = {m: Counted(arm, m) for m, arm in build_arms(models, backend=a.backend).items()}
+    out = p.root / "reports" / "p5"
+    cache = out / "cache"
+    cache.mkdir(parents=True, exist_ok=True)
+
+    def checkpointed(key: str, compute) -> pd.DataFrame:
+        """Each walk-forward pass is saved as it completes, so a crash or a sleeping laptop costs nothing already forecast."""
+        path = cache / f"{tag}_{key}.parquet"
+        if path.exists() and not a.no_resume:
+            print(f"  (resumed {path.name})", flush=True)
+            return pd.read_parquet(path)
+        frame = compute()
+        frame.to_parquet(path)
+        return frame
+
+    print(f"{HYP} {tag} {t0.date()} → {t1.date()} arms={models} backends={[arms[m].backend for m in models]}  [{time.strftime('%H:%M:%S')}]", flush=True)
     rf = pd.Series(df["tbill"].to_numpy() / 100, index=df.index).ffill()
     panel = lake.load_panel(["BTCUSDT"], "1d", start="2020-09-01", market="futures/um")
     garch = fc.garch_forecasts(Y["ret1"], pd.date_range(t0, t1, freq="D", tz="UTC"))
@@ -120,7 +152,7 @@ def main(argv=None) -> int:
         for model in models:
             name = f"{target}:{model}"
             arm = arms[model]
-            f = fc.walk_forward(X, Y, target, model, t0, t1, arm=arm)
+            f = checkpointed(f"{target}_{model}_f", lambda: fc.walk_forward(X, Y, target, model, t0, t1, arm=arm))
             n_forecasts += len(f)
             if f.empty:
                 results[name] = {"error": "no forecasts"}
@@ -134,8 +166,8 @@ def main(argv=None) -> int:
             for _yr, g in Y.groupby(Y.index.year):
                 Yp.loc[g.index, target] = rng.permutation(g[target].to_numpy())
             # only the scored column is permuted; the history the arm sees (`ret1`, `logrv`) stays the real one, as in P3-C
-            fp = fc.walk_forward(X, Yp, target, model, t0, t1, arm=arm)
-            fl = fc.walk_forward(X, Y, target, model, t0, t1, arm=arm, lag_extra=1)
+            fp = checkpointed(f"{target}_{model}_fp", lambda: fc.walk_forward(X, Yp, target, model, t0, t1, arm=arm))
+            fl = checkpointed(f"{target}_{model}_fl", lambda: fc.walk_forward(X, Y, target, model, t0, t1, arm=arm, lag_extra=1))
             n_forecasts += len(fp) + len(fl)
             ctl = {}
             if len(fp):
@@ -188,8 +220,6 @@ def main(argv=None) -> int:
         if {"timesfm3", "timesfm3_cov"} <= set(models) else None
     verdict["PASS"] = bool(verdict["money_passes"])
     print("verdict:", json.dumps(verdict))
-    out = p.root / "reports" / "p5"
-    out.mkdir(parents=True, exist_ok=True)
     if forecasts:
         pd.concat(forecasts).to_parquet(out / f"p5_{tag}_forecasts.parquet")
     summary = {"hypothesis": HYP, "sample": tag, "window": [str(t0.date()), str(t1.date())], "models": models,

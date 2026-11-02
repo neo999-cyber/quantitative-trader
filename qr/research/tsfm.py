@@ -101,6 +101,8 @@ class TimesFM25Arm:
     """Zero-shot TimesFM-2.5 (Apache-2.0) on the target's own history, univariate, the median path."""
 
     uses_covariates = False
+    backend = "torch"          # the 2.5 code has no MLX port
+    licence = "Apache-2.0"
 
     def __init__(self, checkpoint: str = TIMESFM25_CHECKPOINT, context: int = DEFAULT_CONTEXT, model=None,
                  revision: str | None = TIMESFM25_REVISION):

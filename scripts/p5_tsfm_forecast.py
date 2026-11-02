@@ -142,7 +142,7 @@ def main(argv=None) -> int:
         frame.to_parquet(path)
         return frame
 
-    print(f"{HYP} {tag} {t0.date()} → {t1.date()} arms={models} backends={[arms[m].backend for m in models]}  [{time.strftime('%H:%M:%S')}]", flush=True)
+    print(f"{HYP} {tag} {t0.date()} → {t1.date()} arms={models} backends={[getattr(arms[m], 'backend', '?') for m in models]}  [{time.strftime('%H:%M:%S')}]", flush=True)
     rf = pd.Series(df["tbill"].to_numpy() / 100, index=df.index).ffill()
     panel = lake.load_panel(["BTCUSDT"], "1d", start="2020-09-01", market="futures/um")
     garch = fc.garch_forecasts(Y["ret1"], pd.date_range(t0, t1, freq="D", tz="UTC"))

@@ -21,6 +21,12 @@ SEED = 20261001
 PURGE_DAYS = 7
 TARGETS = ("direction", "ret7", "logrv")
 MODELS = ("ridge", "gbt", "chronos")
+# Zero-shot foundation-model arms added 2 November 2026 for a draft memo (`docs/prereg/p5_forecastability_tsfm_v1.md`,
+# not registered): TimesFM-3 on the target's own history, TimesFM-3 with the memo's inputs as past covariates, and
+# TimesFM-2.5 (the Apache-licensed arm). P3-C's `MODELS` and its code path are unchanged; these are reached only when a
+# caller asks for them by name and passes an arm. `qr.research.tsfm` holds the arms.
+TSFM_MODELS = ("timesfm3", "timesfm3_cov", "timesfm25")
+ZERO_SHOT = ("chronos",) + TSFM_MODELS
 IN_SAMPLE_START = pd.Timestamp("2021-03-24", tz="UTC")
 TEST_START = pd.Timestamp("2023-01-01", tz="UTC")
 IN_SAMPLE_END = pd.Timestamp("2026-05-31", tz="UTC")
@@ -155,8 +161,13 @@ class ChronosArm:
 
 
 def walk_forward(X: pd.DataFrame, y: pd.DataFrame, target: str, model: str, test_start=TEST_START, test_end=IN_SAMPLE_END,
-                 seed: int = SEED, chronos: "ChronosArm | None" = None, lag_extra: int = 0) -> pd.DataFrame:
-    """Out-of-sample forecasts for one (target, model) pair: columns `pred`, `y`, `base` (the no-information benchmark)."""
+                 seed: int = SEED, chronos: "ChronosArm | None" = None, lag_extra: int = 0, arm=None) -> pd.DataFrame:
+    """Out-of-sample forecasts for one (target, model) pair: columns `pred`, `y`, `base` (the no-information benchmark).
+
+    A zero-shot model (`chronos` or one of `TSFM_MODELS`) is supplied as `arm` (or, for Chronos, as `chronos`): an object
+    with `forecast(history, steps)`; one that sets `uses_covariates = True` receives the features known at the forecast
+    day as a third argument, shape (k, len(history)), aligned on the same days and ending on the same day as the history.
+    """
     kind = target
     Xs = X.shift(lag_extra) if lag_extra else X
     data = pd.concat([Xs, y[[target]]], axis=1).dropna()
@@ -171,22 +182,35 @@ def walk_forward(X: pd.DataFrame, y: pd.DataFrame, target: str, model: str, test
             continue
         ytr = train[target].to_numpy()
         base = float(ytr.mean()) if kind == "direction" else (0.0 if kind == "ret7" else float(np.mean(ytr[-21:])))
-        if model == "chronos":
-            if chronos is None:
-                raise RuntimeError("the chronos arm needs a ChronosArm")
+        if model in ZERO_SHOT:
+            arm = arm if arm is not None else chronos
+            if arm is None:
+                raise RuntimeError(f"the {model} arm needs a zero-shot arm object (see qr.research.tsfm)")
+            chronos = arm
             # the target's own history as known at the close of each test day: `ret1[t]` is TOMORROW's return (the
             # target), so the known return series is ret1 shifted by one; logrv likewise. Run 936 (1 Oct 2026) fed the
             # unshifted series and "forecast" direction at Sharpe 5 — caught by the memo's leak rule, fixed here.
             known_ret = y["ret1"].shift(1 + lag_extra)
             known_logrv = y["logrv"].shift(1 + lag_extra)
+            with_cov = bool(getattr(chronos, "uses_covariates", False))
+
+            def _call(series: pd.Series, t, steps: int) -> np.ndarray:
+                hist = series[series.index <= t].dropna()
+                if not with_cov:
+                    return np.asarray(chronos.forecast(hist.to_numpy(), steps))
+                # the covariates are the memo's features as known at the close of day t (already lagged by `lag_extra`),
+                # on the same days as the history and ending on the same day — never a row after t
+                joint = pd.concat([hist.rename("__y"), Xs[Xs.index <= t]], axis=1, sort=True).dropna()
+                return np.asarray(chronos.forecast(joint["__y"].to_numpy(), steps, joint.drop(columns="__y").to_numpy().T))
+
             preds = []
             for t in test.index:
                 if kind == "ret7":
-                    preds.append(float(chronos.forecast(known_ret[known_ret.index <= t].dropna().to_numpy(), 7).sum()))
+                    preds.append(float(_call(known_ret, t, 7).sum()))
                 elif kind == "direction":
-                    preds.append(float(chronos.forecast(known_ret[known_ret.index <= t].dropna().to_numpy(), 1)[0]))
+                    preds.append(float(_call(known_ret, t, 1)[0]))
                 else:
-                    preds.append(float(chronos.forecast(known_logrv[known_logrv.index <= t].dropna().to_numpy(), 1)[0]))
+                    preds.append(float(_call(known_logrv, t, 1)[0]))
             pred = np.array(preds)
             if kind == "direction":
                 pred = 1 / (1 + np.exp(-pred / max(np.std(y["ret1"].dropna()), 1e-6) * 2))   # a forecast return into a probability, monotone

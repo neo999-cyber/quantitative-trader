@@ -1,13 +1,16 @@
-# Pre-registration DRAFT: `p5_forecastability_tsfm_v1` — does a multivariate foundation model forecast what nothing else did?
+# Pre-registration: `p5_forecastability_tsfm_v1` — does a multivariate foundation model forecast what nothing else did?
 
 *Drafted 2 November 2026 on the owner's input ("a lot of investors seem to be
 using this; I want to use them here", the TimesFM-3 release of 31 August
-2026). **Not registered.** Registering it opens a Programme 5 and spends
-its first counter; that, the weight downloads (about 2.1 GB) and the run
-each need the owner's yes. What was looked at before drafting: the model
-cards, the licence text, the pretraining-corpus file list, the package
-source, and this project's own P3-C result. No target was computed and no
-model has touched any series of ours.*
+2026), and **registered the same day on the owner's yes** ("ok download and
+register it") to the weight downloads and to this text, through `qr trial
+prereg --file`, after the weights were downloaded, pinned and smoke-tested on
+a synthetic series and before any model saw a series of ours. Registering it
+opens Programme 5 and spends its first counter; the run needs the owner's
+separate "run it". What was looked at before drafting: the model cards, the
+licence text, the pretraining-corpus file list, the package source, and this
+project's own P3-C result. No target was computed and no model has touched
+any series of ours.*
 
 ## Why this is a new test and not a re-run
 
@@ -75,9 +78,27 @@ Three zero-shot arms, nine (target, model) pairs, no fitting anywhere:
 The forecast used is the median path; a direction forecast is the 1-step
 return passed through P3-C's monotone map; the 7-day return is the sum of
 the 7-step path; the variance target is forecast in log as in P3-C.
-`infer_is_positive` is off (returns are signed). Backend: MLX on the M2
-when importable, else PyTorch on the CPU; the backend is recorded in the
-run's summary and changes no number by design (same weights).
+`infer_is_positive` is off (returns are signed). Backend, as installed: the
+TimesFM-3 arms on MLX (Apple silicon), the TimesFM-2.5 arm on PyTorch on the
+CPU (its code has no MLX port); the backend is recorded in the run's summary
+and the arms' checkpoint, commit and licence with it. The same weights on
+either backend differ at floating-point rounding, not at the level of any
+bar.
+
+## Weights, pinned
+
+Both checkpoints are read at the Hugging Face commits the hub served on the
+morning of 2 November 2026, before the download, so every run uses the same
+bytes whatever the repos' `main` later points at (`TIMESFM3_REVISION` and
+`TIMESFM25_REVISION` in `qr/research/tsfm.py`; the arms pass `revision=` to
+the loaders). Safetensors only, no pickled weights; `timesfm` 3.0.2 with
+`mlx` 0.32.4 and `torch` 2.14.1; on disk under `~/qr/models/hf/hub`, 2.1 GB,
+deletable.
+
+| checkpoint | commit | `model.safetensors` | SHA-256 |
+|---|---|---|---|
+| `google/timesfm-3.0-pytorch` | `43046b85ec22d584a13f8098c2ed39c889e129c2` (2 September 2026) | 1,322,898,824 bytes | `a7592b0a8432baee54483254e5647856911ce69e09d09a9bb65904b2d98f17da` |
+| `google/timesfm-2.5-200m-pytorch` | `1d952420fba87f3c6dee4f240de0f1a0fbc790e3` (2 October 2025) | 925,181,104 bytes | `2f776efe6245e42b24bc4153ffdf61810140210e4bd3b01fb21f7aa779ab6ce8` |
 
 ## Leak rule (frozen)
 
@@ -116,9 +137,13 @@ claim — covariates help — is false even if both pass on their own); or a
 ## Counting, cost, what the owner is asked
 
 One run, `variants = 9`, one trial-log record; the controls are not extra
-variants (same as P3-C). Downloads: TimesFM-3 ≈ 1.3 GB and TimesFM-2.5
-≈ 0.8 GB into `~/qr/models/hf`, deletable. Compute: about 11,000
-forecasts on the laptop; minutes on MLX, hours on the CPU. $0 otherwise.
-The owner is asked three separate things, in this order: (1) the
-downloads; (2) registration of this text as written, which opens Programme
-5; (3) "run it". A no to (1) ends it here with nothing spent.
+variants (same as P3-C). Downloads, done: TimesFM-3 1.32 GB and TimesFM-2.5
+0.93 GB into `~/qr/models/hf`, deletable. Compute: about 11,200 primary
+forecasts (nine pairs × about 1,247 test days) and twice that again for the
+two controls; measured on the synthetic smoke test at 35 ms a forecast
+(`timesfm3`, MLX), 663 ms (`timesfm3_cov`, MLX — 44 variates through the
+variate attention) and 279 ms (`timesfm25`, PyTorch CPU): about three hours
+on the laptop in all. $0 otherwise. The owner was asked three separate
+things, in this order: (1) the downloads — yes, done; (2) registration of
+this text, which opens Programme 5 — yes, this stamp; (3) "run it" — still
+the owner's, not given at registration.

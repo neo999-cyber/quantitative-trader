@@ -25,6 +25,10 @@ import numpy as np
 
 TIMESFM3_CHECKPOINT = "google/timesfm-3.0-pytorch"
 TIMESFM25_CHECKPOINT = "google/timesfm-2.5-200m-pytorch"
+#: The Hugging Face commits the weights are pinned to (read from the hub API on 2 November 2026, before the
+#: download): the same bytes on every run, whatever the repo's `main` later points at.
+TIMESFM3_REVISION = "43046b85ec22d584a13f8098c2ed39c889e129c2"      # 2 September 2026; model.safetensors 1,322,898,824 bytes
+TIMESFM25_REVISION = "1d952420fba87f3c6dee4f240de0f1a0fbc790e3"     # 2 October 2025; model.safetensors 925,181,104 bytes
 TIMESFM3_LICENCE = ("TimesFM Non-Commercial License v1.0: research and evaluation only; outputs may not be used in "
                     "commercial decisions or any revenue-generating activity. Commercial use needs Google Cloud "
                     "(BigQuery AI.FORECAST) or a licence from Google.")
@@ -59,10 +63,11 @@ class TimesFM3Arm:
     """
 
     def __init__(self, checkpoint: str = TIMESFM3_CHECKPOINT, context: int = DEFAULT_CONTEXT, covariates: bool = False,
-                 backend: str = "auto", device: str | None = None, forecaster=None):
+                 backend: str = "auto", device: str | None = None, forecaster=None, revision: str | None = TIMESFM3_REVISION):
         self.context = int(context)
         self.uses_covariates = bool(covariates)
         self.checkpoint = checkpoint
+        self.revision = revision
         self.licence = TIMESFM3_LICENCE
         self.backend = backend
         if forecaster is not None:                      # a stand-in, for tests
@@ -72,14 +77,14 @@ class TimesFM3Arm:
         if backend in ("auto", "mlx"):
             try:
                 from timesfm3.mlx import TimesFM3Forecaster  # type: ignore
-                self.model = TimesFM3Forecaster.from_pretrained(checkpoint)
+                self.model = TimesFM3Forecaster.from_pretrained(checkpoint, revision=revision)
                 self.backend = "mlx"
                 return
             except ImportError:
                 if backend == "mlx":
                     raise
         from timesfm3 import TimesFM3Forecaster  # type: ignore
-        self.model = TimesFM3Forecaster.from_pretrained(checkpoint, device=device or "cpu")
+        self.model = TimesFM3Forecaster.from_pretrained(checkpoint, device=device or "cpu", revision=revision)
         self.backend = "torch"
 
     def forecast(self, history: np.ndarray, steps: int, covariates: np.ndarray | None = None) -> np.ndarray:
@@ -97,15 +102,17 @@ class TimesFM25Arm:
 
     uses_covariates = False
 
-    def __init__(self, checkpoint: str = TIMESFM25_CHECKPOINT, context: int = DEFAULT_CONTEXT, model=None):
+    def __init__(self, checkpoint: str = TIMESFM25_CHECKPOINT, context: int = DEFAULT_CONTEXT, model=None,
+                 revision: str | None = TIMESFM25_REVISION):
         self.context = int(context)
         self.checkpoint = checkpoint
+        self.revision = revision
         if model is not None:                           # a stand-in, for tests
             self.model = model
             return
         _models_home()
         import timesfm  # type: ignore
-        self.model = timesfm.TimesFM_2p5_200M_torch.from_pretrained(checkpoint)
+        self.model = timesfm.TimesFM_2p5_200M_torch.from_pretrained(checkpoint, revision=revision)
         # returns are signed: `infer_is_positive` stays off (the model card's example turns it on for demand series)
         self.model.compile(timesfm.ForecastConfig(max_context=self.context, max_horizon=256, normalize_inputs=True,
                                                   use_continuous_quantile_head=True, force_flip_invariance=True,

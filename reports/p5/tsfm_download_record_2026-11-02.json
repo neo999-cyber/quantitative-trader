@@ -1,0 +1,40 @@
+{
+ "timing_s_per_forecast": {
+  "timesfm3": 0.0347,
+  "timesfm3_cov": 0.6627,
+  "timesfm25": 0.2787
+ },
+ "backend_timesfm3": "mlx",
+ "repos": {
+  "models--google--timesfm-2.5-200m-pytorch": {
+   "snapshots": [
+    "1d952420fba87f3c6dee4f240de0f1a0fbc790e3"
+   ],
+   "files": {
+    "config.json": {
+     "bytes": 475,
+     "sha256": null
+    },
+    "model.safetensors": {
+     "bytes": 925181104,
+     "sha256": "2f776efe6245e42b24bc4153ffdf61810140210e4bd3b01fb21f7aa779ab6ce8"
+    }
+   }
+  },
+  "models--google--timesfm-3.0-pytorch": {
+   "snapshots": [
+    "43046b85ec22d584a13f8098c2ed39c889e129c2"
+   ],
+   "files": {
+    "config.json": {
+     "bytes": 1273,
+     "sha256": null
+    },
+    "model.safetensors": {
+     "bytes": 1322898824,
+     "sha256": "a7592b0a8432baee54483254e5647856911ce69e09d09a9bb65904b2d98f17da"
+    }
+   }
+  }
+ }
+}

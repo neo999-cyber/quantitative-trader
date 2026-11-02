@@ -126,3 +126,61 @@ def test_make_arm_names():
     assert tsfm.make_arm("timesfm3", forecaster=_FakeTimesFM3()).uses_covariates is False
     assert tsfm.make_arm("timesfm3_cov", forecaster=_FakeTimesFM3()).uses_covariates is True
     assert tsfm.make_arm("timesfm25", model=_FakeTimesFM25()).uses_covariates is False
+
+
+# ----------------------------------------------------------------- the run script's seams (no data, no weights)
+
+def _p5():
+    import importlib
+    import sys
+    from pathlib import Path
+    scripts = str(Path(__file__).resolve().parents[2] / "scripts")
+    if scripts not in sys.path:
+        sys.path.insert(0, scripts)
+    return importlib.import_module("p5_tsfm_forecast")
+
+
+def test_build_arms_shares_the_timesfm3_weights(monkeypatch):
+    p5 = _p5()
+    loads = []
+
+    class Fake3(tsfm.TimesFM3Arm):
+        def __init__(self, checkpoint=tsfm.TIMESFM3_CHECKPOINT, context=tsfm.DEFAULT_CONTEXT, covariates=False, backend="auto",
+                     device=None, forecaster=None, revision=tsfm.TIMESFM3_REVISION):
+            if forecaster is None:
+                loads.append("timesfm3")
+                forecaster = object()
+            super().__init__(checkpoint, context, covariates, backend, device, forecaster, revision)
+
+    class Fake25(tsfm.TimesFM25Arm):
+        def __init__(self, checkpoint=tsfm.TIMESFM25_CHECKPOINT, context=tsfm.DEFAULT_CONTEXT, model=None, revision=tsfm.TIMESFM25_REVISION):
+            loads.append("timesfm25")
+            super().__init__(checkpoint, context, object(), revision)
+
+    monkeypatch.setattr(tsfm, "TimesFM3Arm", Fake3)
+    monkeypatch.setattr(tsfm, "TimesFM25Arm", Fake25)
+    arms = p5.build_arms(["timesfm3", "timesfm3_cov", "timesfm25"])
+    assert loads == ["timesfm3", "timesfm25"]                       # one load per checkpoint
+    assert arms["timesfm3"].model is arms["timesfm3_cov"].model      # the two TimesFM-3 arms share their weights
+    assert not arms["timesfm3"].uses_covariates and arms["timesfm3_cov"].uses_covariates
+    assert arms["timesfm3"].revision == tsfm.TIMESFM3_REVISION and arms["timesfm25"].revision == tsfm.TIMESFM25_REVISION
+    rec = p5.arm_record(arms["timesfm3_cov"])
+    assert rec["covariates"] and rec["revision"] == tsfm.TIMESFM3_REVISION and "Non-Commercial" in rec["licence"]
+    assert p5.arm_record(arms["timesfm25"])["licence"] == "Apache-2.0"
+
+
+def test_bars_and_money_rule_as_registered(tmp_path):
+    p5 = _p5()
+    assert p5.MONEY_ARMS == ("timesfm25",)
+    assert p5.passes_bar("direction", {"accuracy": 0.55, "base_rate_accuracy": 0.50, "t_vs_base": 3.1})
+    assert not p5.passes_bar("direction", {"accuracy": 0.55, "base_rate_accuracy": 0.50, "t_vs_base": 2.9})
+    assert p5.passes_bar("ret7", {"oos_r2": 0.01, "dm_t_vs_zero": 3.0}) and not p5.passes_bar("ret7", {"oos_r2": -0.01, "dm_t_vs_zero": 3.0})
+    assert p5.passes_bar("logrv", {"dm_t_vs_dvol": 3.0}) and not p5.passes_bar("logrv", {"dm_t_vs_dvol": 2.0})
+    summary = {"sample": "insample", "window": ["2023-01-01", "2026-05-31"], "models": ["timesfm25"],
+               "arms": {"timesfm25": {"backend": "torch"}}, "n_forecasts": 3, "elapsed_s": 1.0,
+               "results": {"direction:timesfm25": {"score": {"accuracy": 0.5}, "controls": {"permuted": {"accuracy": 0.49}},
+                                                   "money": {"skipped": "below its statistical bar"}}},
+               "passes": {"direction:timesfm25": False}, "gates": {"n_trials": 3}, "verdict": {"PASS": False}}
+    p5.write_report(tmp_path / "r.md", summary)
+    text = (tmp_path / "r.md").read_text()
+    assert "direction:timesfm25" in text and "below its statistical bar" in text and "fail" in text

@@ -134,7 +134,10 @@ What it closes: the question for this model class — a zero-shot foundation mod
 on these targets — as P3-C closed it for Chronos and the fitted models. A new input would have to be a
 different target or resolution with its own memo, or fine-tuning (permitted for 2.5 under Apache-2.0, research-only
 for 3.0), each a new counter against a public record that is already negative. The weights (2.1 GB,
-`~/qr/models/hf`) stay on disk until the owner says delete; nothing reads them.
+`~/qr/models/hf`) were **deleted on 3 November on the owner's word** ("delete it"; the owner ran the `rm`);
+the pinned commits and SHA-256s above and in `reports/p5/tsfm_download_record_2026-11-02.json` re-fetch the same
+bytes if a later memo ever needs them. The `timesfm` package stays in the venv; nothing imports it unless an arm is
+built.
 
 ## 6. What a result would have meant
 

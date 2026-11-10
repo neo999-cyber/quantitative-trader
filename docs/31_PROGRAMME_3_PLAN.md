@@ -880,6 +880,6 @@ script kept on the box as `recorder_health.sh.bak-2026-11-10`):
 Verified: `tests/qr_platform/test_recorder_health.py` drives the real script through stub commands (the 10 November
 case, a count change, a returning condition, the daily reminder, a failed push); a dry run on the box under dash; and
 one labelled drill through the live push path (`drill-ignore-this`: alert accepted, repeat quiet, all-clear
-accepted). The two judgment calls beyond "once" — the daily reminder and the quiet all-clear — are the owner's to
-strike. Also corrected in `CLAUDE.md`: the surface unit records Hyperliquid positioning hourly too, so two
+accepted). The two judgment calls beyond "once" — the daily reminder and the quiet all-clear — were put to the owner
+and **kept on the owner's word** ("ok keep both", 10 November). Also corrected in `CLAUDE.md`: the surface unit records Hyperliquid positioning hourly too, so two
 forced-party items remain on §15's list, not one.

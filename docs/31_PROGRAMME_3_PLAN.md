@@ -853,3 +853,33 @@ wedge's status, the measured maker cost, the ladder with its number, the small-s
 P3-C's fail, what keeps running). Also on 1 November, asked by the owner: a site review of London Strategic Edge
 (`docs/research/11`) — a derived, scraped archive, prototyping and cross-check only, two datasets worth a QA pass
 on a free key. Dated next: 30 November.
+
+## 23. 10 November 2026 — four phone alerts for one Deribit 503 hour; the health check now pushes once per failure
+
+The owner sent a screenshot of four `recorder ALERT` pushes (09:30–11:00 UTC, each `WRONG: surface-failed:1`) and
+asked what they meant. Read-only on the box: the 09:02 UTC surface snapshot got HTTP 503 from Deribit on all three
+retries and gave up (Hyperliquid's snapshot in the same run landed); every run from 10:02 succeeded; both recorders
+and both timers active; 13 GB free. `recorder_health.sh` pushed on every 30-minute run while the failure sat inside
+its two-hour window — four pushes for one event. It is the only surface failure in the journal since 13 October. The
+v3 engine reads the latest snapshot at most two hours old (`SurfaceSigma`, `recorded_at <= t <= recorded_at + 7200`),
+so the 10:00 decision used the 08:02 snapshot and no decision falls back to DVOL.
+
+On the owner's "ok change it to alert once" (`deploy/surface/recorder_health.sh`, deployed the same evening, the old
+script kept on the box as `recorder_health.sh.bak-2026-11-10`):
+
+- a condition is pushed when it **first appears** and is quiet while it lasts; a change of count is not a new
+  condition, a second condition is;
+- a condition still wrong **a day after the last push** is pushed again, once a day (`recorder still WRONG`, high
+  priority), so an outage of a recorder cannot go silent before the 30 November read;
+- **one low-priority push** (`recorder OK`) says when a check finds nothing wrong again — silence used to mean
+  "cleared" and would otherwise now mean "cleared or still wrong";
+- a push that fails to send is retried on the next run (`curl -f`; the state advances only on an accepted push);
+- the log line is unchanged and still written on every run (the desk sheet reads its last line); the state is
+  `/root/pm/health.state`.
+
+Verified: `tests/qr_platform/test_recorder_health.py` drives the real script through stub commands (the 10 November
+case, a count change, a returning condition, the daily reminder, a failed push); a dry run on the box under dash; and
+one labelled drill through the live push path (`drill-ignore-this`: alert accepted, repeat quiet, all-clear
+accepted). The two judgment calls beyond "once" — the daily reminder and the quiet all-clear — are the owner's to
+strike. Also corrected in `CLAUDE.md`: the surface unit records Hyperliquid positioning hourly too, so two
+forced-party items remain on §15's list, not one.

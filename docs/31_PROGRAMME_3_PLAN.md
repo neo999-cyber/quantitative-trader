@@ -883,3 +883,38 @@ one labelled drill through the live push path (`drill-ignore-this`: alert accept
 accepted). The two judgment calls beyond "once" — the daily reminder and the quiet all-clear — were put to the owner
 and **kept on the owner's word** ("ok keep both", 10 November). Also corrected in `CLAUDE.md`: the surface unit records Hyperliquid positioning hourly too, so two
 forced-party items remain on §15's list, not one.
+
+## 24. 11 November 2026 — the owner's question on the volatility; a snapshot, and a volatility block on the desk sheet
+
+The owner: "there is huge volatility in the stock market and it is affecting crypto too. how can we make use of it,
+and learn about this." Answered from a descriptive snapshot of public data, no rule evaluated
+(`reports/desk/vol_snapshot_2026-11-11.md`; note seq 1055 under `vol_snapshot`): VIX 16.6 → 28.2 on 5 November →
+19.5; BTC −12% and ETH −19% in 30 days; BTC's week at the 85th percentile of realised volatility while DVOL sits
+below its one-year median; BTC's daily return against the day's change in VIX at −0.68 over 20 sessions against
+−0.40 over 250; funding positive on every print. One conditional figure was looked at and disclosed as noise (BTC the
+session after 23 VIX-jump days: +0.71%, t 0.93); a later spillover memo must cite it. The answer: volatility
+predicts volatility and not direction (P3-C, P5); the dip-buy and the timing rules already failed (C3, P4); the live
+use of the episode is the registered read of 30 November, whose window it falls in; a variance-risk-premium memo was
+offered and **not recommended now** (today's premium is ordinary; five years of DVOL cannot reach a t of 3).
+
+On the owner's "ok add the volatility block to the desk sheet" (`scripts/desk_sheet.py`, deployed 16:32 UTC, the old
+script kept on the box as `/root/desk/desk_sheet.py.bak-2026-11-11`; the cron entry is unchanged):
+
+- **The block**, between the ladder and the notes: for BTC and ETH what options price for the next 30 days (DVOL,
+  with its percentile in the last year and its level a month ago) against what the price did (realised volatility
+  over 7 and 30 closed days, the week's percentile), the gap both ways and the 30-day price change; VIX's last
+  close with its percentile, median, level a month ago, 30-session high and the count of jumps of more than 2 points;
+  bitcoin's daily return against the day's change in VIX over 20 and 250 sessions; one line on how to read it. Three
+  public reads, no key: Binance spot daily closes, Deribit's index, CBOE's own VIX file. A source that fails says so
+  on its line and the rest stands. Descriptive: no rule, no signal.
+- **The 4 KB limit.** ntfy shows a push as text only up to 4,096 bytes; the page was 3,752 and the block is about
+  1,100. So October's dated notes (in `docs/31` §19–§22 and `docs/35`) were cut to the current items, the Programme 3
+  header shortened, and the push takes the fullest form under 4,000 bytes: the full page, else without the reading
+  line, else with the notes cut to the dated item. The file on disk is always the full page. Today's page: 3,885.
+- **A bug the dry run caught and the tests had not:** the page's funding loops reuse the name `v`, which the block's
+  argument first carried, so on the box (where funding is never empty) the block rendered without its lines. The
+  argument is `vol`, and the test now renders with funding present; the check fails on the buggy version.
+- Verified: the block's numbers equal the snapshot's, computed independently with pandas the day before; fixture
+  tests (`tests/qr_platform/test_desk_sheet.py`: the measures, the pairing of bitcoin's closes with VIX sessions
+  across a weekend, a failed source, the push's three forms, the no-network page); a dry run on the box; then the
+  daily command run once by hand, pushed at low priority, exit 0.

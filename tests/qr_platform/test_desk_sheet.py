@@ -77,3 +77,132 @@ def test_funding_trailing_annualises_the_days_held_and_renders_against_the_bill(
                      ds.ladder(tmp_path), {}, now, {"BTCUSDT": {365: {"days": 365.0, "n": 1095, "gross_pct": 3.4, "on_capital_1x_pct": 1.6}}, "ETHUSDT": {"error": "URLError"}})
     assert "BTCUSDT funding realised, annualised (gross / at 1× on the capital it ties up): 365 d 3.4% / 1.6%" in page
     assert "against the bill (3.6%), last 365 days, in points: BTC −2.0" in page and "ETHUSDT funding realised: URLError" in page
+
+
+# ------------------------------------------------------------------ the volatility block (11 November 2026)
+import math
+import statistics
+from datetime import date, timedelta
+
+import pytest
+
+NOW = datetime(2026, 11, 11, 6, 40, tzinfo=timezone.utc)
+_H = {"last_line": "ok", "wrong": False, "pm_mb_yesterday": "1", "reconnects_24h": 0, "surface_files_yesterday": 24, "disk_free": "1G"}
+_C = {"ibit_today": True, "etha_today": True, "table_rows": 0, "equities_flows_age_h": 1.0, "yield_today": True, "latest_yield_file": "x"}
+
+
+def _sessions(n, end=date(2026, 11, 10)):
+    """The last `n` weekdays up to `end`, oldest first."""
+    out, d = [], end
+    while len(out) < n:
+        if d.weekday() < 5:
+            out.append(d)
+        d -= timedelta(days=1)
+    return out[::-1]
+
+
+def _fixture_market():
+    """VIX flat at 15 with two jumps near the end; bitcoin's close moves −1% of each VIX point on session days and is flat at weekends."""
+    days = _sessions(300)
+    vix = [15.0] * 300
+    vix[-5], vix[-4], vix[-2], vix[-1] = 18.0, 15.0, 15.5, 20.0          # +3.0, −3.0, (flat), +0.5, +4.5: two jumps of more than 2 points
+    vx = list(zip(days, vix))
+    closes, px, prev = [], 100.0, vix[0]
+    by_day = dict(vx)
+    d = days[0]
+    while d <= days[-1]:
+        if d in by_day:
+            px *= math.exp(-0.01 * (by_day[d] - prev))
+            prev = by_day[d]
+        closes.append((d, px))
+        d += timedelta(days=1)
+    dvol = [(days[-1] - timedelta(days=399 - k), 40.0) for k in range(400)]
+    dvol[-1] = (dvol[-1][0], 50.0)
+    dvol[-31] = (dvol[-31][0], 45.0)
+    return closes, dvol, vx
+
+
+def test_volatility_measures_priced_against_actual_and_the_link_to_vix():
+    closes, dvol, vx = _fixture_market()
+    v = ds.volatility(NOW, closes=lambda s, now: closes, dvol=lambda c, now: dvol, vix=lambda now: vx)
+    btc = v["assets"]["BTC"]
+    px = [c for _, c in closes]
+    rets = [math.log(b / a) for a, b in zip(px, px[1:])]
+    assert btc["implied"] == 50.0 and btc["implied_month_ago"] == 45.0 and btc["implied_pctile"] == 100
+    assert btc["realised"][7] == pytest.approx(statistics.stdev(rets[-7:]) * math.sqrt(365) * 100)
+    assert btc["realised"][30] == pytest.approx(statistics.stdev(rets[-30:]) * math.sqrt(365) * 100)
+    assert btc["realised_week_pctile"] == 100                                 # the last week holds the largest move
+    assert btc["ret_pct"][30] == pytest.approx((px[-1] / px[-31] - 1) * 100) and btc["as_of"] == "2026-11-10"
+    s = v["stocks"]
+    assert (s["vix"], s["as_of"], s["vix_month_ago"], s["high_30"], s["high_30_date"]) == (20.0, "2026-11-10", 15.0, 20.0, "2026-11-10")
+    assert s["median_252"] == 15.0 and s["pctile_252"] == 100 and s["jump_days_30"] == 2
+    assert v["link"][20] == pytest.approx(-1.0) and v["link"][250] == pytest.approx(-1.0)
+    assert ds._ann_vol([0.01, -0.01, 0.01, -0.01]) == pytest.approx(22.06, abs=0.01)   # sqrt(4e-4 / 3) × sqrt(365) × 100
+
+
+def test_volatility_pairs_bitcoin_with_vix_sessions_across_a_weekend(monkeypatch):
+    monkeypatch.setattr(ds, "LINK_WINDOWS", (3,))
+    thu = date(2026, 11, 5)
+    closes = [(thu + timedelta(days=k), c) for k, c in enumerate([100.0, 110.0, 120.0, 90.0, 99.0, 108.9])]   # Thu … Tue, the weekend included
+    vx = [(thu, 15.0), (thu + timedelta(days=1), 16.0), (thu + timedelta(days=4), 18.0), (thu + timedelta(days=5), 17.0)]
+    v = ds.volatility(NOW, closes=lambda s, now: closes, dvol=lambda c, now: [(thu, 40.0)], vix=lambda now: vx)
+    r = [math.log(110 / 100), math.log(99 / 110), math.log(108.9 / 99)]       # Thu→Fri, Fri→Mon over the weekend, Mon→Tue
+    assert v["link"][3] == pytest.approx(statistics.correlation(r, [1.0, 2.0, -1.0]))
+    assert v["stocks"]["jump_days_30"] == 0 and v["stocks"]["vix_month_ago"] is None      # a short series pairs neighbours, not a day with itself
+    assert v["assets"]["BTC"]["realised"] == {} and v["assets"]["BTC"]["implied_month_ago"] is None
+
+
+def test_volatility_block_renders_and_a_failed_source_leaves_the_rest(tmp_path):
+    closes, dvol, vx = _fixture_market()
+    v = ds.volatility(NOW, closes=lambda s, now: closes, dvol=lambda c, now: dvol, vix=lambda now: vx)
+    # with the funding lines present, as on the box: the page's funding loops must not swallow the block (they once did,
+    # by reusing its variable name — caught by the dry run on the box on 11 November, not by a test with empty funding)
+    f = {"BTCUSDT": {"rate_8h": 1e-4, "annualised_pct": 10.95}, "ETHUSDT": {"error": "URLError"}}
+    t = {"BTCUSDT": {365: {"days": 365.0, "n": 1095, "gross_pct": 3.4, "on_capital_1x_pct": 1.6}}, "ETHUSDT": {30: {"days": 30.0, "n": 90, "gross_pct": 4.2, "on_capital_1x_pct": 2.0}}}
+    page = ds.render(_H, ds.recording_progress(tmp_path / "none.jsonl"), _C, {"dtb3": 4.12, "dtb3_date": "x"}, f, NOW, t, v)
+    assert "BTCUSDT funding realised" in page and "against the bill (4.12%)" in page
+    assert "## Volatility — priced by options for the next 30 days against actual" in page
+    assert "- BTC: priced **50%** (100th percentile; 45% a month ago). Actual **" in page and "Priced minus actual: " in page
+    assert "- Stocks: VIX **20.0** on 10 Nov (100th percentile, median 15.0; 15.0 a month ago); 30-session high 20.0 on 10 Nov, 2 jumps of more than 2 points." in page
+    assert "**−1.00** over 20 sessions, −1.00 over 250" in page and "Size, never direction." in page
+    assert page.index("## Volatility") < page.index("## Notes") and "Open decisions" in page
+
+    def closes_or_fail(symbol, now):
+        if symbol == "ETHUSDT":
+            raise TimeoutError
+        return closes
+    broken = ds.volatility(NOW, closes=closes_or_fail, dvol=lambda c, now: dvol, vix=lambda now: 1 / 0)
+    assert broken["assets"]["ETH"]["price_error"] == "TimeoutError" and broken["stocks"] == {"error": "ZeroDivisionError"} and broken["link"] == {}
+    page = ds.render(_H, ds.recording_progress(tmp_path / "none.jsonl"), _C, {}, {}, NOW, {}, broken)
+    assert "- ETH: priced **50%** (100th percentile; 45% a month ago). Actual: unavailable (TimeoutError)." in page
+    assert "- Stocks: VIX unavailable (ZeroDivisionError)." in page and "Bitcoin against stock fear" not in page
+    assert "- BTC: priced **50%**" in page and "## Notes" in page
+    # no block when nothing was read (the --no-net path), and the older call still renders
+    assert "## Volatility" not in ds.render(_H, ds.recording_progress(tmp_path / "none.jsonl"), _C, {}, {}, NOW, {})
+
+
+def test_the_push_is_the_fullest_form_ntfy_shows_as_text(tmp_path):
+    closes, dvol, vx = _fixture_market()
+    v = ds.volatility(NOW, closes=lambda s, now: closes, dvol=lambda c, now: dvol, vix=lambda now: vx)
+    t = {"BTCUSDT": {365: {"days": 365.0, "n": 1095, "gross_pct": 3.4, "on_capital_1x_pct": 1.6}}}
+    at = lambda short: ds.render(_H, ds.recording_progress(tmp_path / "none.jsonl"), _C, {"dtb3": 4.12}, {"BTCUSDT": {"rate_8h": 1e-4, "annualised_pct": 10.95}}, NOW, t, v, short)
+    full, no_reading, cut = at(0), at(1), at(2)
+    assert "Reading it" in full and "Open decisions" in full
+    assert "Reading it" not in no_reading and "Open decisions" in no_reading and "- BTC: priced" in no_reading
+    assert "Reading it" not in cut and "Open decisions" not in cut and "The full notes are in `latest.md`" in cut and "- BTC: priced" in cut
+    assert len(full.encode()) > len(no_reading.encode()) > len(cut.encode())
+    assert ds.push_body(at, limit=len(full.encode())) == full
+    assert ds.push_body(at, limit=len(full.encode()) - 1) == no_reading
+    assert ds.push_body(at, limit=len(no_reading.encode()) - 1) == cut
+    assert ds.push_body(lambda short: "−" * 1400) == "−" * 1400               # 4,200 bytes in 1,400 characters: over the limit at every step, the last form goes
+    assert ds.PUSH_LIMIT < 4096
+
+
+def test_ordinals_and_the_no_net_page(tmp_path):
+    assert [ds._ord(n) for n in (1, 2, 3, 4, 11, 12, 13, 21, 22, 23, 100, 101, 111, None)] == \
+        ["1st", "2nd", "3rd", "4th", "11th", "12th", "13th", "21st", "22nd", "23rd", "100th", "101st", "111th", "n/a"]
+    out = tmp_path / "desk"
+    assert ds.main(["--no-net", "--out", str(out), "--health-log", str(tmp_path / "h.log"), "--pm", str(tmp_path / "pm"),
+                    "--surface", str(tmp_path / "s"), "--flows", str(tmp_path / "f"), "--yield-dir", str(tmp_path / "y")]) == 0
+    page = (out / "latest.md").read_text()
+    assert "## Recorders" in page and "## Volatility" not in page and "**30 Nov**" in page

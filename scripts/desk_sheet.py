@@ -7,6 +7,14 @@ current rates against the T-bill and the carry, the dated items and the decision
 number comes from a file on the box or one public read (Binance's premium index, no key). Nothing here reads a
 price against a model: the recording's progress is counted, not judged (`docs/31` §16–§18).
 
+The volatility block (11 November 2026, on the owner's word, to learn from) is three more public reads, no key:
+Binance's spot daily closes, Deribit's implied-volatility index and CBOE's own VIX history file. It sets what
+options price against what the market did, and bitcoin's daily return against the day's change in VIX. It is
+descriptive: no rule, no signal, nothing registered (`reports/desk/vol_snapshot_2026-11-11.md`).
+
+The push goes through ntfy, which shows a message as text only up to 4,096 bytes and turns a longer one into a
+file attachment, so a page over `PUSH_LIMIT` is pushed in its short form (the file on disk is always the full page).
+
 Standard library only, so it runs on the box after the morning collectors:
 
     python3 desk_sheet.py --out /root/desk            # writes /root/desk/desk_<date>.md and latest.md
@@ -19,8 +27,10 @@ from __future__ import annotations
 import argparse
 import glob
 import json
+import math
 import os
 import re
+import statistics
 import subprocess
 import sys
 import urllib.request
@@ -31,10 +41,14 @@ V3_START = datetime(2026, 10, 13, 4, 53, tzinfo=timezone.utc)   # the daily ladd
 V3_MIN_CLUSTERS = 30
 MEASURED = {"perp_maker_bps_side": 3.2, "carry_round_trip_bps": 21.4, "stage1_fill_pct": 94.2}
 FUNDING_WINDOWS = (30, 90, 365)                                   # trailing days for the realised-funding lines
+VOL_WINDOWS = (7, 30)                                             # trailing days of realised volatility
+VIX_JUMP_POINTS = 2.0                                             # a jump day: VIX up by more than this, close to close
+LINK_WINDOWS = (20, 250)                                          # sessions for bitcoin's return against the change in VIX
+PUSH_LIMIT = 4000                                                 # bytes; ntfy renders a message as text up to 4,096
 DESK_NOTES = """\
-**Dated (Claude's):** 25 Oct counts-only check of the daily-ladder recording done (`reports/p3/p3a_v3_counts_2026-10-25.md`) · 27 Oct v2's deferral note written (seq 982), no run · 27 Oct Programme 4 registered (seq 984–990); the ETF-flow candidate ran once and **FAILED** in-sample (seq 991–1013: T + 2 negative, T + 1 inside noise, placebo above both; `docs/35` §5) · 27 Oct evening: the CME timer ran once and **FAILED** (seq 1024–1044: every variant behind the holding it times, placebo equal, sort t −0.5; `docs/35` §8); the inflow fade built, **deferred by construction** and **parked** by the owner (71 signal days vs 80; the free feed stopped in May; notes 1023, 1045) · 28 Oct the carry decision pack put to the owner (`docs/34`, last section), no decision; the realised-funding lines below added so the regime is read from the days held, not from one morning's rate · 1 Nov the v3 read run once (seq 1047): 23 clusters with a fill vs 30, **deferred** to 30 Nov by the memo's rule (notes 1046/1048/1049; what was seen is `docs/36` §2, not a verdict); the Programme 3 report written (`docs/36`); site review `docs/research/11` · 30 Nov mirror, the v3 read once on 13 Oct–29 Nov, the addendum to `docs/36`.
+**Dated (Claude's):** **30 Nov** — mirror both recordings, the v3 read once on 13 Oct–29 Nov, the addendum to `docs/36`. Since 1 Nov: Programme 5 (TimesFM) **FAILED** (2 Nov, `docs/37`) · health alerts push once per failure (10 Nov) · this volatility block (11 Nov).
 **Open decisions (owner's):** the carry holding, untimed (`docs/34`): no, not now, or an amount and a leverage; the yield sleeve stays in the bill until then.
-**Standing:** no live orders; the live key's futures and spot trading are off; Programme 3 counter four of four; Programme 2 twelve for twelve."""
+**Standing:** no live orders; the live key's futures and spot trading are off; Programmes 2, 4 and 5 closed without a pass; Programme 3's last read is 30 November."""
 
 
 def _run(cmd: list[str]) -> str:
@@ -216,13 +230,173 @@ def funding_trailing(symbols=("BTCUSDT", "ETHUSDT"), windows=FUNDING_WINDOWS, no
     return out
 
 
+# ------------------------------------------------------------------ volatility: priced against actual
+def _get(url: str, timeout: int = 20) -> bytes:
+    with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"}), timeout=timeout) as r:
+        return r.read()
+
+
+def _fetch_closes(symbol: str, now: datetime, limit: int = 500) -> list[tuple]:
+    """Binance spot daily closes as (UTC date, close), oldest first; the day still open is left out."""
+    now_ms = now.timestamp() * 1000
+    rows = json.loads(_get(f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval=1d&limit={limit}"))
+    return [(datetime.fromtimestamp(int(r[0]) / 1000, tz=timezone.utc).date(), float(r[4])) for r in rows if int(r[6]) < now_ms]
+
+
+def _fetch_dvol(currency: str, now: datetime, days: int = 400) -> list[tuple]:
+    """Deribit's 30-day implied-volatility index as (UTC date, value), oldest first; the last value is the current one."""
+    end = int(now.timestamp() * 1000)
+    url = f"https://www.deribit.com/api/v2/public/get_volatility_index_data?currency={currency}&start_timestamp={end - days * 86_400_000}&end_timestamp={end}&resolution=1D"
+    return [(datetime.fromtimestamp(int(r[0]) / 1000, tz=timezone.utc).date(), float(r[4])) for r in json.loads(_get(url))["result"]["data"]]
+
+
+def _fetch_vix(now: datetime, sessions: int = 400) -> list[tuple]:
+    """CBOE's own VIX history file as (session date, close), oldest first."""
+    rows = _get("https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv").decode().strip().splitlines()[1:]
+    out = []
+    for ln in rows[-sessions:]:
+        d, _o, _h, _l, c = ln.split(",")[:5]
+        out.append((datetime.strptime(d.strip(), "%m/%d/%Y").date(), float(c)))
+    return out
+
+
+def _ann_vol(rets: list[float]) -> float:
+    """Close-to-close volatility of these daily log returns, a year of 365 days (crypto trades every day), in percent."""
+    return statistics.stdev(rets) * math.sqrt(365) * 100
+
+
+def _pct_rank(values: list[float], v: float) -> int | None:
+    """The share of `values` at or below `v`, as a whole percentile."""
+    return round(100 * sum(1 for x in values if x <= v) / len(values)) if values else None
+
+
+def _corr(x: list[float], y: list[float]) -> float | None:
+    try:
+        return statistics.correlation(x, y)
+    except statistics.StatisticsError:
+        return None
+
+
+def volatility(now: datetime | None = None, closes=_fetch_closes, dvol=_fetch_dvol, vix=_fetch_vix) -> dict:
+    """What options price against what the market did, the stock market's gauge, and how closely bitcoin moved with it.
+
+    Per asset: the implied volatility now, a month ago and its percentile in the last year; the realised volatility of the
+    last 7 and 30 closed days and the percentile of the week's; the price change. Stocks: VIX's last close, its level 21
+    sessions ago, its 30-session high, its median and percentile over 252 sessions, and the days it rose by more than
+    `VIX_JUMP_POINTS`. The link: the correlation of bitcoin's log return between consecutive VIX sessions (its UTC-day
+    close on each session's date, so the day covers that US session) with the change in VIX over the same sessions.
+    A source that fails leaves an `error` in its place and the rest stands. Descriptive only: nothing here is a signal."""
+    now = now or datetime.now(timezone.utc)
+    out: dict = {"assets": {}, "stocks": {}, "link": {}}
+    btc: dict = {}
+    for cur in ("BTC", "ETH"):
+        a: dict = {}
+        try:
+            cs = closes(cur + "USDT", now)
+            if cur == "BTC":
+                btc = dict(cs)
+            px = [c for _, c in cs]
+            rets = [math.log(b / a_) for a_, b in zip(px, px[1:])]
+            a["as_of"] = cs[-1][0].isoformat()
+            a["ret_pct"] = {n: (px[-1] / px[-1 - n] - 1) * 100 for n in VOL_WINDOWS if len(px) > n}
+            a["realised"] = {n: _ann_vol(rets[-n:]) for n in VOL_WINDOWS if len(rets) >= n}
+            w = min(VOL_WINDOWS)
+            roll = [_ann_vol(rets[i - w:i]) for i in range(w, len(rets) + 1)][-365:]
+            a["realised_week_pctile"] = _pct_rank(roll, roll[-1]) if roll else None
+        except Exception as exc:  # noqa: BLE001
+            a["price_error"] = type(exc).__name__
+        try:
+            vals = [v for _, v in dvol(cur, now)]
+            a["implied"] = vals[-1]
+            a["implied_month_ago"] = vals[-31] if len(vals) > 30 else None
+            a["implied_pctile"] = _pct_rank(vals[-365:], vals[-1])
+        except Exception as exc:  # noqa: BLE001
+            a["implied_error"] = type(exc).__name__
+        out["assets"][cur] = a
+    try:
+        vx = vix(now)
+        vals = [v for _, v in vx]
+        hi = max(vx[-30:], key=lambda r: r[1])
+        last31 = vx[-31:]                                                    # 30 close-to-close changes
+        out["stocks"] = {"vix": vals[-1], "as_of": vx[-1][0].isoformat(), "vix_month_ago": vals[-22] if len(vals) > 21 else None,
+                         "high_30": hi[1], "high_30_date": hi[0].isoformat(), "median_252": statistics.median(vals[-252:]),
+                         "pctile_252": _pct_rank(vals[-252:], vals[-1]),
+                         "jump_days_30": sum(1 for (_, v0), (_, v1) in zip(last31, last31[1:]) if v1 - v0 > VIX_JUMP_POINTS)}
+        pairs = [(math.log(btc[d1] / btc[d0]), v1 - v0) for (d0, v0), (d1, v1) in zip(vx, vx[1:]) if d0 in btc and d1 in btc]
+        out["link"] = {n: _corr([r for r, _ in pairs[-n:]], [dv for _, dv in pairs[-n:]]) for n in LINK_WINDOWS if len(pairs) >= n}
+    except Exception as exc:  # noqa: BLE001
+        out["stocks"] = {"error": type(exc).__name__}
+    return out
+
+
+def _ord(n: int | None) -> str:
+    if n is None:
+        return "n/a"
+    return f"{n}{'th' if 10 <= n % 100 <= 20 else {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')}"
+
+
+def _signed(x: float) -> str:
+    return f"{'+' if x >= 0 else '−'}{abs(x):.0f}"
+
+
+def _day(iso: str) -> str:
+    d = datetime.fromisoformat(iso)
+    return f"{d.day} {d.strftime('%b')}"
+
+
+def _vol_lines(v: dict, short: int = 0) -> list[str]:
+    lines = ["## Volatility — priced by options for the next 30 days against actual (yearly rates, percentiles within the last year; to learn from, not a signal)"]
+    for cur, a in v.get("assets", {}).items():
+        if "implied" in a:
+            ago = f"; {a['implied_month_ago']:.0f}% a month ago" if a.get("implied_month_ago") is not None else ""
+            priced = f"priced **{a['implied']:.0f}%** ({_ord(a.get('implied_pctile'))} percentile{ago})"
+        else:
+            priced = f"priced: unavailable ({a.get('implied_error')})"
+        rv = a.get("realised") or {}
+        if 7 in rv and 30 in rv:
+            actual = f"Actual **{rv[7]:.0f}%** over 7 days ({_ord(a.get('realised_week_pctile'))} percentile), {rv[30]:.0f}% over 30"
+            gap = f" Priced minus actual: {_signed(a['implied'] - rv[7])} on the week, {_signed(a['implied'] - rv[30])} on the month." if "implied" in a else ""
+            ret = a.get("ret_pct") or {}
+            move = f" Price {_signed_pct(ret[30])} in 30 days." if 30 in ret else ""
+            lines += [f"- {cur}: {priced}. {actual}.{gap}{move}"]
+        else:
+            lines += [f"- {cur}: {priced}. Actual: unavailable ({a.get('price_error', 'too little history')})."]
+    s = v.get("stocks") or {}
+    if "vix" in s:
+        ago = f"; {s['vix_month_ago']:.1f} a month ago" if s.get("vix_month_ago") is not None else ""
+        lines += [f"- Stocks: VIX **{s['vix']:.1f}** on {_day(s['as_of'])} ({_ord(s.get('pctile_252'))} percentile, median {s['median_252']:.1f}{ago}); "
+                  f"30-session high {s['high_30']:.1f} on {_day(s['high_30_date'])}, {s['jump_days_30']} jumps of more than {VIX_JUMP_POINTS:.0f} points."]
+    else:
+        lines += [f"- Stocks: VIX unavailable ({s.get('error', 'no data')})."]
+    k = v.get("link") or {}
+    got = [(n, k[n]) for n in LINK_WINDOWS if k.get(n) is not None]
+    if got:
+        first = f"**{_signed2(got[0][1])}** over {got[0][0]} sessions"
+        rest = "".join(f", {_signed2(c)} over {n}" for n, c in got[1:])
+        lines += [f"- Bitcoin against stock fear (daily return against the day's change in VIX): {first}{rest}; nearer −1 means it falls as fear rises."]
+    if not short:
+        lines += ["- Reading it: priced a few points over the month's actual is the usual insurance premium; actual far above priced means options expect the swings to fade; "
+                  "priced above its 80th percentile is a volatile regime. Size, never direction."]
+    return lines + [""]
+
+
+def _signed_pct(x: float) -> str:
+    return f"{'+' if x >= 0 else '−'}{abs(x):.1f}%"
+
+
+def _signed2(x: float) -> str:
+    return f"{'+' if x >= 0 else '−'}{abs(x):.2f}"
+
+
 # ------------------------------------------------------------------ the page
-def render(h: dict, p: dict, c: dict, l: dict, f: dict, now: datetime, t: dict | None = None) -> str:
+def render(h: dict, p: dict, c: dict, l: dict, f: dict, now: datetime, t: dict | None = None, vol: dict | None = None, short: int = 0) -> str:
+    """The page. `short` is for the push when the full page is over `PUSH_LIMIT`: 1 leaves out the volatility block's reading
+    line, 2 also cuts the notes to the dated item and a pointer to the file."""
     def yn(b): return "yes" if b else "**no**"
     lines = [f"# Desk sheet — {now.strftime('%Y-%m-%d %H:%M')} UTC", ""]
     lines += ["## Recorders", f"- Health: {'**WRONG** — ' if h['wrong'] else 'clean — '}`{h['last_line'] or 'no health line yet'}`",
               f"- Polymarket yesterday: {h['pm_mb_yesterday']} MB; reconnects last 24 h: {h['reconnects_24h']}; surface snapshots yesterday: {h['surface_files_yesterday']}/24; disk free {h['disk_free']}", ""]
-    lines += ["## Programme 3 recording (v3, daily ladders — read 1 Nov: 23 clusters with a fill vs 30, deferred to 30 November on the window to 29 November)",
+    lines += ["## Programme 3 recording (v3 daily ladders — the 1 Nov read had 23 clusters with a fill vs 30; next read 30 November)",
               f"- Days recorded since the switch: {p.get('days_recorded', 0)}; catalogue refreshes: {p.get('catalogue_lines_since_switch', 0)}; markets in the latest list: {p.get('latest_markets', 0)}, of which daily ladders {p.get('latest_daily_markets', 0)}",
               f"- Daily-ladder markets seen so far: {p.get('daily_markets_seen', 0)} in **{p.get('clusters_total', 0)} asset × settlement-date clusters**, {p.get('clusters_settled', 0)} settled — the memo's minimum is {p['minimum']} clusters *with a fill*, so this is the ceiling, not the count", ""]
     lines += ["## Collectors", f"- ETF workbooks today: IBIT {yn(c['ibit_today'])}, ETHA {yn(c['etha_today'])}; flow-table rows {c['table_rows']}; equities share counts last touched {c['equities_flows_age_h']} h ago",
@@ -253,8 +427,23 @@ def render(h: dict, p: dict, c: dict, l: dict, f: dict, now: datetime, t: dict |
         if gaps:
             lines += [f"- The carry at 1× against the bill ({l['dtb3']}%), last {max(FUNDING_WINDOWS)} days, in points: " + ", ".join(gaps) + " — the rate above is one morning's; this is what the days held paid"]
     lines += [f"- Measured costs: perp maker {MEASURED['perp_maker_bps_side']} bps a side (stage 1, {MEASURED['stage1_fill_pct']}% fill); a carry round trip ≈ {MEASURED['carry_round_trip_bps']} bps", ""]
-    lines += ["## Notes", DESK_NOTES, ""]
+    if vol:                                                                 # not `v`: the funding loops above reuse that name
+        lines += _vol_lines(vol, short)
+    if short >= 2:
+        lines += ["## Notes", "Next dated: **30 Nov**, the v3 read. The full notes are in `latest.md` on the box.", ""]
+    else:
+        lines += ["## Notes", DESK_NOTES, ""]
     return "\n".join(lines)
+
+
+def push_body(page_at, limit: int = PUSH_LIMIT) -> str:
+    """The fullest form of the page that ntfy will show as text: the full page, else without the reading line, else with the notes cut."""
+    body = ""
+    for short in (0, 1, 2):
+        body = page_at(short)
+        if len(body.encode()) <= limit:
+            break
+    return body
 
 
 def main(argv=None) -> int:
@@ -275,7 +464,8 @@ def main(argv=None) -> int:
     l = ladder(a.yield_dir)
     f = {} if a.no_net else funding_now()
     t = {} if a.no_net else funding_trailing()
-    page = render(h, p, c, l, f, now, t)
+    vol = {} if a.no_net else volatility(now)
+    page = render(h, p, c, l, f, now, t, vol)
     a.out.mkdir(parents=True, exist_ok=True)
     (a.out / f"desk_{now.date().isoformat()}.md").write_text(page)
     (a.out / "latest.md").write_text(page)
@@ -283,7 +473,8 @@ def main(argv=None) -> int:
     topic = os.environ.get("QR_NTFY_TOPIC")
     if a.push and topic:
         try:
-            req = urllib.request.Request(f"https://ntfy.sh/{topic}", data=page.encode(), method="POST",
+            body = push_body(lambda short: render(h, p, c, l, f, now, t, vol, short))
+            req = urllib.request.Request(f"https://ntfy.sh/{topic}", data=body.encode(), method="POST",
                                          headers={"Title": f"desk sheet {now.date().isoformat()}", "Markdown": "yes", "Priority": "low"})
             urllib.request.urlopen(req, timeout=20).read()
         except Exception as exc:  # noqa: BLE001

@@ -67,6 +67,7 @@ FAMILIES = {
     "etf_flow_pressure": "EtfFlowPressure",
     "carry_crowding_timer": "CarryCrowdingTimer",
     "exchange_inflow_fade": "ExchangeInflowFade",
+    "trend_reset": "TrendReset",
 }
 
 
@@ -1928,10 +1929,10 @@ def _family_class(name: str):
     carry family lives beside the carry unit in `qr.strategies.carry`, which
     imports helpers from the library and so cannot be imported *by* it.
     """
-    from qr.strategies import auction, carry, cot, etfflow, inflow, intraday, library, oi, pairs, unlocks
+    from qr.strategies import auction, carry, cot, etfflow, inflow, intraday, library, oi, pairs, trend, unlocks
 
     cls_name = FAMILIES[name]
-    for module in (library, carry, auction, intraday, oi, unlocks, pairs, etfflow, cot, inflow):
+    for module in (library, carry, auction, intraday, oi, unlocks, pairs, etfflow, cot, inflow, trend):
         if hasattr(module, cls_name):
             return getattr(module, cls_name)
     raise KeyError(f"no strategy class {cls_name!r} for family {name!r}")

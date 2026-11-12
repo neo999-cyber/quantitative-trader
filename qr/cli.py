@@ -68,6 +68,7 @@ FAMILIES = {
     "carry_crowding_timer": "CarryCrowdingTimer",
     "exchange_inflow_fade": "ExchangeInflowFade",
     "trend_reset": "TrendReset",
+    "momentum_breakout": "MomentumBreakout",
 }
 
 
@@ -1946,10 +1947,10 @@ def _family_class(name: str):
     carry family lives beside the carry unit in `qr.strategies.carry`, which
     imports helpers from the library and so cannot be imported *by* it.
     """
-    from qr.strategies import auction, carry, cot, etfflow, inflow, intraday, library, oi, pairs, trend, unlocks
+    from qr.strategies import auction, breakout, carry, cot, etfflow, inflow, intraday, library, oi, pairs, trend, unlocks
 
     cls_name = FAMILIES[name]
-    for module in (library, carry, auction, intraday, oi, unlocks, pairs, etfflow, cot, inflow, trend):
+    for module in (library, carry, auction, intraday, oi, unlocks, pairs, etfflow, cot, inflow, trend, breakout):
         if hasattr(module, cls_name):
             return getattr(module, cls_name)
     raise KeyError(f"no strategy class {cls_name!r} for family {name!r}")
@@ -2057,6 +2058,9 @@ def _universe_spec(args, market: str) -> UniverseSpec:
             **extra,
         )
     name = f"{market.replace('/', '_')}_ranks{args.rank_min}_{args.n}" if getattr(args, "rank_min", None) else None
+    if name is None and market == "spot" and args.n != UniverseSpec.n:
+        # until 12 November 2026 every spot run was recorded as `binance_spot_top30` whatever its --n
+        name = f"binance_spot_top{args.n}"
     return UniverseSpec(n=args.n, lookback=args.lookback, min_history=args.min_history, **extra, **({"name": name} if name else {}))
 
 

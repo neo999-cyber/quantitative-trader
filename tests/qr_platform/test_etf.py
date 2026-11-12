@@ -83,11 +83,85 @@ def test_the_loader_reads_adjusted_prices_not_traded_ones():
 
 
 def test_the_traded_price_is_kept_because_share_counts_need_it():
-    frame = to_frame(tiingo_rows(n=300, dividend=0.05))
+    rows = tiingo_rows(n=300, dividend=0.05)
+    frame = to_frame(rows)
     assert "close_unadjusted" in frame
     assert not np.allclose(frame["close"], frame["close_unadjusted"])
-    # Dollar volume is computed on what actually changed hands.
-    assert np.allclose(frame["quote_volume"], frame["volume"] * frame["close_unadjusted"])
+    # Dollar volume is computed on what actually changed hands ...
+    shares = np.array([r["volume"] for r in rows], dtype=float)
+    assert np.allclose(frame["quote_volume"], shares * frame["close_unadjusted"])
+    # ... and the share count is stated in the frame's own price space, so dollars over shares is the adjusted close.
+    assert np.allclose(frame["volume"] * frame["close"], frame["quote_volume"], rtol=1e-12)
+    assert np.array_equal(to_frame(tiingo_rows(n=300, adjusted=False))["volume"], shares)   # unadjusted: untouched
+
+
+def _vendor_rows(n=600, split_at=300, quarterly=0.006, seed=4):
+    """Tiingo rows adjusted the way the vendor adjusts them: backwards from the last bar, for a 2:1 split and a
+    distribution every quarter, so the oldest bars' adjusted prices are under half the traded ones (SPY's first bar is
+    at 0.55). `adjVolume` is split-adjusted only, as Tiingo's is."""
+    rng = np.random.default_rng(seed)
+    dates = pd.bdate_range("2016-01-04", periods=n)
+    raw = 100.0 * np.exp(np.cumsum(rng.normal(0.0003, 0.01, n)))
+    shares = rng.integers(500_000, 2_000_000, n).astype(float)
+    raw[split_at:] /= 2.0
+    shares[split_at:] *= 2.0
+    div = np.zeros(n)
+    div[63::63] = quarterly * raw[62::63][: len(div[63::63])]
+    split = np.ones(n)
+    split[split_at] = 2.0
+    factor, price_factor = np.ones(n), np.ones(n)
+    for i in range(n - 2, -1, -1):                                         # the factor for bar i covers every event after it
+        price_factor[i] = price_factor[i + 1] * (1.0 / split[i + 1]) * (1.0 - div[i + 1] / raw[i])
+        factor[i] = factor[i + 1] * split[i + 1]
+    rows = []
+    for i, day in enumerate(dates):
+        o, h, lo, c = raw[i] * 0.999, raw[i] * 1.006, raw[i] * 0.994, raw[i]
+        f = price_factor[i]
+        rows.append({"date": day.strftime("%Y-%m-%dT00:00:00.000Z"), "open": o, "high": h, "low": lo, "close": c,
+                     "volume": shares[i], "adjOpen": o * f, "adjHigh": h * f, "adjLow": lo * f, "adjClose": c * f,
+                     "adjVolume": shares[i] * factor[i], "divCash": div[i], "splitFactor": split[i]})
+    return rows
+
+
+def test_an_adjusted_etf_written_through_the_ingest_is_tradable_in_its_own_price_space(tmp_path, capsys):
+    """The lake's `etf` market was withheld by the engine bar by bar (`docs/20`, 12 November 2026).
+
+    Its frames held dividend- and split-adjusted prices beside the share count as traded and the true dollar volume,
+    so dollars over shares was the traded price, outside the adjusted bar; `Panel.tradable` has refused such a bar
+    since 17 September, which left SPY 3.9% of its 2007-2022 bars and eight of the twelve funds none, and
+    `qr families --asset etf` would have traded an almost empty universe without a word. The ingest now states the
+    share count in the adjusted price space; the dollars stay what changed hands.
+    """
+    from qr.cli import main
+    from qr.config import paths
+    from qr.data.lake import Lake
+    from qr.data.qa import check_klines
+
+    rows = _vendor_rows()
+    mirror = LocalTiingo(tmp_path / "tiingo")
+    mirror.write("SPY", rows, {"name": "SPDR S&P 500", "exchangeCode": "NYSE ARCA"})
+    mirror.write("GLD", tiingo_rows(n=400, seed=5))                       # pays nothing: the one fund that was whole
+    root = tmp_path / "lake"
+    assert main(["--root", str(root), "data", "etf-ingest", "--tiingo-mirror", str(mirror.root)]) == 0
+    capsys.readouterr()
+
+    lake = Lake(paths(root))
+    panel = lake.load_panel(source="tiingo", market="etf")
+    assert panel.tradable().equals(panel.close.notna())                      # every bar each fund has, and no other
+    frame = lake.read_klines("SPY", source="tiingo", market="etf")
+    shares = np.array([r["volume"] for r in rows], dtype=float)
+    traded = np.array([r["close"] for r in rows], dtype=float)
+    assert frame["close"].iloc[0] / frame["close_unadjusted"].iloc[0] < 0.5   # the fixture is adjusted, by a lot
+    assert np.allclose(frame["volume"] * frame["close"], frame["quote_volume"], rtol=1e-12)
+    assert np.allclose(frame["quote_volume"], shares * traded)              # true dollars
+    assert np.allclose(frame["close_unadjusted"], traded)
+    assert np.allclose(frame["quote_volume"] / frame["close_unadjusted"], shares)   # nothing measured is lost
+    assert not check_klines(frame, "SPY", calendar="xnys").failures
+
+    # The frame as the ingest wrote it until 12 November: refused by the engine before the split, and now by QA too.
+    before = frame.assign(volume=shares)
+    assert not Panel.from_frames({"SPY": before}).tradable()["SPY"].iloc[:300].any()
+    assert "quote_volume_consistent" in {c.name for c in check_klines(before, "SPY", calendar="xnys").failures}
 
 
 def test_a_feed_with_no_adjusted_columns_is_flagged_rather_than_trusted():
@@ -333,9 +407,13 @@ def test_an_adjusted_series_is_not_reported_as_column_misalignment():
     """The check that called eleven of twelve real ETFs corrupt.
 
     `quote_volume` is the notional that actually changed hands, so it is built
-    from the traded price; the OHLC columns are dividend-adjusted. Comparing
-    the implied VWAP against the adjusted range fails every bar before the last
+    from the traded price; the OHLC columns are dividend-adjusted. Against a
+    share count as traded, the implied VWAP fails every bar before the last
     distribution — and the only fund that passed was the one that pays none.
+    That was first fixed in the check (12 September, a factor that moved the
+    VWAP into the adjusted space) and since 12 November 2026 at the source: the
+    loader states the share count in the adjusted space, and the check asks the
+    question `Panel.tradable()` asks.
     """
     from qr.data.qa import check_klines
 

@@ -9,6 +9,7 @@ from qr.config import paths
 from qr.data import trendbars as tb
 from qr.data.lake import Lake
 from qr.data.panel import FIELDS, Panel
+from qr.data.qa import check_klines
 from qr.strategies import trend as tr
 from qr.strategies.trend import TrendReset, features
 
@@ -102,14 +103,20 @@ def test_builders_write_bars_with_the_rule_inputs(tmp_path, monkeypatch):
     monkeypatch.setattr(tb, "SYMBOL_START", {"AAA": days[100].date().isoformat()})   # a ticker that meant something else before
     assert tb.build_trend_xnas(lake, ["AAA"]).iloc[0]["sessions"] == 320
     etf = _daily(_walk(500, seed=9)); etf["close_unadjusted"] = etf["close"] * 1.4; etf["dividend"] = 0.0
-    etf["quote_volume"] = etf["volume"] * etf["close_unadjusted"]         # as the lake holds it: adjusted prices, raw shares, true dollars
+    etf["quote_volume"] = etf["volume"] * etf["close_unadjusted"]         # as the lake held it until 12 November: adjusted prices, shares as traded, true dollars
     lake.write_klines("SPY", etf, "1d", source="tiingo", market="etf")
-    assert not lake.load_panel(["SPY"], "1d", source="tiingo", market="etf").tradable().any().any()   # which the engine refuses as it stands
+    assert not lake.load_panel(["SPY"], "1d", source="tiingo", market="etf").tradable().any().any()   # which the engine refuses
+    assert "quote_volume_consistent" in {c.name for c in check_klines(etf, "SPY", calendar="xnys").failures}   # and QA with it
     assert tb.build_trend_etf(lake, ["SPY"]).iloc[0]["sessions"] == 500
     out = lake.read_klines("SPY", "1d", source="tiingo", market="trend-etf")
     assert "dividend" not in out.columns and np.allclose(out["close"], etf["close"]) and out["trend_ok"].notna().all()
     assert np.allclose(out["volume"] * out["close"], out["quote_volume"])
     assert lake.load_panel(["SPY"], "1d", source="tiingo", market="trend-etf").tradable().all().all()
+    # QA asks the engine's question: until 12 November it moved dollars over shares by close / close_unadjusted a second
+    # time, and failed both instruments before every split or distribution on bars the engine trades (gate 1 reads that
+    # as a data failure on a held name).
+    assert not check_klines(out, "SPY", "1d", calendar="xnys").failures
+    assert not check_klines(frame, "AAA", "1d", calendar="xnys").failures
     panel = lake.load_panel(["AAA"], "1d", source="databento", market="trend-xnas")
     assert panel.get("zprior_63") is not None and panel.get("trend_ok") is not None
 

@@ -573,6 +573,36 @@ metrics start 2021-12, so the sample cannot grow backwards) or on a
 second venue's OI (Bybit's is mirrored for funding only) — a new
 pre-registration, not a re-run.
 
+**12 November 2026, evening Dubai — the ETF ticket from item (2) below is closed: the lake's `etf` market is
+restated and tradable, and QA asks the engine's question. No verdict moves.** `qr/data/tiingo.py` now states each
+bar's share count in the adjusted price space at ingest (`volume` = shares as traded × `close_unadjusted` / `close`,
+so dollars over shares is the adjusted close). `quote_volume` stays the dollars that changed hands and
+`close_unadjusted` stays the traded close, so the shares as traded remain `quote_volume / close_unadjusted` exactly.
+Tiingo's `adjVolume` was not usable: it is adjusted for splits only. The twelve frames were re-ingested from the
+untouched Tiingo mirror (`qr data etf-ingest`, no download). Bar counts, dates and every other column are
+bit-identical; `volume` alone changed. Share of each fund's bars that `Panel.tradable()` admits, before → after, in
+percent:
+
+| | DBC | EEM | EFA | GLD | HYG | IEF | IWM | LQD | QQQ | SPY | TLT | VNQ |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 2007–2022 | 0 → 100 | 0 → 100 | 0 → 100 | 100 → 100 | 0 → 100 | 0 → 100 | 6.5 → 100 | 0 → 100 | 28.9 → 100 | 3.9 → 100 | 0 → 100 | 0 → 100 |
+| all bars | 8.3 → 100 | 10.2 → 100 | 6.2 → 99.98 | 100 → 100 | 4.3 → 100 | 5.5 → 100 | 18.0 → 100 | 4.5 → 100 | 30.2 → 100 | 12.8 → 100 | 4.9 → 100 | 7.1 → 100 |
+
+The one bar still withheld is EFA's second day, 2001-08-20, which traded no shares. **A second fault, found while
+closing it.** Since 12 September, `qa.check_klines` had multiplied dollars over shares by `close / close_unadjusted`.
+That suited the old ETF frames and counted the adjustment twice on a frame already restated. Before this change,
+`quote_volume_consistent` failed `trend-etf` on 11 of 12 funds and `trend-xnas` on the 11 names with a split, on bars
+the engine trades. Gate 1 would have read that as a data failure on a held name in Programme 6's run, and so would
+the restated `etf` market. QA now judges the implied VWAP in the frame's own price space, as `Panel.tradable()`
+does. All 12 `etf`, 12 `trend-etf` and 31 `trend-xnas` frames now pass it, and a frame with shares as traded beside
+adjusted prices fails it, as the engine refuses it. `trend-etf` needed no rebuild, because its builder had restated
+the same numbers. Tests: `tests/qr_platform/test_etf.py` (the ingest path on a vendor-style back-adjusted fixture
+with a split and distributions) and `tests/qr_platform/test_trendbars.py` (QA on both instruments); both fail on the
+previous code. The ETF trial's verdicts and reports (`docs/08`) are unchanged: nothing was re-run. One input will
+differ if the trial is ever re-run: the RSI control's relative volume, by at most one distribution's size on bars
+whose 20-bar window spans an ex-date. Nothing ran through the engine and nothing was registered. The trial log is
+byte-identical (1,057 records, chain verified). Manifest hash after: `239c3204…`.
+
 **12 November 2026 — two lake observations from building Programme 6's instruments (`docs/prereg/p6_trend_reset_v1.md`,
 a draft). No verdict moves.** (1) **The session bars the 1 November note asked for now exist.** `qr data trend-build`
 writes market `trend-xnas`: one bar per regular session for the 31 names from the lake's minute bars — the open of

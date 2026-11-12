@@ -172,10 +172,10 @@ def build_trend_etf(lake, symbols=None) -> pd.DataFrame:
             continue
         keep = [c for c in ("open", "high", "low", "close", "volume", "quote_volume", "close_unadjusted") if c in bars.columns]
         frame = bars[keep].sort_index().copy()
-        # The lake's ETF bars carry adjusted prices beside raw share volume and true dollar volume, so dollars over
-        # shares is the raw price and sits outside the adjusted bar — which `Panel.tradable` rightly refuses (it masks
-        # every dividend-paying ETF there: an engine observation, `docs/20`, 12 November 2026). Here the share volume
-        # is restated in the instrument's own price space, as the auction instrument does.
+        # Dollars over shares must be a price on the bar, or `Panel.tradable` refuses it. The ETF ingest states the
+        # share count in the adjusted price space since 12 November 2026 (`qr/data/tiingo.py`, `docs/20`), so on a lake
+        # ingested since then this restates the same numbers; it stays so that a lake ingested before then — adjusted
+        # prices beside shares as traded, every dividend payer masked — still builds a consistent instrument.
         if "quote_volume" in frame.columns:
             frame["volume"] = frame["quote_volume"] / frame["close"]
         frame = with_features(frame)

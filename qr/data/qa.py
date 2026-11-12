@@ -287,18 +287,20 @@ def check_klines(
     if "quote_volume" in frame and "volume" in frame:
         traded = frame["volume"] > 0
         vwap = frame["quote_volume"].where(traded) / frame["volume"].where(traded)
-        # The two sides must be in the same price space. A dividend-adjusted
-        # frame carries an adjusted range and a `quote_volume` built from the
-        # price that actually changed hands, so comparing them directly fails
-        # every bar before the most recent distribution — which is what an
-        # adjusted ETF series looks like: eleven of twelve funds "corrupt", and
-        # the one that pays nothing clean. The factor puts the implied VWAP
-        # back into the frame's own space before the comparison.
-        low, high = l, h
-        if "close_unadjusted" in frame:
-            factor = (frame["close"] / frame["close_unadjusted"]).replace([np.inf, -np.inf], np.nan)
-            vwap = vwap * factor.where(factor > 0)
-        outside = traded & ((vwap < low * (1 - quote_volume_tolerance)) | (vwap > high * (1 + quote_volume_tolerance)))
+        # Judged in the frame's own price space, as `Panel.tradable()` judges
+        # it: dollars over shares must be a price on the bar. Every frame the
+        # lake writes states its share count in that space — the Tiingo ETFs
+        # (since 12 November 2026), the split-adjusted session bars, the
+        # auction and intraday instruments — so an adjusted frame is held to
+        # the same identity as a raw one, and a frame QA passes is one the
+        # engine will trade. From 12 September to 12 November this multiplied
+        # the VWAP by close / close_unadjusted, which suited ETF frames that
+        # carried shares as traded beside adjusted prices and double-counted
+        # the adjustment on a frame that had restated them: `trend-etf` and
+        # `trend-xnas` failed here before every distribution or split while
+        # the engine traded those bars, which gate 1 reads as a data failure
+        # on a held name (`docs/20`, 12 November 2026).
+        outside = traded & ((vwap < l * (1 - quote_volume_tolerance)) | (vwap > h * (1 + quote_volume_tolerance)))
         add(
             "quote_volume_consistent",
             outside,

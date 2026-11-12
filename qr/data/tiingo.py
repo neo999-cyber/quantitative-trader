@@ -235,10 +235,24 @@ def to_frame(rows: Iterable[dict], adjusted: bool = True) -> pd.DataFrame:
     close is kept as `close_unadjusted` because position sizing, share counts
     and the broker's per-order minimum all key off the price actually paid.
 
-    `quote_volume` is dollar volume — volume times price — which is the field
-    the universe and the impact model both expect, and it is computed from the
-    **unadjusted** pair, because that is the notional that actually changed
-    hands on the day.
+    `quote_volume` is dollar volume, the field the universe and the impact
+    model both expect, and it is computed from the **unadjusted** pair —
+    Tiingo's share count times the traded close — because that is the notional
+    that actually changed hands on the day.
+
+    `volume` is that share count stated in the frame's own price space: shares
+    times traded over adjusted close, so that `quote_volume / volume` is the
+    adjusted close, a price on the adjusted bar. That is the identity
+    `Panel.tradable()` and `qa.check_klines` hold every bar to. Until 12
+    November 2026 `volume` was the share count as traded, which put dollars
+    over shares at the traded price — outside the adjusted bar by every
+    distribution and split since — and the engine withheld those bars: every
+    dividend payer's history (`docs/20`, 12 November 2026). Nothing measured
+    is lost, since the shares as traded are `quote_volume / close_unadjusted`.
+    Tiingo's own `adjVolume` is not used: it is adjusted for splits and not for
+    distributions, so its implied price still sits off the adjusted bar (SPY's
+    first bar by 45%). Where the ratio cannot be formed (a missing or
+    non-positive close) the share count as traded is kept.
     """
     frame = pd.DataFrame(list(rows))
     if frame.empty:
@@ -263,16 +277,19 @@ def to_frame(rows: Iterable[dict], adjusted: bool = True) -> pd.DataFrame:
             return values.where(values.notna(), raw)
         return pd.to_numeric(frame[name], errors="coerce")
 
-    volume = pd.to_numeric(frame.get("volume", pd.Series(np.nan, index=frame.index)), errors="coerce")
+    shares = pd.to_numeric(frame.get("volume", pd.Series(np.nan, index=frame.index)), errors="coerce")
     raw_close = pd.to_numeric(frame["close"], errors="coerce")
+    close = column("close")
+    with np.errstate(divide="ignore", invalid="ignore"):
+        ratio = (raw_close / close).where((close > 0) & (raw_close > 0), 1.0)   # exactly 1.0 where unadjusted
     out = pd.DataFrame(
         {
             "open": column("open").to_numpy(),
             "high": column("high").to_numpy(),
             "low": column("low").to_numpy(),
-            "close": column("close").to_numpy(),
-            "volume": volume.to_numpy(),
-            "quote_volume": (volume * raw_close).to_numpy(),
+            "close": close.to_numpy(),
+            "volume": (shares * ratio).to_numpy(),
+            "quote_volume": (shares * raw_close).to_numpy(),
             "close_unadjusted": raw_close.to_numpy(),
         },
         index=index,

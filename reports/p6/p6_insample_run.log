@@ -1,0 +1,244 @@
+=== p6_trend_reset_v1 18:15:47
+  gate 0 preregistration…
+  gate 0 pre-registration: PASS (0s)
+  gate 1 data integrity…
+  gate 1 data integrity: FAIL (0s)
+  gate 2 cost survival…
+  gate 2 cost survival: PASS (0s)
+  gate 3 significance…
+  gate 3 single-strategy significance: WARN (1s)
+  gate 4 deflation…
+  gate 4 multiple-testing deflation: PASS (0s)
+  gate 5 selection…
+  gate 5 selection overfitting: FAIL (0s)
+  gate 6 permutation…
+  gate 6 permutation: FAIL (346s)
+  gate 7 cross validation…
+  gate 7 cross-validated OOS: PASS (0s)
+  gate 8 robustness…
+  gate 8 robustness and regime: FAIL (0s)
+| gate | name | verdict | detail |
+|---|---|---|---|
+| 0 | pre-registration | PASS | registered 2026-11-12T14:15:34 |
+| 1 | data integrity | FAIL | QA failed for AAPL, AMZN, AVGO, BKNG, GOOG, which this strategy holds |
+| 2 | cost survival | PASS | 99% of gross survives; Sharpe 0.98 at 2x costs; capacity about $30,000,000 before impact takes a further 10% of gross |
+| 3 | single-strategy significance | WARN | t = 2.63, PSR = 0.99 |
+| 4 | multiple-testing deflation | PASS | DSR = 0.978 over 8 trials (effective rank 2), haircut Sharpe 0.50 |
+| 5 | selection overfitting | FAIL | PBO = 0.56 over 12870 splits of 8 variants; selection is arbitrary but stays profitable out of sample (5% losing) — the variants are interchangeable; SPA p = 0.711 vs exposure-matched buy-and-hold (86% invested) — no variant beats holding the universe at its own size |
+| 6 | permutation | FAIL | bar permutation p = 0.751 (25th percentile, re-optimised over 8 of 8 variants); random entry p = 0.204; volatility-preserving null p = 0.955 (4th percentile, reported, not binding) |
+| 7 | cross-validated OOS | PASS | median path Sharpe 0.69 = 69% of in-sample; 100% of 9 paths positive; WFE 0.58 |
+| 8 | robustness and regime | FAIL | alpha t = 1.18 against beta 0.67 to equal_weight: this is the market, not the strategy |
+
+
+verdict: FAIL — stopped at gate 1 (data integrity): QA failed for AAPL, AMZN, AVGO, BKNG, GOOG, which this strategy holds
+
+wrote /Users/anoop/qr/lake/reports/p6_trend_reset_v1.md
+      /Users/anoop/qr/lake/reports/p6_trend_reset_v1.json
+      /Users/anoop/qr/lake/reports/p6_trend_reset_v1_variant_returns.parquet
+=== p6_trend_reset_v1_trend 18:21:37
+  gate 0 preregistration…
+  gate 0 pre-registration: PASS (0s)
+  gate 1 data integrity…
+  gate 1 data integrity: FAIL (0s)
+  gate 2 cost survival…
+  gate 2 cost survival: PASS (0s)
+  gate 3 significance…
+  gate 3 single-strategy significance: FAIL (1s)
+  gate 4 deflation…
+  gate 4 multiple-testing deflation: PASS (0s)
+  gate 5 selection…
+  gate 5 selection overfitting: SKIP (0s)
+  gate 6 permutation…
+  gate 6 permutation: FAIL (65s)
+  gate 7 cross validation…
+  gate 7 cross-validated OOS: PASS (0s)
+  gate 8 robustness…
+  gate 8 robustness and regime: FAIL (0s)
+| gate | name | verdict | detail |
+|---|---|---|---|
+| 0 | pre-registration | PASS | registered 2026-11-12T14:15:34 |
+| 1 | data integrity | FAIL | QA failed for AAPL, AMZN, AVGO, BKNG, GOOG, which this strategy holds |
+| 2 | cost survival | PASS | 99% of gross survives; Sharpe 0.86 at 2x costs; capacity about $30,000,000 before impact takes a further 10% of gross |
+| 3 | single-strategy significance | FAIL | HAC t = 2.29 |
+| 4 | multiple-testing deflation | PASS | DSR = 0.983 over 1 trials (effective rank 1), haircut Sharpe 0.87 |
+| 5 | selection overfitting | SKIP | only one variant was run, so nothing was selected; PBO does not apply |
+| 6 | permutation | FAIL | bar permutation p = 0.861 (14th percentile, single variant, no re-optimisation); random entry p = 0.537; volatility-preserving null p = 0.955 (4th percentile, reported, not binding) |
+| 7 | cross-validated OOS | PASS | median path Sharpe 0.87 = 100% of in-sample; 100% of 9 paths positive; WFE 0.58 |
+| 8 | robustness and regime | FAIL | alpha t = 0.54 against beta 0.87 to equal_weight: this is the market, not the strategy |
+
+
+verdict: FAIL — stopped at gate 1 (data integrity): QA failed for AAPL, AMZN, AVGO, BKNG, GOOG, which this strategy holds
+
+wrote /Users/anoop/qr/lake/reports/p6_trend_reset_v1_trend.md
+      /Users/anoop/qr/lake/reports/p6_trend_reset_v1_trend.json
+      /Users/anoop/qr/lake/reports/p6_trend_reset_v1_trend_variant_returns.parquet
+=== p6_trend_reset_v1_mirror 18:22:45
+  gate 0 preregistration…
+  gate 0 pre-registration: PASS (0s)
+  gate 1 data integrity…
+  gate 1 data integrity: FAIL (0s)
+  gate 2 cost survival…
+  gate 2 cost survival: PASS (0s)
+  gate 3 significance…
+  gate 3 single-strategy significance: FAIL (1s)
+  gate 4 deflation…
+  gate 4 multiple-testing deflation: WARN (0s)
+  gate 5 selection…
+  gate 5 selection overfitting: FAIL (0s)
+  gate 6 permutation…
+  gate 6 permutation: FAIL (187s)
+  gate 7 cross validation…
+  gate 7 cross-validated OOS: PASS (0s)
+  gate 8 robustness…
+  gate 8 robustness and regime: FAIL (0s)
+| gate | name | verdict | detail |
+|---|---|---|---|
+| 0 | pre-registration | PASS | registered 2026-11-12T14:15:35 |
+| 1 | data integrity | FAIL | QA failed for AAPL, AMZN, AVGO, BKNG, GOOG, which this strategy holds |
+| 2 | cost survival | PASS | 98% of gross survives; Sharpe 0.88 at 2x costs; capacity about $30,000,000 before impact takes a further 10% of gross |
+| 3 | single-strategy significance | FAIL | HAC t = 2.37 |
+| 4 | multiple-testing deflation | WARN | DSR = 0.94 |
+| 5 | selection overfitting | FAIL | PBO = 0.21 over 12870 splits of 4 variants; selection is arbitrary but stays profitable out of sample (2% losing) — the variants are interchangeable; SPA p = 0.740 vs exposure-matched buy-and-hold (86% invested) — no variant beats holding the universe at its own size |
+| 6 | permutation | FAIL | bar permutation p = 0.891 (11th percentile, re-optimised over 4 of 4 variants); random entry p = 0.443; volatility-preserving null p = 0.970 (3th percentile, reported, not binding) |
+| 7 | cross-validated OOS | PASS | median path Sharpe 0.81 = 91% of in-sample; 100% of 9 paths positive; WFE 0.62 |
+| 8 | robustness and regime | FAIL | alpha t = 0.95 against beta 0.60 to equal_weight: this is the market, not the strategy |
+
+
+verdict: FAIL — stopped at gate 1 (data integrity): QA failed for AAPL, AMZN, AVGO, BKNG, GOOG, which this strategy holds
+
+wrote /Users/anoop/qr/lake/reports/p6_trend_reset_v1_mirror.md
+      /Users/anoop/qr/lake/reports/p6_trend_reset_v1_mirror.json
+      /Users/anoop/qr/lake/reports/p6_trend_reset_v1_mirror_variant_returns.parquet
+=== p6_trend_reset_v1_placebo 18:25:56
+  gate 0 preregistration…
+  gate 0 pre-registration: PASS (0s)
+  gate 1 data integrity…
+  gate 1 data integrity: FAIL (1s)
+  gate 2 cost survival…
+  gate 2 cost survival: PASS (0s)
+  gate 3 significance…
+  gate 3 single-strategy significance: FAIL (1s)
+  gate 4 deflation…
+  gate 4 multiple-testing deflation: PASS (0s)
+  gate 5 selection…
+  gate 5 selection overfitting: FAIL (0s)
+  gate 6 permutation…
+  gate 6 permutation: FAIL (420s)
+  gate 7 cross validation…
+  gate 7 cross-validated OOS: WARN (0s)
+  gate 8 robustness…
+  gate 8 robustness and regime: FAIL (0s)
+| gate | name | verdict | detail |
+|---|---|---|---|
+| 0 | pre-registration | PASS | registered 2026-11-12T14:15:35 |
+| 1 | data integrity | FAIL | QA failed for AAPL, AMZN, AVGO, BKNG, GOOG, which this strategy holds |
+| 2 | cost survival | PASS | 98% of gross survives; Sharpe 0.82 at 2x costs; capacity about $30,000,000 before impact takes a further 10% of gross |
+| 3 | single-strategy significance | FAIL | HAC t = 2.32 |
+| 4 | multiple-testing deflation | PASS | DSR = 0.963 over 8 trials (effective rank 2), haircut Sharpe 0.28 |
+| 5 | selection overfitting | FAIL | PBO = 0.92 over 12870 splits of 8 variants; selection is arbitrary but stays profitable out of sample (9% losing) — the variants are interchangeable; SPA p = 0.781 vs exposure-matched buy-and-hold (70% invested) — no variant beats holding the universe at its own size |
+| 6 | permutation | FAIL | bar permutation p = 0.886 (12th percentile, re-optimised over 8 of 8 variants); random entry p = 0.572; volatility-preserving null p = 0.980 (2th percentile, reported, not binding) |
+| 7 | cross-validated OOS | WARN | median path Sharpe 0.55 = 65% of in-sample; 100% of 9 paths positive; WFE 0.35 |
+| 8 | robustness and regime | FAIL | alpha t = 0.53 against beta 0.59 to equal_weight: this is the market, not the strategy |
+
+
+verdict: FAIL — stopped at gate 1 (data integrity): QA failed for AAPL, AMZN, AVGO, BKNG, GOOG, which this strategy holds
+
+wrote /Users/anoop/qr/lake/reports/p6_trend_reset_v1_placebo.md
+      /Users/anoop/qr/lake/reports/p6_trend_reset_v1_placebo.json
+      /Users/anoop/qr/lake/reports/p6_trend_reset_v1_placebo_variant_returns.parquet
+=== p6_trend_reset_v1_etf 18:33:00
+  gate 0 preregistration…
+  gate 0 pre-registration: PASS (0s)
+  gate 1 data integrity…
+  gate 1 data integrity: FAIL (0s)
+  gate 2 cost survival…
+  gate 2 cost survival: PASS (0s)
+  gate 3 significance…
+  gate 3 single-strategy significance: PASS (1s)
+  gate 4 deflation…
+  gate 4 multiple-testing deflation: PASS (0s)
+  gate 5 selection…
+  gate 5 selection overfitting: WARN (1s)
+  gate 6 permutation…
+  gate 6 permutation: PASS (673s)
+  gate 7 cross validation…
+  gate 7 cross-validated OOS: PASS (0s)
+  gate 8 robustness…
+  gate 8 robustness and regime: WARN (0s)
+| gate | name | verdict | detail |
+|---|---|---|---|
+| 0 | pre-registration | PASS | registered 2026-11-12T14:15:35 |
+| 1 | data integrity | FAIL | QA failed for DBC, EEM, EFA, HYG, IEF, which this strategy holds |
+| 2 | cost survival | PASS | 96% of gross survives; Sharpe 0.80 at 2x costs; capacity about $10,000,000 before impact takes a further 10% of gross |
+| 3 | single-strategy significance | PASS | t = 3.45, PSR = 1.000, CI excludes zero |
+| 4 | multiple-testing deflation | PASS | DSR = 0.998 over 8 trials (effective rank 2), haircut Sharpe 0.61 |
+| 5 | selection overfitting | WARN | PBO = 0.44 over 12870 splits of 8 variants; selection is arbitrary but stays profitable out of sample (0% losing) — the variants are interchangeable; SPA p = 0.317 vs exposure-matched buy-and-hold (64% invested) |
+| 6 | permutation | PASS | bar permutation p = 0.030 (98th percentile, re-optimised over 8 of 8 variants); random entry p = 0.010; volatility-preserving null p = 0.672 (33th percentile, reported, not binding) |
+| 7 | cross-validated OOS | PASS | median path Sharpe 0.83 = 100% of in-sample; 100% of 9 paths positive; WFE 0.80 |
+| 8 | robustness and regime | WARN | alpha t = 2.85 |
+
+
+verdict: FAIL — stopped at gate 1 (data integrity): QA failed for DBC, EEM, EFA, HYG, IEF, which this strategy holds
+
+wrote /Users/anoop/qr/lake/reports/p6_trend_reset_v1_etf.md
+      /Users/anoop/qr/lake/reports/p6_trend_reset_v1_etf.json
+      /Users/anoop/qr/lake/reports/p6_trend_reset_v1_etf_variant_returns.parquet
+=== p6_trend_reset_v1_etf_trend 18:44:18
+  gate 0 preregistration…
+  gate 0 pre-registration: PASS (0s)
+  gate 1 data integrity…
+  gate 1 data integrity: FAIL (0s)
+  gate 2 cost survival…
+  gate 2 cost survival: PASS (0s)
+  gate 3 significance…
+  gate 3 single-strategy significance: PASS (1s)
+  gate 4 deflation…
+  gate 4 multiple-testing deflation: PASS (0s)
+  gate 5 selection…
+  gate 5 selection overfitting: SKIP (0s)
+  gate 6 permutation…
+  gate 6 permutation: PASS (111s)
+  gate 7 cross validation…
+  gate 7 cross-validated OOS: PASS (0s)
+  gate 8 robustness…
+  gate 8 robustness and regime: WARN (0s)
+| gate | name | verdict | detail |
+|---|---|---|---|
+| 0 | pre-registration | PASS | registered 2026-11-12T14:15:36 |
+| 1 | data integrity | FAIL | QA failed for DBC, EEM, EFA, HYG, IEF, which this strategy holds |
+| 2 | cost survival | PASS | 97% of gross survives; Sharpe 0.70 at 2x costs; capacity about $30,000,000 before impact takes a further 10% of gross |
+| 3 | single-strategy significance | PASS | t = 3.08, PSR = 0.998, CI excludes zero |
+| 4 | multiple-testing deflation | PASS | DSR = 0.998 over 1 trials (effective rank 1), haircut Sharpe 0.72 |
+| 5 | selection overfitting | SKIP | only one variant was run, so nothing was selected; PBO does not apply |
+| 6 | permutation | PASS | bar permutation p = 0.045 (96th percentile, single variant, no re-optimisation); random entry p = 0.020; volatility-preserving null p = 0.816 (18th percentile, reported, not binding) |
+| 7 | cross-validated OOS | PASS | median path Sharpe 0.72 = 100% of in-sample; 100% of 9 paths positive; WFE 1.19 |
+| 8 | robustness and regime | WARN | alpha t = 2.43 |
+
+
+verdict: FAIL — stopped at gate 1 (data integrity): QA failed for DBC, EEM, EFA, HYG, IEF, which this strategy holds
+
+wrote /Users/anoop/qr/lake/reports/p6_trend_reset_v1_etf_trend.md
+      /Users/anoop/qr/lake/reports/p6_trend_reset_v1_etf_trend.json
+      /Users/anoop/qr/lake/reports/p6_trend_reset_v1_etf_trend_variant_returns.parquet
+=== compare 18:46:13
+# `p6_trend_reset_v1` — the rule against its controls, 2026-11-12 (reads the sweeps' returns; runs nothing)
+
+| sweep | id | variants | net Sharpe, each | the median variant |
+|---|---|---|---|---|
+| rule | `p6_trend_reset_v1` | 8 | 0.99, 0.89, 0.81, 0.80, 0.75, 0.70, 0.69, 0.64 | `trend_reset_controlnone_hold63_near_zero0p25_roc21_was_high1` (0.80) |
+| trend | `p6_trend_reset_v1_trend` | 1 | 0.87 | `trend_reset_controltrend_hold63_near_zero0p25_roc63_was_high1` (0.87) |
+| mirror | `p6_trend_reset_v1_mirror` | 4 | 0.90, 0.78, 0.59, 0.31 | `trend_reset_controlmirror_hold63_near_zero0p25_roc21_was_high1p5` (0.78) |
+| placebo | `p6_trend_reset_v1_placebo` | 8 | 0.84, 0.84, 0.80, 0.78, 0.77, 0.70, 0.68, 0.65 | `trend_reset_controlplacebo_hold63_near_zero0p5_roc21_was_high1` (0.78) |
+| etf | `p6_trend_reset_v1_etf` | 8 | 0.83, 0.71, 0.67, 0.67, 0.66, 0.64, 0.62, 0.60 | `trend_reset_controlnone_hold63_near_zero0p5_roc21_was_high1p5` (0.67) |
+| etf_trend | `p6_trend_reset_v1_etf_trend` | 1 | 0.72 | `trend_reset_controltrend_hold63_near_zero0p25_roc63_was_high1` (0.72) |
+
+| the rule against | bars | mean difference, points a year | Newey–West t | Sharpe, rule − control | the memo's bar | met |
+|---|---|---|---|---|---|---|
+| its trend filter alone | 1551 | -6.2 | -0.99 | 0.80 − 0.87 = -0.07 | t ≥ 2 | **no** |
+| its placebo | 1551 | +1.9 | +0.32 | 0.80 − 0.78 = +0.02 | t ≥ 2 | **no** |
+| its mirror | 1551 | +2.3 | +0.40 | 0.80 − 0.78 = +0.03 | difference ≥ 0 | yes |
+| ETF arm: its trend filter alone | 4028 | -2.4 | -1.77 | 0.67 − 0.72 = -0.05 | reported | — |
+
+Conditions (2)–(4) of the memo: **not met**. Condition (1) is the candidate's own gate report; (5) is the ETF arm's.
+
+=== done 18:46:14

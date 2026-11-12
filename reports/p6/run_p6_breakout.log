@@ -1,0 +1,208 @@
+=== p6_breakout_crypto_v1 18:54:02
+restricted panel to 371 of 577 symbols (the rest are never in the universe)
+  gate 0 preregistration…
+  gate 0 pre-registration: PASS (0s)
+  gate 1 data integrity…
+  gate 1 data integrity: WARN (3s)
+  gate 2 cost survival…
+  gate 2 cost survival: PASS (1s)
+  gate 3 significance…
+  gate 3 single-strategy significance: FAIL (1s)
+  gate 4 deflation…
+  gate 4 multiple-testing deflation: PASS (0s)
+  gate 5 selection…
+  gate 5 selection overfitting: WARN (1s)
+  gate 6 permutation…
+  gate 6 permutation: FAIL (3365s)
+  gate 7 cross validation…
+  gate 7 cross-validated OOS: WARN (0s)
+  gate 8 robustness…
+  gate 8 robustness and regime: FAIL (0s)
+| gate | name | verdict | detail |
+|---|---|---|---|
+| 0 | pre-registration | PASS | registered 2026-11-12T14:46:22 |
+| 1 | data integrity | WARN | 38 held symbols with QA warnings; no lag spike (-8.8 standard errors over its neighbours) |
+| 2 | cost survival | PASS | 95% of gross survives; Sharpe 0.73 at 2x costs; capacity about $10,000 before impact takes a further 10% of gross |
+| 3 | single-strategy significance | FAIL | HAC t = 2.05 |
+| 4 | multiple-testing deflation | PASS | DSR = 0.957 over 8 trials (effective rank 2), haircut Sharpe 0.06 |
+| 5 | selection overfitting | WARN | PBO = 0.47 over 12870 splits of 8 variants; selection is arbitrary but stays profitable out of sample (8% losing) — the variants are interchangeable; SPA p = 0.097 vs exposure-matched buy-and-hold (13% invested) |
+| 6 | permutation | FAIL | bar permutation p = 0.249 (76th percentile, re-optimised over 8 of 8 variants); random entry p = 0.005; volatility-preserving null p = 0.070 (94th percentile, reported, not binding) |
+| 7 | cross-validated OOS | WARN | median path Sharpe 0.53 = 68% of in-sample; 100% of 9 paths positive; WFE 0.33 |
+| 8 | robustness and regime | FAIL | profitable in only 50% of years; alpha t = 1.73 against beta 0.10 to BTCUSDT: the factors explain only 3% of it, so this is neutral around nothing rather than market exposure |
+
+
+verdict: FAIL — stopped at gate 3 (single-strategy significance): HAC t = 2.05
+
+wrote /Users/anoop/qr/lake/reports/p6_breakout_crypto_v1.md
+      /Users/anoop/qr/lake/reports/p6_breakout_crypto_v1.json
+      /Users/anoop/qr/lake/reports/p6_breakout_crypto_v1_variant_returns.parquet
+=== p6_breakout_crypto_v1_leaders 19:50:20
+restricted panel to 371 of 577 symbols (the rest are never in the universe)
+  gate 0 preregistration…
+  gate 0 pre-registration: PASS (0s)
+  gate 1 data integrity…
+  gate 1 data integrity: WARN (3s)
+  gate 2 cost survival…
+  gate 2 cost survival: PASS (1s)
+  gate 3 significance…
+  gate 3 single-strategy significance: FAIL (1s)
+  gate 4 deflation…
+  gate 4 multiple-testing deflation: WARN (0s)
+  gate 5 selection…
+  gate 5 selection overfitting: FAIL (1s)
+  gate 6 permutation…
+  gate 6 permutation: FAIL (956s)
+  gate 7 cross validation…
+  gate 7 cross-validated OOS: WARN (0s)
+  gate 8 robustness…
+  gate 8 robustness and regime: FAIL (0s)
+| gate | name | verdict | detail |
+|---|---|---|---|
+| 0 | pre-registration | PASS | registered 2026-11-12T14:46:22 |
+| 1 | data integrity | WARN | 58 held symbols with QA warnings; no lag spike (-8.3 standard errors over its neighbours) |
+| 2 | cost survival | PASS | 91% of gross survives; Sharpe 0.51 at 2x costs; capacity about $1,000 before impact takes a further 10% of gross |
+| 3 | single-strategy significance | FAIL | HAC t = 1.56 |
+| 4 | multiple-testing deflation | WARN | DSR = 0.94 |
+| 5 | selection overfitting | FAIL | PBO = 0.70 over 12870 splits of 2 variants; the in-sample winner loses out of sample 14% of the time; SPA p = 0.166 vs exposure-matched buy-and-hold (39% invested) |
+| 6 | permutation | FAIL | bar permutation p = 0.249 (76th percentile, re-optimised over 2 of 2 variants); random entry p = 0.010; volatility-preserving null p = 0.055 (95th percentile, reported, not binding) |
+| 7 | cross-validated OOS | WARN | median path Sharpe 0.41 = 72% of in-sample; 100% of 9 paths positive; WFE -0.11 |
+| 8 | robustness and regime | FAIL | profitable in only 50% of years; alpha t = 1.04 against beta 0.29 to BTCUSDT: the factors explain only 8% of it, so this is neutral around nothing rather than market exposure |
+
+
+verdict: FAIL — stopped at gate 3 (single-strategy significance): HAC t = 1.56
+
+wrote /Users/anoop/qr/lake/reports/p6_breakout_crypto_v1_leaders.md
+      /Users/anoop/qr/lake/reports/p6_breakout_crypto_v1_leaders.json
+      /Users/anoop/qr/lake/reports/p6_breakout_crypto_v1_leaders_variant_returns.parquet
+=== p6_breakout_crypto_v1_placebo 20:06:26
+restricted panel to 371 of 577 symbols (the rest are never in the universe)
+  gate 0 preregistration…
+  gate 0 pre-registration: PASS (0s)
+  gate 1 data integrity…
+  gate 1 data integrity: WARN (3s)
+  gate 2 cost survival…
+  gate 2 cost survival: PASS (1s)
+  gate 3 significance…
+  gate 3 single-strategy significance: FAIL (1s)
+  gate 4 deflation…
+  gate 4 multiple-testing deflation: FAIL (0s)
+  gate 5 selection…
+  gate 5 selection overfitting: FAIL (1s)
+  gate 6 permutation…
+  gate 6 permutation: FAIL (3432s)
+  gate 7 cross validation…
+  gate 7 cross-validated OOS: FAIL (0s)
+  gate 8 robustness…
+  gate 8 robustness and regime: FAIL (0s)
+| gate | name | verdict | detail |
+|---|---|---|---|
+| 0 | pre-registration | PASS | registered 2026-11-12T14:46:22 |
+| 1 | data integrity | WARN | 31 held symbols with QA warnings; no lag spike (-4.9 standard errors over its neighbours) |
+| 2 | cost survival | PASS | 96% of gross survives; Sharpe 0.81 at 2x costs; capacity about $10,000 before impact takes a further 10% of gross |
+| 3 | single-strategy significance | FAIL | HAC t = 2.05 |
+| 4 | multiple-testing deflation | FAIL | DSR = 0.75 over 8 trials (effective rank 6): the best of this search is what noise would give |
+| 5 | selection overfitting | FAIL | PBO = 0.33 over 12870 splits of 8 variants; the in-sample winner loses out of sample 20% of the time; SPA p = 0.125 vs exposure-matched buy-and-hold (13% invested) |
+| 6 | permutation | FAIL | bar permutation p = 0.343 (66th percentile, re-optimised over 8 of 8 variants); random entry p = 0.005; volatility-preserving null p = 0.109 (90th percentile, reported, not binding) |
+| 7 | cross-validated OOS | FAIL | median path Sharpe 0.03 = 3% of in-sample; 56% of 9 paths positive; WFE 0.51 |
+| 8 | robustness and regime | FAIL | neighbours keep only 16% of the peak Sharpe (a spike, not a plateau); alpha t = 1.72 against beta 0.12 to BTCUSDT: the factors explain only 5% of it, so this is neutral around nothing rather than market exposure |
+
+
+verdict: FAIL — stopped at gate 3 (single-strategy significance): HAC t = 2.05
+
+wrote /Users/anoop/qr/lake/reports/p6_breakout_crypto_v1_placebo.md
+      /Users/anoop/qr/lake/reports/p6_breakout_crypto_v1_placebo.json
+      /Users/anoop/qr/lake/reports/p6_breakout_crypto_v1_placebo_variant_returns.parquet
+=== p6_breakout_crypto_v1_late 21:03:51
+restricted panel to 371 of 577 symbols (the rest are never in the universe)
+  gate 0 preregistration…
+  gate 0 pre-registration: PASS (0s)
+  gate 1 data integrity…
+  gate 1 data integrity: WARN (3s)
+  gate 2 cost survival…
+  gate 2 cost survival: PASS (1s)
+  gate 3 significance…
+  gate 3 single-strategy significance: FAIL (1s)
+  gate 4 deflation…
+  gate 4 multiple-testing deflation: FAIL (0s)
+  gate 5 selection…
+  gate 5 selection overfitting: FAIL (1s)
+  gate 6 permutation…
+  gate 6 permutation: FAIL (3459s)
+  gate 7 cross validation…
+  gate 7 cross-validated OOS: WARN (0s)
+  gate 8 robustness…
+  gate 8 robustness and regime: FAIL (0s)
+| gate | name | verdict | detail |
+|---|---|---|---|
+| 0 | pre-registration | PASS | registered 2026-11-12T14:46:23 |
+| 1 | data integrity | WARN | 39 held symbols with QA warnings; no lag spike (-4.8 standard errors over its neighbours) |
+| 2 | cost survival | PASS | 91% of gross survives; Sharpe 0.43 at 2x costs; capacity about $10,000 before impact takes a further 10% of gross |
+| 3 | single-strategy significance | FAIL | HAC t = 1.32 |
+| 4 | multiple-testing deflation | FAIL | DSR = 0.84 over 8 trials (effective rank 2): the best of this search is what noise would give |
+| 5 | selection overfitting | FAIL | PBO = 0.81 over 12870 splits of 8 variants; the in-sample winner loses out of sample 24% of the time; SPA p = 0.290 vs exposure-matched buy-and-hold (13% invested) |
+| 6 | permutation | FAIL | bar permutation p = 0.582 (42th percentile, re-optimised over 8 of 8 variants); random entry p = 0.751; volatility-preserving null p = 0.308 (70th percentile, reported, not binding) |
+| 7 | cross-validated OOS | WARN | median path Sharpe 0.28 = 59% of in-sample; 100% of 9 paths positive; WFE 0.24 |
+| 8 | robustness and regime | FAIL | profitable in only 50% of years; the entire result is five trades; alpha t = 0.94 against beta 0.10 to BTCUSDT: the factors explain only 3% of it, so this is neutral around nothing rather than market exposure |
+
+
+verdict: FAIL — stopped at gate 3 (single-strategy significance): HAC t = 1.32
+
+wrote /Users/anoop/qr/lake/reports/p6_breakout_crypto_v1_late.md
+      /Users/anoop/qr/lake/reports/p6_breakout_crypto_v1_late.json
+      /Users/anoop/qr/lake/reports/p6_breakout_crypto_v1_late_variant_returns.parquet
+=== p6_breakout_crypto_v1_nofilter 22:01:43
+restricted panel to 371 of 577 symbols (the rest are never in the universe)
+  gate 0 preregistration…
+  gate 0 pre-registration: PASS (0s)
+  gate 1 data integrity…
+  gate 1 data integrity: WARN (3s)
+  gate 2 cost survival…
+  gate 2 cost survival: PASS (1s)
+  gate 3 significance…
+  gate 3 single-strategy significance: FAIL (1s)
+  gate 4 deflation…
+  gate 4 multiple-testing deflation: PASS (0s)
+  gate 5 selection…
+  gate 5 selection overfitting: FAIL (1s)
+  gate 6 permutation…
+  gate 6 permutation: FAIL (3885s)
+  gate 7 cross validation…
+  gate 7 cross-validated OOS: WARN (0s)
+  gate 8 robustness…
+  gate 8 robustness and regime: FAIL (0s)
+| gate | name | verdict | detail |
+|---|---|---|---|
+| 0 | pre-registration | PASS | registered 2026-11-12T14:46:23 |
+| 1 | data integrity | WARN | 44 held symbols with QA warnings; no lag spike (-10.2 standard errors over its neighbours) |
+| 2 | cost survival | PASS | 95% of gross survives; Sharpe 0.89 at 2x costs; capacity about $30,000 before impact takes a further 10% of gross |
+| 3 | single-strategy significance | FAIL | HAC t = 2.25 |
+| 4 | multiple-testing deflation | PASS | DSR = 0.982 over 8 trials (effective rank 2), haircut Sharpe 0.26 |
+| 5 | selection overfitting | FAIL | PBO = 0.69 over 12870 splits of 8 variants; the in-sample winner loses out of sample 12% of the time; SPA p = 0.083 vs exposure-matched buy-and-hold (21% invested) |
+| 6 | permutation | FAIL | bar permutation p = 0.169 (84th percentile, re-optimised over 8 of 8 variants); random entry p = 0.005; volatility-preserving null p = 0.015 (99th percentile, reported, not binding) |
+| 7 | cross-validated OOS | WARN | median path Sharpe 0.69 = 74% of in-sample; 100% of 9 paths positive; WFE -0.15 |
+| 8 | robustness and regime | FAIL | profitable in only 50% of years; alpha t = 1.95 against beta 0.16 to BTCUSDT: the factors explain only 4% of it, so this is neutral around nothing rather than market exposure |
+
+
+verdict: FAIL — stopped at gate 3 (single-strategy significance): HAC t = 2.25
+
+wrote /Users/anoop/qr/lake/reports/p6_breakout_crypto_v1_nofilter.md
+      /Users/anoop/qr/lake/reports/p6_breakout_crypto_v1_nofilter.json
+      /Users/anoop/qr/lake/reports/p6_breakout_crypto_v1_nofilter_variant_returns.parquet
+=== compare 23:06:40
+# `p6_breakout_crypto_v1` — the rule against its controls, 2026-11-12 (reads the sweeps' returns; runs nothing)
+
+- `p6_breakout_crypto_v1`: 8 variant(s); median variant `momentum_breakout_base10_controlnone_tight2_trail10`, net Sharpe 0.53
+- `p6_breakout_crypto_v1_leaders`: 2 variant(s); median variant `momentum_breakout_base5_controlleaders_tight2_trail10`, net Sharpe 0.57
+- `p6_breakout_crypto_v1_placebo`: 8 variant(s); median variant `momentum_breakout_base10_controlplacebo_tight2p5_trail10`, net Sharpe 0.42
+- `p6_breakout_crypto_v1_late`: 8 variant(s); median variant `momentum_breakout_base10_controllate_tight2p5_trail10`, net Sharpe 0.41
+- `p6_breakout_crypto_v1_nofilter`: 8 variant(s); median variant `momentum_breakout_base5_controlnofilter_tight2p5_trail20`, net Sharpe 0.88
+
+| condition | control | bars | control scaled by | rule − control, % a year | Newey–West t | Sharpe rule | Sharpe control | met |
+|---|---|---|---|---|---|---|---|---|
+| (2) the setup adds to owning leaders | `p6_breakout_crypto_v1_leaders` | 2677 | 0.45 | -1.4 | -0.11 | 0.53 | 0.57 | **no** |
+| (3) the day matters, not the name alone | `p6_breakout_crypto_v1_placebo` | 2677 | 1.01 | +3.4 | 0.24 | 0.53 | 0.42 | **no** |
+| (4) the breakout day is not worse than the next | `p6_breakout_crypto_v1_late` | 2677 | 0.86 | +3.8 | 0.48 | 0.53 | 0.41 | yes |
+| (reported) the market filter | `p6_breakout_crypto_v1_nofilter` | 2677 | 0.60 | -10.8 | -0.84 | 0.53 | 0.88 | — |
+
+wrote /Users/anoop/qr/lake/reports/p6_breakout_crypto_v1_compare_2026-11-12.md
+=== done 23:06:41

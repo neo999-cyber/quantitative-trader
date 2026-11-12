@@ -46,3 +46,36 @@ ran (`--all-gates`) on the same prices, and the candidate fails gates 5, 6 and 8
 their own. No rerun: one registered run, and its answer does not depend on gate 1.
 
 Holdout shut. Nothing forward. The rule is closed.
+
+## 2. `p6_breakout_crypto_v1` — ran once, FAILED (12 November 2026)
+
+Qullamaggie's momentum breakout (`docs/research/13` §1), made exact for Binance spot and registered as Programme 6's
+second hypothesis on the owner's "go with recommendation" (memo `docs/prereg/p6_breakout_crypto_v1.md`, seq 1123;
+controls `_leaders` / `_placebo` / `_late` / `_nofilter`, seq 1124–1127). Registered only after the trend chain had
+exited, because trial-log appends are not locked between processes. Ran once on the owner's "run it", 18:54–23:06
+Dubai, five sweeps chained (`reports/p6/run_p6_breakout.log`); result note seq 1179; `qr trial verify` clean.
+
+| sweep | gate 3 t | gate 4 DSR | gate 5 SPA *p* | gate 6 bar permutation *p* | gate 8 |
+|---|---|---|---|---|---|
+| candidate (8 variants) | **2.05 FAIL** | 0.957 | WARN (PBO 0.47) | 0.249 FAIL | FAIL: profitable in 50% of years, alpha t 1.73 |
+| `_leaders` (no setup) | 1.56 | 0.94 | 0.166 | 0.249 | FAIL |
+| `_placebo` (random eligible days) | 2.05 | 0.75 | 0.125 | 0.343 | FAIL |
+| `_late` (one day late) | 1.32 | 0.84 | 0.290 | 0.582 | FAIL |
+| `_nofilter` (no bitcoin filter) | 2.25 | 0.982 | 0.083 | 0.169 | FAIL |
+
+The registered conditions on the median variants (`reports/p6/p6_breakout_crypto_v1_compare_2026-11-12.md`; the
+control scaled to the rule's volatility, Newey–West t, 30 lags):
+
+| the rule against | points a year | t | memo's bar | met |
+|---|---|---|---|---|
+| owning the momentum leaders | −1.4 | −0.11 | t ≥ 2 | no |
+| random eligible days | +3.4 | +0.24 | t ≥ 2 | no |
+| buying one day late | +3.8 | +0.48 | not behind | yes |
+| the rule without the bitcoin filter (reported) | −10.8 | −0.84 | — | — |
+
+What it says: the book makes money net of costs (95% of gross survives; Sharpe 0.53 on the median variant), but no
+more than owning the same momentum leaders through the same exits, and no more than buying them on random eligible
+days. The tight base, the breakout and the volume add nothing measurable; the bitcoin filter, if anything, costs.
+That is the memo's prediction (a fail at gates 3/4/6, the setup within noise of the leaders control), and it is
+Programme 1's crypto momentum result again with his entry and exit path added. Holdout shut. Nothing forward. The
+rule is closed on crypto; with §1, the videos' momentum school is answered here.

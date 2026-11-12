@@ -38,7 +38,10 @@ Nasdaq names with splits and the eleven ETFs that pay dividends. The cause is a 
 building the instruments, not bad prices: `qa.check_klines` expects raw share volume and rescales the implied VWAP by
 `close / close_unadjusted`; the instruments restated volume into the adjusted price space (to satisfy
 `Panel.tradable`, which applies no factor), so the check adjusted twice. The two engine checks disagree on the price
-space of an adjusted frame — an engine ticket, passed to the ETF-restatement session the same evening. Gates 2–8
+space of an adjusted frame. **Fixed the same evening on branch `claude/reverent-khayyam-c5f801` (commit `0adbaf8`,
+17:53 Dubai, before this run, which therefore ran the old check):** `qa.check_klines` now judges dollars over shares
+in the frame's own price space, as `Panel.tradable` does, and the Tiingo ingest states share volume in that space;
+measured on the real lake after it, all 12 `etf`, 12 `trend-etf` and 31 `trend-xnas` frames pass. Gates 2–8
 ran (`--all-gates`) on the same prices, and the candidate fails gates 5, 6 and 8 and conditions (2) and (3) on
 their own. No rerun: one registered run, and its answer does not depend on gate 1.
 

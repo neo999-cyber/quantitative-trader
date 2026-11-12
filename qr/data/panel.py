@@ -49,6 +49,8 @@ FIELDS = (
     "cot_crowd", "cot_pct_26", "cot_pct_52",
     # exchange inflows (qr/data/inflow.py): yesterday's net inflow, standardised
     "cm_netflow_z",
+    # the trend instruments (qr/data/trendbars.py): the rule's inputs, each known at the close of its own bar
+    "above_ma", "trend_ok", "zroc_21", "zprior_21", "zroc_63", "zprior_63",
 )
 
 

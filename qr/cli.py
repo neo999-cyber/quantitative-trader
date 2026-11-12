@@ -518,6 +518,23 @@ def _benchmark_kwargs(args, lake) -> dict:
     return {"benchmark": benchmark, "risk_free": risk_free}
 
 
+def cmd_data_trend_build(args) -> int:
+    """The `trend_reset` instruments: session bars from the lake's minutes for the Nasdaq names, the ETFs as held, with the rule's inputs."""
+    from qr.data.trendbars import build_trend_etf, build_trend_xnas
+
+    lake = _lake(args)
+    if args.market in ("xnas", "both"):
+        summary = build_trend_xnas(lake, args.symbols or None)
+        print(table(summary))
+        print(f"\n{len(summary)} instruments written under market 'trend-xnas'")
+    if args.market in ("etf", "both"):
+        summary = build_trend_etf(lake, args.symbols or None)
+        print(table(summary))
+        print(f"\n{len(summary)} instruments written under market 'trend-etf'")
+    print(f"manifest hash: {lake.manifest_hash()}")
+    return 0
+
+
 def cmd_data_auction_build(args) -> int:
     """E1's panel: one overnight-return instrument per Nasdaq name, with the imbalance features."""
     from pathlib import Path
@@ -1234,7 +1251,7 @@ def cmd_gates(args) -> int:
         holdout_universe=holdout_universe,
         permutations=args.permutations,
         vol_preserving_permutations=args.vol_permutations,
-        calendar={"auction-xnas": "xnys", "intraday-xnas": "sessions2"}.get(market, "continuous"),
+        calendar={"auction-xnas": "xnys", "intraday-xnas": "sessions2", "trend-xnas": "xnys", "trend-etf": "xnys"}.get(market, "continuous"),
         **({"equity": equity} if equity else {}),
         **benchmark_kwargs,
         engine=getattr(args, "engine", "weights") or "weights",
@@ -1976,6 +1993,12 @@ def _costs(args) -> CostModel:
         return CostModel.carry_pair(spot, CostModel.binance_perp())
     if getattr(args, "costs", "spot") == "alpaca":
         return CostModel.alpaca_zero()
+    if getattr(args, "costs", "spot") == "alpaca_frac":
+        # `p6_trend_reset_v1`: the same $0-commission model with fractional shares — a rule that holds for months sends
+        # day orders, which Alpaca fills in fractions; the whole-share rule belongs to on-close orders
+        from dataclasses import replace
+
+        return replace(CostModel.alpaca_zero(), whole_shares=False, name="alpaca_us_equity_zero_commission_fractional")
     if getattr(args, "costs", "spot") == "perp":
         return CostModel.binance_perp(half_spread_bps=args.spread)
     if args.tier.upper() == TRIAL_FEE_TIER and args.bnb == TRIAL_BNB_DISCOUNT:
@@ -1984,7 +2007,8 @@ def _costs(args) -> CostModel:
 
 
 #: Named fixed baskets a run may use instead of a ranked universe.
-BASKETS = {"nasdaq31": "qr.data.auction:NASDAQ31", "qqq": "qr.data.intraday:QQQ_ONLY", "btc": "qr.data.etfflow:BTC_ONLY", "eth": "qr.data.cot:ETH_ONLY"}
+BASKETS = {"nasdaq31": "qr.data.auction:NASDAQ31", "qqq": "qr.data.intraday:QQQ_ONLY", "btc": "qr.data.etfflow:BTC_ONLY", "eth": "qr.data.cot:ETH_ONLY",
+           "etf12": "qr.data.trendbars:ETF12"}
 
 
 def _basket_symbols(name: str) -> tuple[str, ...]:
@@ -2004,8 +2028,10 @@ def _universe_for(panel, spec: UniverseSpec, basket: str | None):
 
 
 def _source_of(market: str) -> str:
-    """Which vendor a lake market comes from; Databento for the auction panel."""
-    return "databento" if market in ("auction-xnas", "intraday-xnas") else "binance"
+    """Which vendor a lake market comes from; Databento for the Nasdaq panels, Tiingo for the ETF trend panel."""
+    if market == "trend-etf":
+        return "tiingo"
+    return "databento" if market in ("auction-xnas", "intraday-xnas", "trend-xnas") else "binance"
 
 
 def _universe_spec(args, market: str) -> UniverseSpec:
@@ -2212,6 +2238,14 @@ def build_parser() -> argparse.ArgumentParser:
     infb.add_argument("--count-end", dest="count_end")
     infb.set_defaults(func=cmd_data_inflow_build)
 
+    trendb = data.add_parser(
+        "trend-build",
+        help="xnas minute bars -> split-adjusted session bars (market trend-xnas); ETF bars (market trend-etf); both with the trend_reset inputs",
+    )
+    trendb.add_argument("--market", choices=("xnas", "etf", "both"), default="both")
+    trendb.add_argument("--symbols", nargs="*")
+    trendb.set_defaults(func=cmd_data_trend_build)
+
     auction = data.add_parser(
         "auction-build",
         help="Databento XNAS daily bars + closing-cross snapshots -> overnight-return panel (market auction-xnas)",
@@ -2381,7 +2415,7 @@ def build_parser() -> argparse.ArgumentParser:
     gt.add_argument("--spread", type=float, default=2.0)
     gt.add_argument(
         "--costs",
-        choices=("spot", "carry", "carry_maker", "alpaca", "perp", "maker", "maker_dow", "xvenue", "xvenue_maker", "xvenue_maker_both"),
+        choices=("spot", "carry", "carry_maker", "alpaca", "alpaca_frac", "perp", "maker", "maker_dow", "xvenue", "xvenue_maker", "xvenue_maker_both"),
         default="spot",
         help="spot: the trial's Binance spot model; carry: spot plus Binance perp, both legs taker; "
         "alpaca: $0 commission, 2 bps half-spread, 1 bp slippage, whole shares; "

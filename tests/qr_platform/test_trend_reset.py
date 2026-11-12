@@ -53,6 +53,14 @@ def test_book_gives_a_freed_slot_to_the_name_that_was_waiting():
     assert opened[:, 1].tolist() == [0, 0, 1, 0, 1, 0]
 
 
+def test_book_opens_no_more_than_the_quota_on_a_bar():
+    entry = np.ones((4, 3), dtype=bool)
+    strength = np.tile(np.array([1.0, 3.0, 2.0]), (4, 1))
+    w, opened = book(entry, strength, np.ones((4, 3), dtype=bool), hold=10, quota=np.array([1, 0, 2, 5]))
+    assert opened.sum(axis=1).tolist() == [1, 0, 2, 0]                       # one, none, the two that are left, then nothing to open
+    assert opened[0].tolist() == [False, True, False] and w[3].sum() == pytest.approx(0.6)
+
+
 # ------------------------------------------------------------------ a synthetic market
 def _closes():
     """UP: a quiet rise, a three-week run, then a flat stretch (the reset). DOWN: a quiet fall. CHOP: a seeded walk."""
@@ -126,10 +134,10 @@ def test_controls_ask_their_own_questions(panel):
     pw2, popen2 = placebo.positions(panel)
     assert pw.equals(pw2) and popen.equals(popen2)                           # a fixed seed
     in_trend, _ = tr.trend_filter(panel.close)
-    assert not (popen & ~in_trend).any().any()                               # only on trend bars
-    for c in panel.symbols:
-        assert popen[c].sum() <= rule_open[c].sum()
-    assert 0 < popen["UP"].sum() and not popen["UP"].equals(rule_open["UP"]) and popen["DOWN"].sum() == 0
+    assert not (popen & ~in_trend).any().any()                               # only names in an uptrend
+    assert (popen.sum(axis=1) <= rule_open.sum(axis=1)).all()                # never more than the rule opened on that bar
+    assert popen.sum().sum() == rule_open.sum().sum() and popen["DOWN"].sum() == 0   # and here always as many: a trend name is free each time
+    assert 0 < pw.sum(axis=1).mean() <= rule_w.sum(axis=1).mean()            # a random name can leave its uptrend sooner, never stay longer
     with pytest.raises(ValueError):
         TrendReset(control="nonsense")
 

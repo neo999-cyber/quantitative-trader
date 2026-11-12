@@ -81,12 +81,47 @@ t ≥ 2. The agents are an open question that only time can answer.
 
 ## 6. What is built, and what waits for the owner
 
-**Built, on synthetic prices only** (`qr/strategies/trend.py`, `tests/qr_platform/test_trend_reset.py`): the family
-`trend_reset` with its three controls, registered with `qr gates`; the book checked on hand-sized arrays, the signals
-against a slow reference, the look-ahead rule by truncation, the universe mask. No real series has been read by it.
+**The owner chose the market the same day**: the 31 Nasdaq names, with the twelve ETFs as the second arm.
 
-**Waits:** (1) the market — the 31 Nasdaq names with the ETF arm is the recommendation; it needs a daily
-session-close instrument built from the lake's own minute bars and adjusted for splits, $0; (2) the memo, then
-registration, which opens Programme 6 and spends a counter, then "run it"; (3) whether the agents' forward diary
-starts, and on what engine — a scheduled routine in Claude Code on the owner's plan, or the Anthropic API at a cost
-to be priced first.
+**Built** (no return of the rule computed on a real series):
+
+- the family `trend_reset` with its controls `trend`, `mirror` and `placebo` (`qr/strategies/trend.py`), on
+  synthetic prices: the book checked on hand-sized arrays, the signals against a slow reference, the look-ahead rule
+  by truncation (`tests/qr_platform/test_trend_reset.py`);
+- the instruments (`qr/data/trendbars.py`, `qr data trend-build`): `trend-xnas`, session bars for the 31 names from
+  the lake's own minute bars, adjusted for the twelve splits the opens reveal, and `trend-etf`, the twelve ETFs; both
+  carry the rule's inputs on their bars so a panel cut at any date arrives warmed up
+  (`tests/qr_platform/test_trendbars.py`);
+- the wiring for `qr gates` (the two markets, the basket `etf12`, the fractional-share cost model `alpaca_frac`);
+- the counts (`scripts/p6_trend_counts.py`, `reports/p6/p6_counts_2026-11-12.md`; note seq 1056): every variant opens
+  145–214 positions on the Nasdaq names and 214–441 on the ETFs, against a minimum of 60;
+- **the memo, a draft**: `docs/prereg/p6_trend_reset_v1.md` — the candidate, five control sweeps, the bars a pass
+  must clear, the prediction (a fail at gate 5); all six commands rehearsed on synthetic prices in a scratch lake
+  with its own log;
+- the comparison the memo registers (`scripts/p6_trend_compare.py`, `tests/qr_platform/test_p6_compare.py`): the
+  rule against each control on the *median* variant of each sweep, a paired test on daily returns. The rehearsal on
+  drifting noise is why: the rule's best of eight stood 0.44 of Sharpe above a one-variant control, so a bar set on
+  Sharpe would have been met by nothing.
+
+Two findings on the way, both in `docs/20` (12 November): the lake now has true session bars for the Nasdaq names;
+and the lake's `etf` market is withheld by the engine as it stands (adjusted prices against raw dollars and shares),
+which a count caught before any run.
+
+**Waits for the owner:** "register it" (opens Programme 6, one counter), then "run it" (about forty minutes, $0).
+
+## 7. The agents' diary — the suggestion put to the owner
+
+Start it, in the cheapest form that can still answer a question:
+
+- **Weekly, not daily.** The rule holds for three months; a daily reading adds cost and noise.
+- **A record, never a trader.** The agents write scores; the paper book follows the rule; no order goes anywhere.
+- **Scope.** Each weekend, every one of the 31 names that the rule's trend filter passes (about eighteen a week) gets
+  one reading: three scores from −2 to +2 — fundamentals, news and sentiment, catalysts — a line of reason each, the
+  sources, the next earnings date. Sentiment from what a web search surfaces; no paid X feed.
+- **Engine.** A weekly scheduled task in the desktop app on the laptop, on the owner's plan (it runs while the app is
+  open, else at the next launch). The first sweep by hand, to fix the format and measure the usage; then scheduled.
+  The model and the prompt recorded with every reading.
+- **One question, registered before the first reading.** After 26 weeks: did the names scored higher do better over
+  the following four weeks than the names scored lower? Read once; about 450 name-weeks.
+- **Needs.** Fresh prices — the lake stops on 31 August 2026: about $2 of the remaining Databento credit over six
+  months, the same source as the record. Nothing else.

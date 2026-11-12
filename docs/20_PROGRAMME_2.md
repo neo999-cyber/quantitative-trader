@@ -573,6 +573,25 @@ metrics start 2021-12, so the sample cannot grow backwards) or on a
 second venue's OI (Bybit's is mirrored for funding only) — a new
 pre-registration, not a re-run.
 
+**12 November 2026 — two lake observations from building Programme 6's instruments (`docs/prereg/p6_trend_reset_v1.md`,
+a draft). No verdict moves.** (1) **The session bars the 1 November note asked for now exist.** `qr data trend-build`
+writes market `trend-xnas`: one bar per regular session for the 31 names from the lake's minute bars — the open of
+the first regular minute, the close at the closing auction's minute (16:00 New York, 13:00 on the 18 early closes in
+the span, checked against where the auction's volume sits for AAPL and MSFT), back-adjusted for the twelve splits the
+opens reveal (all explained by a whole ratio, none guessed), dividends not included. The close is the first print of
+the auction minute: the published close to the cent on an ordinary day (AAPL 2020-08-28: 499.23 exactly; 2024-06-12:
+213.08 against 213.07) and 19 bps away on the heaviest (2020-08-31, AAPL's split day: 128.79 against 129.04).
+(2) **The lake's ETF panel is withheld by the engine as it stands.** The Tiingo frames under market `etf` hold
+adjusted prices beside raw share volume and true dollar volume, so dollars over shares is the *raw* price;
+`Panel.tradable` has refused a bar whose implied VWAP sits outside its own range since 17 September (commit
+`b5978f8`, added for 24 bad perp bars), and so withholds every dividend payer's history — over 2007–2022 GLD stays
+whole, QQQ keeps 29% of its bars, IWM 6.5%, SPY 3.9%, the other eight none. The ETF trial's verdicts were written on
+12 September, before the check existed, so nothing moves; but `qr families --asset etf` run today would trade an
+almost empty universe and must not be trusted until those frames are restated. `trend-etf` restates the share volume
+in the adjusted price space (as the auction instrument does) and a test pins both facts
+(`tests/qr_platform/test_trendbars.py`). Restating the original `etf` market is a ticket, not done here. Found by a
+count (four names where twelve were expected), before any run.
+
 **1 November 2026 — a lake observation from the London Strategic Edge quality pass (`docs/research/11` §7). No
 verdict moves.** Comparing that site's AAPL daily bar against the lake's showed what the lake's own Databento daily bars
 are: under `raw/databento/xnas/klines/interval=1d/` the open equals the first 04:00 ET minute's open and the close the

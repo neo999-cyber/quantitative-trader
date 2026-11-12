@@ -22,10 +22,9 @@ Controls (`control`), the questions a pass would have to survive:
 
 - `"trend"` enters on the trend filter alone — does waiting for the reset add anything to the filter?
 - `"mirror"` enters when the scaled rate of change is at or above `was_high` *today* — strength, not the reset;
-- `"placebo"` draws, for each name, as many entry bars as the rule opened positions in it, at random among that
-  name's trend bars (a fixed seed) — the same exposure to the trend, the timing removed. A bar drawn while the name
-  is already held opens nothing, so the placebo holds at most as many positions as the rule. The draw uses the whole
-  sample, so the placebo is a control and never a candidate.
+- `"placebo"` opens, on each bar, as many positions as the rule opened on that bar, in names drawn at random among
+  those in an uptrend and not held (a fixed seed) — the rule's own timing and its share of the book, the choice of
+  name removed. It reads the rule's entries, so it is a control and never a candidate.
 
 Weights are for bar *t*, held over bar *t+1*, from information at or before the close of bar *t* (`Strategy`'s rule);
 the placebo aside, truncating the panel after any bar leaves every earlier weight unchanged.
@@ -44,6 +43,7 @@ VOL = 252               # bars behind the volatility that scales the rate of cha
 SLOTS = 5               # five names at a time, as in the clip
 SEED = 20261112         # the placebo's draw
 CONTROLS = ("none", "trend", "mirror", "placebo")
+ROCS = (21, 63)          # the rate-of-change windows an instrument carries the features for
 
 
 def trend_filter(close: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -59,12 +59,30 @@ def scaled_roc(close: pd.DataFrame, n: int) -> pd.DataFrame:
     return np.log(close / close.shift(n)) / sigma.where(sigma > 0)
 
 
-def book(entry: np.ndarray, strength: np.ndarray, keep: np.ndarray, hold: int, slots: int = SLOTS) -> tuple[np.ndarray, np.ndarray]:
+def features(close: pd.DataFrame, rocs: tuple[int, ...] = ROCS) -> dict[str, pd.DataFrame]:
+    """The rule's inputs, each known at the close of its own bar: `above_ma`, `trend_ok`, `zroc_<n>`, `zprior_<n>`.
+
+    `zprior_<n>` is the largest scaled rate of change over the `2n` bars before the bar — what "was higher" reads.
+    An instrument stores these on its bars (`qr.data.trendbars`) so a panel cut at any date arrives warmed up; a panel
+    without them has them computed on the spot, from the bars it holds.
+    """
+    trend, above = trend_filter(close)
+    out = {"above_ma": above.astype(float).where(close.notna()), "trend_ok": trend.astype(float).where(close.notna())}
+    for n in rocs:
+        z = scaled_roc(close, n)
+        out[f"zroc_{n}"] = z
+        out[f"zprior_{n}"] = z.shift(1).rolling(2 * n, min_periods=1).max()
+    return out
+
+
+def book(entry: np.ndarray, strength: np.ndarray, keep: np.ndarray, hold: int, slots: int = SLOTS,
+         quota: np.ndarray | None = None) -> tuple[np.ndarray, np.ndarray]:
     """The positions a stream of entry signals turns into: (weights, opened), both bars × names.
 
     Each bar, in this order: a held name ages by one bar and is closed if it has been held `hold` bars or `keep` is false
     for it; then free slots are filled from the names with `entry` true and no position, the largest `strength` first
-    (ties by column order). A name closed on a bar may be reopened on that same bar. Every open position weighs 1/slots.
+    (ties by column order), and no more than `quota[t]` of them when a quota is given. A name closed on a bar may be
+    reopened on that same bar. Every open position weighs 1/slots.
     """
     bars, names = entry.shape
     weights = np.zeros((bars, names))
@@ -76,6 +94,8 @@ def book(entry: np.ndarray, strength: np.ndarray, keep: np.ndarray, hold: int, s
         age[held] += 1
         age[held & ((age >= hold) | ~keep[t])] = -1
         free = slots - int((age >= 0).sum())
+        if quota is not None:
+            free = min(free, int(quota[t]))
         if free > 0:
             candidates = np.flatnonzero(entry[t] & (age < 0))
             if len(candidates):
@@ -103,9 +123,15 @@ class TrendReset(Strategy):
         allowed = panel.tradable()
         if universe is not None:
             allowed = allowed & universe.reindex_like(allowed).fillna(False)
-        trend, above = trend_filter(close)
-        z = scaled_roc(close, p["roc"])
-        prior = z.shift(1).rolling(2 * p["roc"], min_periods=1).max()      # the best reading before today
+        n = int(p["roc"])
+        if panel.get("trend_ok") is not None:                              # an instrument that carries the inputs
+            z, prior = panel.get(f"zroc_{n}"), panel.get(f"zprior_{n}")
+            if z is None or prior is None:
+                raise ValueError(f"this panel carries the trend features, but not for roc={n}; rebuild the instrument with it")
+            trend, above = panel["trend_ok"] > 0.5, panel["above_ma"] > 0.5
+        else:
+            f = features(close, (n,))
+            trend, above, z, prior = f["trend_ok"] > 0.5, f["above_ma"] > 0.5, f[f"zroc_{n}"], f[f"zprior_{n}"]
         trend = (trend & allowed).fillna(False)
         if p["control"] == "trend":
             entry = trend
@@ -122,14 +148,9 @@ class TrendReset(Strategy):
         hold = int(self.params["hold"])
         weights, opened = book(entry, strength, keep, hold)
         if self.params["control"] == "placebo":
-            rng = np.random.default_rng(SEED)
-            drawn = np.zeros_like(entry)
-            for j in range(entry.shape[1]):
-                eligible = np.flatnonzero(trend[:, j])
-                take = min(int(opened[:, j].sum()), len(eligible))
-                if take:
-                    drawn[rng.choice(eligible, size=take, replace=False), j] = True
-            weights, opened = book(drawn, rng.random(entry.shape), keep, hold)
+            quota = opened.sum(axis=1)                                     # how many the rule opened on each bar
+            draw = np.random.default_rng(SEED).random(entry.shape)         # the order names are taken in
+            weights, opened = book(trend & (quota > 0)[:, None], draw, keep, hold, quota=quota)
         frame = lambda a: pd.DataFrame(a, index=panel.index, columns=panel.symbols)   # noqa: E731
         return frame(weights), frame(opened)
 

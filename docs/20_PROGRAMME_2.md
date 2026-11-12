@@ -592,16 +592,24 @@ The one bar still withheld is EFA's second day, 2001-08-20, which traded no shar
 closing it.** Since 12 September, `qa.check_klines` had multiplied dollars over shares by `close / close_unadjusted`.
 That suited the old ETF frames and counted the adjustment twice on a frame already restated. Before this change,
 `quote_volume_consistent` failed `trend-etf` on 11 of 12 funds and `trend-xnas` on the 11 names with a split, on bars
-the engine trades. Gate 1 would have read that as a data failure on a held name in Programme 6's run, and so would
-the restated `etf` market. QA now judges the implied VWAP in the frame's own price space, as `Panel.tradable()`
+the engine trades, and gate 1 reads that as a data failure on a held name; the restated `etf` market would have
+failed it too. QA now judges the implied VWAP in the frame's own price space, as `Panel.tradable()`
 does. All 12 `etf`, 12 `trend-etf` and 31 `trend-xnas` frames now pass it, and a frame with shares as traded beside
 adjusted prices fails it, as the engine refuses it. `trend-etf` needed no rebuild, because its builder had restated
 the same numbers. Tests: `tests/qr_platform/test_etf.py` (the ingest path on a vendor-style back-adjusted fixture
 with a split and distributions) and `tests/qr_platform/test_trendbars.py` (QA on both instruments); both fail on the
 previous code. The ETF trial's verdicts and reports (`docs/08`) are unchanged: nothing was re-run. One input will
 differ if the trial is ever re-run: the RSI control's relative volume, by at most one distribution's size on bars
-whose 20-bar window spans an ex-date. Nothing ran through the engine and nothing was registered. The trial log is
-byte-identical (1,057 records, chain verified). Manifest hash after: `239c3204…`.
+whose 20-bar window spans an ex-date. This work ran nothing through the engine and registered nothing. The trial log
+was byte-identical across it (1,057 records, chain verified at 17:47 Dubai; the fix committed 17:53). Manifest hash
+after: `239c3204…`. **Afterwards, in another session on a branch without this fix:** `p6_trend_reset_v1` and its five
+control sweeps were registered and run (seq 1057–1122, 14:15–14:46 UTC, manifest `239c3204…`). Gate 1 failed every
+sweep for this defect and nothing else: the `trend-xnas` sweeps on the 11 split names (AAPL AMZN AVGO BKNG GOOG GOOGL
+ISRG LRCX NFLX NVDA TSLA; LRCX not held by the placebo) and the two ETF sweeps on the 11 dividend payers (all but GLD).
+Those records stand as written. What the run means, and whether anything is re-run, is the owner's call; nothing was
+re-run here. A suggestion from that session to keep shares as traded and give `Panel.tradable` the factor instead was
+not taken: both Programme 6 instruments already state their shares in their own price space, so the factor in the
+engine would withhold the same bars that QA failed.
 
 **12 November 2026 — two lake observations from building Programme 6's instruments (`docs/prereg/p6_trend_reset_v1.md`,
 a draft). No verdict moves.** (1) **The session bars the 1 November note asked for now exist.** `qr data trend-build`

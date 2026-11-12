@@ -2,9 +2,9 @@
 
 *Drafted 12 November 2026 on the owner's input — a 105-second clip on trading with AI agents
 (`docs/research/12_video_ai_agents_trend_reset.md`) and "we need to try this model here. with small tweaks" — and on
-the owner's choice of market the same day (the 31 Nasdaq names, with the ETFs as a second arm). **A draft until it is
-registered through `qr trial prereg --file`; registration needs the owner's yes, opens Programme 6 and spends its
-first counter; the run needs a separate "run it".** What was looked at before drafting: the clip; the two instruments'
+the owner's choice of market the same day (the 31 Nasdaq names, with the ETFs as a second arm). **Registered the same
+day on the owner's "register it and run it"** through `qr trial prereg --file`, with its five control sweeps, before
+any return was computed; it opens Programme 6 and spends its first counter. What was looked at before drafting: the clip; the two instruments'
 prices; counts only (`reports/p6/p6_counts_2026-11-12.md`: the positions each variant opens in-sample, on how many
 names, the share of the book they fill) and two checks of the instrument; one rehearsal of the invocation below on
 synthetic prices in a scratch lake with its own log. Two things were changed after the first count and before any

@@ -573,6 +573,20 @@ metrics start 2021-12, so the sample cannot grow backwards) or on a
 second venue's OI (Bybit's is mirrored for funding only) — a new
 pre-registration, not a re-run.
 
+**18 November 2026, 07:40 Dubai — box disk maintenance (the scheduled task `qr-box-disk-24nov`, approved 17 November
+and widened 18 November; it fired on the 18th). Nothing run through the engine, nothing registered, the trial log
+untouched.** Before: 9.9 GB free on `/` (73% used), `/root/pm/data/polymarket` 12 GB, deribit 340 MB, surface 55 MB;
+all four units active (`qr-pm-polymarket`, `qr-pm-deribit`, `qr-surface.timer`, `qr-yield.timer`). Both recordings
+mirrored with `rsync -a` (`/root/pm/data/` → `~/qr/lake/mirror/polymarket_live/`, `/root/surface/data/` →
+`~/qr/lake/mirror/surface_live/`; laptop 136 GB free after). Kept on the box: the six most recent day folders,
+2026-11-13 → 2026-11-18. Deleted on the box: the 53 day folders 2026-09-21 → 2026-11-12 (9.05 GB), each first checked
+against the laptop copy — file count, exact byte total, and `gzip -t` of every hourly file in the laptop copy; 53 of 53
+passed, none dropped. `catalogue.json`/`catalogue.jsonl`, the deribit recording, the surface and every other `/root`
+service untouched; both recorders still active after. After: 19.6 GB free (49% used), polymarket 2.8 GB. Growth
+measured over 9–17 November: about 435 MB a day (450 over the last seven days, peak 730 on 14 November); over the 12.3
+days to 30 November that is ~5.5 GB at the mean and ~9 GB at the peak rate every day, so ~10–14 GB free on the read's
+day, well above the 5 GB alert. The disk risk to the 30 November read is closed.
+
 **12 November 2026, evening Dubai — the ETF ticket from item (2) below is closed: the lake's `etf` market is
 restated and tradable, and QA asks the engine's question. No verdict moves.** `qr/data/tiingo.py` now states each
 bar's share count in the adjusted price space at ingest (`volume` = shares as traded × `close_unadjusted` / `close`,
